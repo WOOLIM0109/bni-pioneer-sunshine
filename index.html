@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="BNI 부산 파이오니아 챕터 선샤인·파워팀·결원 업종 지도">
+<style>:root{color-scheme:light dark;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html,body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>파이오니아 선샤인</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@700;900&family=IBM+Plex+Sans+KR:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+:root{
+  --paper:#F1EEE8; --surface:#FFFFFF; --surface-2:#F7F4EF;
+  --ink:#1C1815; --ink-2:#5C544B; --ink-3:#8B8177;
+  --line:#DFD8CD; --line-2:#CFC6B8;
+  --red:#C8102E; --red-soft:#F7DFE3;
+  --sun:#D9861F; --sun-soft:#FBEBD4;
+  --gap:#6F8288; --gap-soft:#E6ECED;
+  --shadow:0 1px 2px rgba(28,24,21,.06),0 8px 24px -12px rgba(28,24,21,.18);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#15120F; --surface:#201C18; --surface-2:#282320;
+    --ink:#F3EEE6; --ink-2:#B8AEA2; --ink-3:#8B8177;
+    --line:#332D27; --line-2:#463E36;
+    --red:#FF7484; --red-soft:#3A1F23;
+    --sun:#F0B45E; --sun-soft:#3A2C18;
+    --gap:#A3B8BD; --gap-soft:#222B2C;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -12px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#15120F; --surface:#201C18; --surface-2:#282320;
+  --ink:#F3EEE6; --ink-2:#B8AEA2; --ink-3:#8B8177;
+  --line:#332D27; --line-2:#463E36;
+  --red:#FF7484; --red-soft:#3A1F23;
+  --sun:#F0B45E; --sun-soft:#3A2C18;
+  --gap:#A3B8BD; --gap-soft:#222B2C;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -12px rgba(0,0,0,.7);
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  font-size:14px; line-height:1.6; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1180px; margin:0 auto; padding-inline:16px; padding-block:0 56px}
+h1,h2,h3{font-family:"Gothic A1","Apple SD Gothic Neo",sans-serif; margin:0; text-wrap:balance; letter-spacing:-.02em}
+.num{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums}
+
+header{padding-block:28px 18px; border-bottom:1px solid var(--line)}
+.eyebrow{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--red); font-weight:600}
+h1{font-size:clamp(26px,4.4vw,38px); font-weight:900; margin-top:6px}
+.sub{color:var(--ink-2); margin-top:8px; max-width:64ch}
+.sub b{color:var(--ink); font-weight:600}
+.badge{display:inline-block; font-size:11px; padding:2px 8px; border-radius:99px; background:var(--sun-soft); color:var(--sun); border:1px solid color-mix(in srgb,var(--sun) 35%,transparent); font-weight:600; vertical-align:2px}
+
+nav{display:flex; gap:8px; flex-wrap:wrap; margin-block:20px 24px; position:sticky; top:env(safe-area-inset-top,0px); background:var(--paper); padding-block:8px; z-index:5}
+.step{display:flex; align-items:center; gap:9px; border:1px solid var(--line-2); background:var(--surface); color:var(--ink-2);
+  padding:9px 15px 9px 10px; border-radius:10px; cursor:pointer; font:inherit; font-weight:500; transition:.15s}
+.step:hover{border-color:var(--ink-3)}
+.step .idx{width:20px;height:20px;border-radius:6px;background:var(--surface-2);color:var(--ink-3);display:grid;place-items:center;font-size:11px;font-weight:700;font-family:"IBM Plex Mono",monospace}
+.step[aria-selected="true"]{background:var(--ink); color:var(--paper); border-color:var(--ink)}
+.step[aria-selected="true"] .idx{background:var(--red); color:#fff}
+.step:focus-visible{outline:2px solid var(--red); outline-offset:2px}
+
+.cols{display:grid; grid-template-columns:238px 1fr; gap:22px; align-items:start}
+.cols.rev{grid-template-columns:1fr 360px}
+@media (max-width:860px){.cols,.cols.rev{grid-template-columns:1fr}}
+.panel{background:var(--surface); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow)}
+.panel-pad{padding:18px}
+.ptitle{font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-3); font-weight:600; margin-bottom:10px}
+
+.mlist{max-height:600px; overflow:auto; padding:4px}
+@media (max-width:860px){.mlist{max-height:220px}}
+.gname{font-size:10.5px; letter-spacing:.1em; color:var(--sun); font-weight:700; padding:10px 9px 4px}
+.mrow{width:100%; text-align:left; border:0; background:none; font:inherit; color:var(--ink); cursor:pointer;
+  padding:6px 9px; border-radius:8px; display:block}
+.mrow:hover{background:var(--surface-2)}
+.mrow[aria-current="true"]{background:var(--red); color:#fff}
+.mrow[aria-current="true"] small{color:rgba(255,255,255,.82)}
+.mrow strong{font-weight:600}
+.mrow small{display:block; color:var(--ink-3); font-size:11.5px; line-height:1.4}
+.search{width:100%; border:1px solid var(--line-2); background:var(--surface-2); color:var(--ink);
+  border-radius:9px; padding:8px 10px; font:inherit; font-size:13px; margin-bottom:6px}
+.search:focus{outline:2px solid var(--red); outline-offset:1px}
+.new{font-size:9.5px; background:var(--sun); color:#fff; border-radius:4px; padding:1px 4px; margin-left:4px; vertical-align:1px; font-weight:700}
+
+.stage{position:relative; width:100%; aspect-ratio:1.45/1; min-height:440px}
+.rays{position:absolute; inset:0; width:100%; height:100%}
+.node{position:absolute; transform:translate(-50%,-50%); width:130px}
+.card{background:var(--surface); border:1px solid var(--line-2); border-radius:10px; padding:8px 10px; text-align:center; box-shadow:var(--shadow); position:relative}
+.card .f{font-weight:600; font-size:12.5px; line-height:1.3}
+.card .who{font-size:11px; color:var(--red); font-weight:600; margin-top:3px}
+.card.gap{border-style:dashed; border-color:var(--gap); background:var(--gap-soft)}
+.card.gap .who{color:var(--gap)}
+.card .x{position:absolute; top:-7px; right:-7px; width:18px;height:18px; border-radius:99px; border:1px solid var(--line-2);
+  background:var(--surface); color:var(--ink-3); font-size:11px; line-height:1; cursor:pointer; display:none; padding:0}
+.card:hover .x, .card:focus-within .x{display:block}
+.core{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:200px; height:200px; border-radius:99px;
+  background:radial-gradient(circle at 50% 36%, var(--sun-soft), var(--surface) 74%);
+  border:3px solid var(--sun); display:grid; place-content:center; text-align:center; padding:14px; box-shadow:var(--shadow)}
+.core .lab{font-size:10px; letter-spacing:.12em; color:var(--sun); font-weight:700}
+.core .cust{font-family:"Gothic A1",sans-serif; font-weight:900; font-size:14.5px; line-height:1.35; margin-top:5px}
+.core .field{margin-top:7px; padding-top:7px; border-top:1px solid var(--line); font-size:11.5px; color:var(--ink-2)}
+.stagelist{display:none; flex-direction:column; gap:8px}
+@media (max-width:760px){.stage{display:none} .stagelist{display:flex}}
+.lcore{background:var(--sun-soft); border:2px solid var(--sun); border-radius:12px; padding:12px}
+.lrow{display:flex; justify-content:space-between; gap:10px; align-items:center; border:1px solid var(--line-2); border-radius:10px; padding:9px 12px; background:var(--surface)}
+.lrow.gap{border-style:dashed; border-color:var(--gap); background:var(--gap-soft)}
+
+.chips{display:flex; flex-wrap:wrap; gap:6px}
+.chip{font-size:11.5px; padding:3px 9px; border-radius:99px; background:var(--surface-2); border:1px solid var(--line); color:var(--ink-2)}
+.chip.sun{background:var(--sun-soft); border-color:color-mix(in srgb,var(--sun) 35%,transparent); color:var(--sun); font-weight:600}
+.grid{display:grid; gap:14px}
+.g3{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}
+.addrow{display:flex; gap:8px; margin-top:12px; flex-wrap:wrap}
+.addrow input{flex:1; min-width:180px}
+.btn{border:1px solid var(--ink); background:var(--ink); color:var(--paper); border-radius:9px; padding:8px 14px; font:inherit; font-weight:600; font-size:13px; cursor:pointer}
+.btn.ghost{background:none; color:var(--ink-2); border-color:var(--line-2)}
+.btn:focus-visible{outline:2px solid var(--red); outline-offset:2px}
+.want{margin-top:14px; border-left:3px solid var(--sun); background:var(--surface-2); padding:9px 12px; border-radius:0 8px 8px 0; font-size:12.5px; color:var(--ink-2)}
+.want b{color:var(--ink)}
+
+.eu{display:grid; grid-template-columns:26px 1fr auto; gap:10px; align-items:center; padding:9px 0; border-bottom:1px solid var(--line)}
+.eu:last-child{border-bottom:0}
+.eu .rk{font-family:"IBM Plex Mono",monospace; font-weight:600; color:var(--ink-3); font-size:12px}
+.eu .bar{height:7px; border-radius:99px; background:var(--gap); opacity:.8; margin-top:5px}
+.eu .nm{font-weight:600; font-size:13.5px}
+.eu .who{font-size:11px; color:var(--ink-3); margin-top:2px; line-height:1.45}
+.eu .cnt{font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:16px; color:var(--red); text-align:right}
+.eu .cnt small{display:block; font-family:"IBM Plex Sans KR",sans-serif; font-size:10px; color:var(--ink-3); font-weight:400}
+
+.tsun{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px; box-shadow:var(--shadow)}
+.tsun h3{font-size:15px; font-weight:700}
+.tsun .meta{font-size:11px; color:var(--ink-3); margin:3px 0 11px; font-family:"IBM Plex Mono",monospace}
+.dots{display:flex; flex-wrap:wrap; gap:5px}
+.dot{font-size:11px; padding:3px 8px; border-radius:7px; background:var(--red-soft); color:var(--red); font-weight:600; border:1px solid color-mix(in srgb,var(--red) 22%,transparent)}
+.dot.hollow{background:none; color:var(--gap); border:1px dashed var(--gap); font-weight:500}
+.fillbar{height:5px; border-radius:99px; background:var(--line); overflow:hidden; margin-top:11px}
+.fillbar i{display:block; height:100%; background:var(--red)}
+table{width:100%; border-collapse:collapse; font-size:13px}
+th,td{text-align:left; padding:8px 10px; border-bottom:1px solid var(--line)}
+th{font-size:11px; letter-spacing:.08em; color:var(--ink-3); font-weight:600}
+.scrollx{overflow-x:auto}
+.note{font-size:12px; color:var(--ink-3); margin-top:14px; line-height:1.6}
+.legend{display:flex; gap:14px; flex-wrap:wrap; font-size:11.5px; color:var(--ink-2); margin-top:12px}
+.legend i{display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:5px; vertical-align:-1px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="eyebrow">BNI 부산 파이오니아 · 8기</div>
+  <h1>파이오니아 선샤인</h1>
+  <p class="sub">핵심고객을 가운데 놓고 <b>상생직군</b>을 둘러 그리면 나의 선샤인이 완성되고, 선샤인이 겹치는 멤버끼리 <b>파워팀</b>이 되며, 끝내 비어 있는 자리가 <b>다음 비지터 초대 명단</b>으로 남습니다. <span class="badge">데모 · 경청표 26.09.02 기준 31명</span></p>
+</header>
+
+<nav role="tablist" aria-label="단계">
+  <button class="step" role="tab" id="t1" aria-selected="true" data-v="v1"><span class="idx">1</span>나의 선샤인</button>
+  <button class="step" role="tab" id="t2" aria-selected="false" data-v="v2"><span class="idx">2</span>파워팀</button>
+  <button class="step" role="tab" id="t3" aria-selected="false" data-v="v3"><span class="idx">3</span>챕터 전체 지도</button>
+</nav>
+
+<section id="v1">
+  <div class="cols">
+    <div class="panel panel-pad">
+      <div class="ptitle">멤버 31명 · 파워팀순</div>
+      <input class="search" id="q" placeholder="이름 · 업종 검색" aria-label="멤버 검색">
+      <div class="mlist" id="mlist"></div>
+    </div>
+    <div>
+      <div class="panel panel-pad">
+        <div class="stage" id="stage"><svg class="rays" id="rays" viewBox="0 0 1000 690" preserveAspectRatio="none" aria-hidden="true"></svg></div>
+        <div class="stagelist" id="stagelist"></div>
+        <div id="wantbox"></div>
+        <div class="legend">
+          <span><i style="background:var(--sun)"></i>핵심고객 · 선샤인 중심</span>
+          <span><i style="background:var(--surface);border:1px solid var(--line-2)"></i>챕터에 있는 상생직군</span>
+          <span><i style="background:var(--gap-soft);border:1px dashed var(--gap)"></i>비어 있는 자리 · 초대 타깃</span>
+        </div>
+        <div class="addrow">
+          <input class="search" id="addf" style="margin:0" placeholder="상생직군 추가 (예: 세무사)" aria-label="상생직군 추가">
+          <button class="btn" id="addb">추가</button>
+          <button class="btn ghost" id="resetb">원래대로</button>
+        </div>
+        <p class="note">카드에 커서를 올리면 ×로 지웁니다. 수정 내용은 이 브라우저에만 남으며, 정식 버전에서는 챕터 계정으로 저장됩니다.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="v2" hidden>
+  <div class="grid g3" id="teamgrid"></div>
+  <p class="note">'미정' 팀 5명은 아직 공유 고객이 정해지지 않은 상태이므로, 아래 핵심고객 표를 근거로 기존 팀에 편입하거나 신규 팀으로 독립시키는 판단이 필요합니다.</p>
+</section>
+
+<section id="v3" hidden>
+  <div class="cols rev">
+    <div class="panel panel-pad">
+      <div class="ptitle">파워팀별 충원 현황</div>
+      <div class="grid g3" id="chaptermap"></div>
+    </div>
+    <div class="panel panel-pad">
+      <div class="ptitle">유레카 보드 · 초대 우선순위</div>
+      <p class="note" style="margin:0 0 6px">챕터에 없는데 멤버들이 상생직군으로 지목한 업종. 지목 수가 곧 초대 효과입니다.</p>
+      <div id="eureka"></div>
+    </div>
+  </div>
+  <div class="panel panel-pad" style="margin-top:14px">
+    <div class="ptitle">핵심고객별 커버리지 · 같은 고객을 보는 멤버가 곧 파워팀 후보</div>
+    <div class="scrollx"><table id="custtable"></table></div>
+  </div>
+</section>
+</div>
+
+<script>
+const M = [
+ {n:'이소연',co:'해피드로잉',f:'미술교육',g:'교육',c:['유아·초등 학부모','부모·가족'],s:['리더십 교육','사진','학원·교습소','교육출판','문구·화방','심리상담','공방']},
+ {n:'이해경',co:'데일카네기',f:'리더십 교육',g:'교육',nw:1,c:['기업 인사·총무','중기업 대표'],s:['경영컨설팅','고용지원금','미술교육','노무사','채용·헤드헌팅','기업보험','강연장 대관']},
+
+ {n:'이채홍',co:'법무사사무소 검인',f:'법무사',g:'법률·기업도움',c:['상속·분쟁 당사자','이사·입주 가구'],s:['변호사','부동산중개','상조서비스','세무사','감정평가사','은행·대출']},
+ {n:'박선영',co:'㈜경동코퍼레이션',f:'안전용품',g:'법률·기업도움',c:['제조·공장 대표','건설 현장소장'],s:['고용지원금','인쇄·디자인','산업안전관리','소방설비','폐기물처리','공구 유통','노무사']},
+ {n:'김경태',co:'늘곁애',f:'상조서비스',g:'법률·기업도움',c:['부모·가족','중장년 가장'],s:['꽃·화환','법무사','인보험','세무사','장례식장','간병·요양','유품정리']},
+ {n:'김철홍',co:'법무법인 새곁',f:'변호사',g:'법률·기업도움',c:['중기업 대표','상속·분쟁 당사자'],s:['법무사','경영컨설팅','세무사','변리사(특허)','감정평가사','회계감사','노무사']},
+
+ {n:'심학봉',co:'㈜더베스트 금융서비스',f:'인보험',g:'미정',c:['부모·가족','소기업 대표'],s:['기업보험','상조서비스','세무사','건강검진 병원','물보험','재무설계']},
+ {n:'최경수',co:'옆커폰',f:'휴대폰·통신',g:'미정',c:['소기업 대표','창업 준비자'],s:['앱·웹개발','포스·키오스크','CCTV·보안설비','정수기 렌탈','사무기기','인터넷 회선']},
+ {n:'조현우',co:'디에이치원',f:'고용지원금',g:'미정',c:['소기업 대표','기업 인사·총무'],s:['경영컨설팅','기업보험','세무사','노무사','채용·헤드헌팅','정책자금','산업안전관리']},
+ {n:'김근우',co:'종합광고기획 창운',f:'인쇄·디자인',g:'미정',c:['소기업 대표','창업 준비자'],s:['앱·웹개발','사진','온라인마케팅','브랜드디자인','옥외광고','판촉물 제조']},
+ {n:'홍정택',co:'스타인컴퍼니',f:'경호',g:'미정',c:['기업 인사·총무','행사 주최자'],s:['변호사','CCTV·보안설비','이벤트기획','의전 렌터카','옥외광고','흥신·조사']},
+
+ {n:'정명수',co:'에어컨설팅',f:'에어컨',g:'공간',c:['숙박·병원·상가 사업주','신축·리모델링 건축주'],s:['중문','상업 인테리어','냉동공조','커튼·블라인드','입주청소','전기공사','창호·샷시']},
+ {n:'박진성',co:'㈜진성부동산중개법인',f:'부동산중개',g:'공간',c:['신축·리모델링 건축주','이사·입주 가구','상가 임대인'],s:['법무사','주거 인테리어','세무사','이사','입주청소','은행·대출','감정평가사']},
+ {n:'김지현',co:'감성온도',f:'숙박업',g:'공간',c:['숙박·병원·상가 사업주'],s:['상업 인테리어','에어컨','커튼·블라인드','사진','온라인마케팅','침구·리넨','입주청소']},
+ {n:'권두현',co:'오직중문만',f:'중문',g:'공간',c:['이사·입주 가구','신축·리모델링 건축주'],s:['주거 인테리어','상업 인테리어','커튼·블라인드','도배','바닥재','창호·샷시','입주청소','이사']},
+ {n:'이상호',co:'㈜디자인시선',f:'상업 인테리어',g:'공간',c:['숙박·병원·상가 사업주','신축·리모델링 건축주'],s:['중문','에어컨','냉동공조','커튼·블라인드','조명','간판','소방설비','전기공사']},
+ {n:'조은영',co:'에어월드시스템BS',f:'냉동공조',g:'공간',nw:1,c:['제조·공장 대표','요식업 점주','숙박·병원·상가 사업주'],s:['에어컨','상업 인테리어','축산물 유통','요식업(고기구이)','전기공사','소방설비','정수기 렌탈']},
+ {n:'이상민',co:'Creation by Jm',f:'주거 인테리어',g:'공간',c:['이사·입주 가구','신축·리모델링 건축주'],s:['중문','커튼·블라인드','부동산중개','도배','바닥재','조명','가구','입주청소']},
+
+ {n:'송승훈',co:'T.M LINK',f:'앱·웹개발',g:'기업',c:['소기업 대표','전문직','무역·여행업'],s:['인쇄·디자인','경영컨설팅','온라인마케팅','브랜드디자인','사진','번역','영상제작'],w:'다양한 언어가 들어간 명함이 필요한 분',v:'전문직 · 무역업 · 여행업'},
+ {n:'박미성',co:'울림 컴퍼니',f:'경영컨설팅',g:'기업',real:1,c:['3년 내 (예비)창업자','정책자금·정부지원사업 희망 사업자','기업인증 필요 사업자','소개자료·브랜딩 필요 기업'],s:['앱·웹개발','홈페이지 제작','브랜딩 전문가','세무사','회계사·신용분석사','투자사·액셀러레이터','온·오프라인 마케팅','노무사','변리사(특허)'],w:'AI·블록체인·빅데이터 창업자 / 아이디어 기반 창업자 / 영업자료가 필요한 사업자',v:'정부지원사업에 도전하려는 창업기업 대표 · 제안서·사업계획서가 필요한 기업 담당자',tg:['세금 때문에 미치겠다','새 사업을 하고 싶은데 돈이 없다','수출이나 온라인 판매를 하고 싶다','하던 업을 업그레이드해 개발하고 싶다']},
+ {n:'이도현',co:'AIA프리미어 파트너',f:'기업보험',g:'기업',c:['중기업 대표','제조·공장 대표'],s:['인보험','경영컨설팅','변호사','세무사','노무사','산업안전관리','외국보험']},
+ {n:'정상현',co:'아메리츠파이낸셜',f:'외국보험',g:'기업',c:['해외 거주·주재원','중기업 대표'],s:['기업보험','세무사','번역','유학·이민 컨설팅','외환·송금','국제물류']},
+
+ {n:'이화춘',co:'이화춘뷰티랩',f:'반영구 뷰티',g:'뷰티',c:['미용 소비자','창업 준비자'],s:['태닝','맞춤수제양복','사진','피부관리','헤어샵','웨딩플래너','네일']},
+ {n:'마루이',co:'벨라우모',f:'맞춤수제양복',g:'뷰티',c:['예비신랑','정장 입는 전문직'],s:['태닝','반영구 뷰티','사진','웨딩플래너','스튜디오·드레스','구두·수선','예물']},
+ {n:'윤민수',co:'㈜이엘그룹',f:'태닝',g:'뷰티',nw:1,c:['미용 소비자','예비신랑·신부'],s:['반영구 뷰티','맞춤수제양복','사진','피부관리','필라테스·PT','헤어샵']},
+ {n:'김주찬',co:'이미지노마드',f:'사진',g:'뷰티',c:['창업 준비자','신혼·웨딩'],s:['맞춤수제양복','반영구 뷰티','인쇄·디자인','앱·웹개발','웨딩플래너','스튜디오·드레스','영상제작']},
+
+ {n:'김윤호',co:'㈜거북축산',f:'축산물 유통',g:'선물',c:['요식업 점주','명절 선물 구매 기업'],s:['요식업(고기구이)','기름·곡물 가공품','냉동공조','식자재 유통','주류 유통','포스·키오스크','배달대행']},
+ {n:'문성우',co:'당고',f:'요식업(고기구이)',g:'선물',nw:1,c:['회식 기업','가족 외식 손님'],s:['축산물 유통','기름·곡물 가공품','주류 유통','포스·키오스크','배달대행','간판','온라인마케팅']},
+ {n:'이수민',co:'새벽 한방울(황지상회)',f:'기름·곡물 가공품',g:'선물',nw:1,c:['명절 선물 구매 기업','요식업 점주'],s:['축산물 유통','꽃·화환','요식업(고기구이)','인쇄·디자인','식자재 유통','포장·박스','쇼핑몰 운영대행'],w:'기업체 맞춤 답례품 및 선물세트'},
+ {n:'임춘식',co:'꽃가람',f:'꽃·화환',g:'선물',c:['신혼·웨딩','부모·가족','창업 준비자'],s:['상조서비스','기름·곡물 가공품','인쇄·디자인','웨딩플래너','장례식장','이벤트기획','조경']},
+ {n:'오예준',co:'청년커튼',f:'커튼·블라인드',g:'선물',nw:1,c:['이사·입주 가구','숙박·병원·상가 사업주'],s:['중문','주거 인테리어','상업 인테리어','에어컨','도배','바닥재','가구','입주청소']}
+];
+
+const GROUPS=['교육','법률·기업도움','미정','공간','기업','뷰티','선물'];
+const FIELD2M={}; M.forEach(m=>FIELD2M[m.f]=m);
+const KEY='pioneer-sunshine-v2';
+let edits={};
+try{ edits=JSON.parse(localStorage.getItem(KEY)||'{}'); }catch(e){ edits={}; }
+const save=()=>{ try{ localStorage.setItem(KEY,JSON.stringify(edits)); }catch(e){} };
+const syn=m=>edits[m.n]||m.s;
+let sel=M.findIndex(m=>m.n==='박미성');
+
+document.querySelectorAll('.step').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.step').forEach(x=>x.setAttribute('aria-selected',String(x===b)));
+  ['v1','v2','v3'].forEach(v=>document.getElementById(v).hidden=(v!==b.dataset.v));
+}));
+
+const mlist=document.getElementById('mlist'), q=document.getElementById('q');
+function renderList(){
+  const term=q.value.trim(); mlist.innerHTML='';
+  GROUPS.forEach(g=>{
+    const rows=M.map((m,i)=>({m,i})).filter(({m})=>m.g===g && (!term||(m.n+m.f+m.co).includes(term)));
+    if(!rows.length) return;
+    const h=document.createElement('div'); h.className='gname'; h.textContent=g; mlist.appendChild(h);
+    rows.forEach(({m,i})=>{
+      const b=document.createElement('button');
+      b.className='mrow'; b.setAttribute('aria-current',String(i===sel));
+      b.innerHTML=`<strong>${m.n}</strong>${m.nw?'<span class="new">신입</span>':''}${m.real?'<span class="new" style="background:var(--red)">실데이터</span>':''}<small>${m.f} · ${m.co}</small>`;
+      b.onclick=()=>{sel=i; renderList(); renderSun();};
+      mlist.appendChild(b);
+    });
+  });
+}
+q.addEventListener('input',renderList);
+
+function renderSun(){
+  const m=M[sel], list=syn(m), stage=document.getElementById('stage'), rays=document.getElementById('rays');
+  stage.querySelectorAll('.node,.core').forEach(e=>e.remove()); rays.innerHTML='';
+  const core=document.createElement('div'); core.className='core';
+  core.innerHTML=`<div class="lab">핵심고객</div><div class="cust">${m.c.join('<br>')}</div><div class="field">${m.n} · ${m.f}</div>`;
+  stage.appendChild(core);
+
+  const n=list.length, RX=39.5, RY=38.5;
+  list.forEach((f,i)=>{
+    const a=-Math.PI/2+(i*2*Math.PI/n);
+    const x=50+RX*Math.cos(a), y=50+RY*Math.sin(a);
+    const found=FIELD2M[f];
+    const d=document.createElement('div'); d.className='node'; d.style.left=x+'%'; d.style.top=y+'%';
+    d.innerHTML=`<div class="card ${found?'':'gap'}"><div class="f">${f}</div>
+      <div class="who">${found?found.n+' 대표':'비어 있음 · 초대 타깃'}</div>
+      <button class="x" title="삭제" aria-label="${f} 삭제">×</button></div>`;
+    d.querySelector('.x').onclick=ev=>{ev.stopPropagation(); edits[m.n]=list.filter(v=>v!==f); save(); renderSun(); refreshAll();};
+    stage.appendChild(d);
+    const ln=document.createElementNS('http://www.w3.org/2000/svg','line');
+    ln.setAttribute('x1',500); ln.setAttribute('y1',345);
+    ln.setAttribute('x2',x*10); ln.setAttribute('y2',y*6.9);
+    ln.setAttribute('stroke',found?'var(--sun)':'var(--gap)');
+    ln.setAttribute('stroke-width',found?'2':'1.5');
+    if(!found) ln.setAttribute('stroke-dasharray','4 4');
+    ln.setAttribute('opacity','.5'); rays.appendChild(ln);
+  });
+
+  document.getElementById('stagelist').innerHTML=
+    `<div class="lcore"><div style="font-size:10px;letter-spacing:.12em;color:var(--sun);font-weight:700">핵심고객</div>
+     <div style="font-family:'Gothic A1',sans-serif;font-weight:900;font-size:16px">${m.c.join(' · ')}</div>
+     <div style="font-size:12px;color:var(--ink-2);margin-top:4px">${m.n} · ${m.f}</div></div>`
+    + list.map(f=>{const gm=FIELD2M[f];
+        return `<div class="lrow ${gm?'':'gap'}"><span style="font-weight:600">${f}</span><span style="font-size:11.5px;color:${gm?'var(--red)':'var(--gap)'};font-weight:600">${gm?gm.n+' 대표':'초대 타깃'}</span></div>`;}).join('');
+
+  const gaps=list.filter(f=>!FIELD2M[f]);
+  document.getElementById('wantbox').innerHTML =
+    `<div class="want"><b>${m.n} 대표 · ${m.g} 파워팀</b> — 상생직군 ${list.length}개 중 ${list.length-gaps.length}개는 챕터 안에서 바로 연결 가능, ${gaps.length}개는 초대로 채워야 합니다.`
+    + (m.w?`<br>원하는 비지터 : ${m.w}`:'') + (m.v?`<br>좋은 리퍼럴 : ${m.v}`:'')+ (m.tg?`<br><b>이 말이 들리면 연결</b> : ${m.tg.map(t=>'"'+t+'"').join(' · ')}`:'')+ (m.real?'':'<br><span style="color:var(--ink-3)">※ 핵심고객·상생직군은 추정치. 신상명세표·C단계 질문지가 들어오면 교체됩니다.</span>') + `</div>`;
+}
+document.getElementById('addb').onclick=()=>{
+  const el=document.getElementById('addf'), v=el.value.trim(); if(!v) return;
+  const m=M[sel], cur=syn(m).slice(); if(!cur.includes(v)) cur.push(v);
+  edits[m.n]=cur; save(); el.value=''; renderSun(); refreshAll();
+};
+document.getElementById('resetb').onclick=()=>{ delete edits[M[sel].n]; save(); renderSun(); refreshAll(); };
+
+function teams(){
+  const t={};
+  GROUPS.forEach(g=>t[g]={members:[],gaps:{},cust:{}});
+  M.forEach(m=>{
+    const d=t[m.g]; d.members.push(m);
+    m.c.forEach(c=>d.cust[c]=(d.cust[c]||0)+1);
+    syn(m).forEach(f=>{ if(!FIELD2M[f]) d.gaps[f]=(d.gaps[f]||0)+1; });
+  });
+  return t;
+}
+function eureka(){
+  const g={};
+  M.forEach(m=>syn(m).forEach(f=>{ if(!FIELD2M[f]) (g[f]=g[f]||[]).push(m.n); }));
+  return Object.entries(g).map(([f,who])=>({f,who})).sort((a,b)=>b.who.length-a.who.length||a.f.localeCompare(b.f));
+}
+
+function renderTeams(){
+  const t=teams(), box=document.getElementById('teamgrid'); box.innerHTML='';
+  GROUPS.forEach(name=>{
+    const d=t[name]; if(!d.members.length) return;
+    const gaps=Object.entries(d.gaps).sort((a,b)=>b[1]-a[1]).slice(0,6);
+    const shared=Object.entries(d.cust).sort((a,b)=>b[1]-a[1]);
+    const el=document.createElement('div'); el.className='tsun';
+    el.innerHTML=`<h3>${name}</h3>
+      <div class="meta">멤버 ${d.members.length}명 · 결원 ${Object.keys(d.gaps).length}개 업종</div>
+      <div class="ptitle" style="margin:0 0 6px">공유 핵심고객</div>
+      <div class="chips" style="margin-bottom:12px">${shared.map(([c,n])=>`<span class="chip ${n>1?'sun':''}">${c}${n>1?' <span class="num">'+n+'</span>':''}</span>`).join('')}</div>
+      <div class="ptitle" style="margin:0 0 6px">현재 멤버</div>
+      <div class="dots" style="margin-bottom:12px">${d.members.map(m=>`<span class="dot">${m.n} · ${m.f}</span>`).join('')}</div>
+      <div class="ptitle" style="margin:0 0 6px">채우면 팀이 완성되는 자리</div>
+      <div class="dots">${gaps.length?gaps.map(([f,c])=>`<span class="dot hollow">${f} <span class="num">${c}</span></span>`).join(''):'<span class="chip">없음</span>'}</div>`;
+    box.appendChild(el);
+  });
+}
+
+function renderChapter(){
+  const t=teams(), box=document.getElementById('chaptermap'); box.innerHTML='';
+  GROUPS.forEach(name=>{
+    const d=t[name]; if(!d.members.length) return;
+    const gapN=Object.keys(d.gaps).length, total=d.members.length+gapN;
+    const pct=Math.round(d.members.length/total*100);
+    const el=document.createElement('div'); el.className='tsun';
+    el.innerHTML=`<h3>${name}</h3><div class="meta">충원율 ${pct}% · 멤버 ${d.members.length} / 필요 ${total}</div>
+      <div class="dots">${d.members.map(m=>`<span class="dot">${m.n}</span>`).join('')}
+      ${Object.entries(d.gaps).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([f])=>`<span class="dot hollow">${f}</span>`).join('')}</div>
+      <div class="fillbar"><i style="width:${pct}%"></i></div>`;
+    box.appendChild(el);
+  });
+
+  const eu=eureka(), max=eu.length?eu[0].who.length:1, box2=document.getElementById('eureka'); box2.innerHTML='';
+  eu.slice(0,15).forEach((r,i)=>{
+    const el=document.createElement('div'); el.className='eu';
+    el.innerHTML=`<div class="rk">${String(i+1).padStart(2,'0')}</div>
+      <div><div class="nm">${r.f}</div><div class="who">${r.who.join(' · ')}</div>
+      <div class="bar" style="width:${Math.max(8,Math.round(r.who.length/max*100))}%"></div></div>
+      <div class="cnt">${r.who.length}<small>명 지목</small></div>`;
+    box2.appendChild(el);
+  });
+
+  const cm={};
+  M.forEach(m=>m.c.forEach(c=>{ (cm[c]=cm[c]||[]).push(m.n+'('+m.g+')'); }));
+  const rows=Object.entries(cm).sort((a,b)=>b[1].length-a[1].length);
+  document.getElementById('custtable').innerHTML=
+    `<thead><tr><th>핵심고객</th><th>이 고객을 공유하는 멤버</th><th style="text-align:right">인원</th></tr></thead><tbody>`
+    + rows.map(([c,ns])=>`<tr><td style="font-weight:600">${c}</td><td style="color:var(--ink-2)">${ns.join(', ')}</td><td class="num" style="text-align:right">${ns.length}</td></tr>`).join('')
+    + `</tbody>`;
+}
+
+function refreshAll(){ renderTeams(); renderChapter(); }
+renderList(); renderSun(); refreshAll();
+</script>
+
+</body>
+</html>
