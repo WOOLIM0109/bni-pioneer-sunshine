@@ -147,28 +147,77 @@ th{font-size:11px; letter-spacing:.08em; color:var(--ink-3); font-weight:600}
 .note{font-size:12px; color:var(--ink-3); margin-top:14px; line-height:1.6}
 .legend{display:flex; gap:14px; flex-wrap:wrap; font-size:11.5px; color:var(--ink-2); margin-top:12px}
 .legend i{display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:5px; vertical-align:-1px}
+input.cell{width:100%; border:1px solid transparent; background:none; color:var(--ink); font:inherit; font-size:12.5px; padding:5px 7px; border-radius:6px}
+input.cell:hover{border-color:var(--line)}
+input.cell:focus{outline:none; border-color:var(--red); background:var(--surface-2)}
+.mini{border:1px solid var(--line-2); background:var(--surface); color:var(--ink-3); border-radius:6px; padding:4px 9px; font:inherit; font-size:11.5px; cursor:pointer}
+.mini:hover{border-color:var(--red); color:var(--red)}
+#admintable td{padding:2px 4px; vertical-align:middle}
+textarea.io{width:100%; min-height:110px; border:1px solid var(--line-2); background:var(--surface-2); color:var(--ink); border-radius:9px; padding:9px 11px; font-family:"IBM Plex Mono",monospace; font-size:11.5px; line-height:1.55; resize:vertical}
+textarea.io:focus{outline:2px solid var(--red); outline-offset:1px}
+.msg{font-size:12px; color:var(--red); font-weight:600; margin-top:7px; min-height:17px}
+.warnbox{border:1px dashed var(--gap); background:var(--gap-soft); color:var(--ink-2); border-radius:10px; padding:11px 13px; font-size:12.5px; line-height:1.65; margin-bottom:16px}
+.warnbox b{color:var(--ink)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+.header-top,.auth-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.auth-actions{justify-content:flex-end;font-size:12px;min-width:0}
+#auth-email{overflow-wrap:anywhere;max-width:100%}
+.connection{margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.connection .badge{vertical-align:0}
+.status-detail{font-size:12px;color:var(--ink-2);overflow-wrap:anywhere}
+.status-detail.error,.msg.error{color:var(--red)}
+.msg.success{color:var(--ink-2)}
+button:disabled{opacity:.45;cursor:not-allowed}
+input[readonly],textarea[readonly]{color:var(--ink-2);cursor:default}
+.cols>*,.grid>*,.panel,.lrow>*,.eu>*{min-width:0}
+.wrap{overflow-wrap:anywhere}
+dialog{width:min(420px,calc(100% - 32px));max-height:calc(100% - 32px);overflow:auto;border:1px solid var(--line);border-radius:14px;padding:22px;background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+dialog h2{font-size:20px;margin-bottom:12px}
+dialog label{display:block;margin-bottom:6px}
+.dialog-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.empty-state{padding:24px;color:var(--ink-2);text-align:center}
+@media(max-width:600px){
+  .g3{grid-template-columns:minmax(0,1fr)}
+  nav{gap:6px}.step{flex:1 1 45%;padding:9px 8px;font-size:12px}
+  .panel-pad{padding:14px}.lrow{align-items:flex-start}.lrow>span:last-child{flex-shrink:0}
+  #admintable,#admintable tbody,#admintable tr,#admintable td{display:block;width:100%}
+  #admintable thead{display:none}
+  #admintable tr{padding:10px 0;border-bottom:1px solid var(--line-2)}
+  #admintable td{display:grid;grid-template-columns:80px minmax(0,1fr);align-items:center;border:0;padding:3px 0}
+  #admintable td::before{content:attr(data-label);font-size:11px;color:var(--ink-3)}
+  #admintable input.cell{min-width:0;background:var(--surface-2)}
+  #admintable .del{justify-self:start}
+  #custtable{table-layout:fixed}#custtable th,#custtable td{padding:8px 4px}#custtable th:last-child{width:42px}
+}
 </style>
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 
 </head>
 <body>
 <div class="wrap">
 <header>
-  <div class="eyebrow">BNI 부산 파이오니아 · 8기</div>
+  <div class="header-top">
+    <div class="eyebrow">BNI 부산 파이오니아 · 8기</div>
+    <div class="auth-actions"><span id="auth-email" hidden></span><button class="mini" id="loginb">로그인</button><button class="mini" id="logoutb" hidden>로그아웃</button></div>
+  </div>
   <h1>파이오니아 선샤인</h1>
-  <p class="sub">핵심고객을 가운데 놓고 <b>상생직군</b>을 둘러 그리면 나의 선샤인이 완성되고, 선샤인이 겹치는 멤버끼리 <b>파워팀</b>이 되며, 끝내 비어 있는 자리가 <b>다음 비지터 초대 명단</b>으로 남습니다. <span class="badge">데모 · 경청표 26.09.02 기준 31명</span></p>
+  <p class="sub">핵심고객을 가운데 놓고 <b>상생직군</b>을 둘러 그리면 나의 선샤인이 완성되고, 선샤인이 겹치는 멤버끼리 <b>파워팀</b>이 되며, 끝내 비어 있는 자리가 <b>다음 비지터 초대 명단</b>으로 남습니다. <span class="badge" id="roster-badge">경청표 26.09.02 기준 31명</span></p>
+  <div class="connection" role="status"><span class="badge" id="connection-badge">오프라인 · 읽기 전용</span><span class="status-detail" id="connection-detail">서버 연결을 확인하고 있습니다.</span><button class="mini" id="retryb">다시 연결</button></div>
+  <div class="msg" id="auth-status" role="status"></div>
 </header>
 
 <nav role="tablist" aria-label="단계">
   <button class="step" role="tab" id="t1" aria-selected="true" data-v="v1"><span class="idx">1</span>나의 선샤인</button>
   <button class="step" role="tab" id="t2" aria-selected="false" data-v="v2"><span class="idx">2</span>파워팀</button>
   <button class="step" role="tab" id="t3" aria-selected="false" data-v="v3"><span class="idx">3</span>챕터 전체 지도</button>
+  <button class="step" role="tab" id="t4" aria-selected="false" data-v="v4"><span class="idx">＋</span>멤버 관리</button>
 </nav>
 
 <section id="v1">
   <div class="cols">
     <div class="panel panel-pad">
-      <div class="ptitle">멤버 31명 · 파워팀순</div>
+      <div class="ptitle" id="list-title">멤버 31명 · 파워팀순</div>
       <input class="search" id="q" placeholder="이름 · 업종 검색" aria-label="멤버 검색">
       <div class="mlist" id="mlist"></div>
     </div>
@@ -182,12 +231,7 @@ th{font-size:11px; letter-spacing:.08em; color:var(--ink-3); font-weight:600}
           <span><i style="background:var(--surface);border:1px solid var(--line-2)"></i>챕터에 있는 상생직군</span>
           <span><i style="background:var(--gap-soft);border:1px dashed var(--gap)"></i>비어 있는 자리 · 초대 타깃</span>
         </div>
-        <div class="addrow">
-          <input class="search" id="addf" style="margin:0" placeholder="상생직군 추가 (예: 세무사)" aria-label="상생직군 추가">
-          <button class="btn" id="addb">추가</button>
-          <button class="btn ghost" id="resetb">원래대로</button>
-        </div>
-        <p class="note">카드에 커서를 올리면 ×로 지웁니다. 수정 내용은 이 브라우저에만 남으며, 정식 버전에서는 챕터 계정으로 저장됩니다.</p>
+        <p class="note">상생직군과 멤버 정보는 로그인 후 멤버 관리 탭에서 수정할 수 있습니다.</p>
       </div>
     </div>
   </div>
@@ -215,10 +259,50 @@ th{font-size:11px; letter-spacing:.08em; color:var(--ink-3); font-weight:600}
     <div class="scrollx"><table id="custtable"></table></div>
   </div>
 </section>
+
+<section id="v4" hidden>
+  <div class="warnbox" id="admin-note">수정하려면 로그인하세요</div>
+  <div class="msg" id="adminmsg" role="status" aria-live="polite"></div>
+  <div class="panel panel-pad">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+      <div class="ptitle" style="margin:0">멤버 <span class="num" id="cnt">0</span>명</div>
+      <button class="btn" id="newrow" disabled>＋ 멤버 추가</button>
+    </div>
+    <div class="scrollx"><table id="admintable"></table></div>
+  </div>
+
+  <div class="cols rev" style="margin-top:14px">
+    <div class="panel panel-pad">
+      <div class="ptitle">경청표에서 한꺼번에 넣기</div>
+      <p class="note" style="margin:0 0 9px">한 줄에 한 명씩. <b>성함, 회사명, 전문분야, 파워팀</b> 순서로 쉼표나 탭으로 구분합니다. 엑셀에서 네 열을 복사해 붙여넣어도 됩니다. 같은 성함이 한 명이면 갱신하고, 없으면 추가합니다. 동명이인은 표에서 직접 확인해 수정하세요.</p>
+      <textarea class="io" id="bulk" placeholder="홍길동, 길동상사, 간판 제작, 선물&#10;김영희, 영희세무회계, 세무사, 법률·기업도움"></textarea>
+      <div style="margin-top:9px"><button class="btn" id="bulkb" disabled>일괄 반영</button></div>
+      <div class="msg" id="bulkmsg"></div>
+    </div>
+    <div class="panel panel-pad">
+      <div class="ptitle">내보내기 · 불러오기</div>
+      <p class="note" style="margin:0 0 9px">내보내기로 현재 명단을 복사합니다. JSON을 붙여넣고 불러오면 성함을 기준으로 갱신하거나 추가합니다. 기존 멤버를 삭제하지 않으며, 동명이인이 있으면 반영을 멈춥니다.</p>
+      <textarea class="io" id="io" placeholder="여기에 JSON이 표시되거나, 받은 JSON을 붙여넣습니다"></textarea>
+      <div style="margin-top:9px;display:flex;gap:8px"><button class="btn" id="exportb">내보내기</button><button class="btn ghost" id="importb" disabled>불러오기</button></div>
+      <div class="msg" id="iomsg"></div>
+    </div>
+  </div>
+</section>
 </div>
 
+<dialog id="login-dialog" aria-labelledby="login-title">
+  <form id="login-form">
+    <h2 id="login-title">이메일로 로그인</h2>
+    <label for="login-email">이메일 주소</label>
+    <input class="search" type="email" id="login-email" autocomplete="email" placeholder="name@example.com" required>
+    <p class="note">메일로 받은 로그인 링크를 열면 멤버 정보를 수정할 수 있습니다.</p>
+    <div class="msg" id="login-message" role="status"></div>
+    <div class="dialog-actions"><button class="btn" id="send-link" type="submit">로그인 링크 보내기</button><button class="btn ghost" id="close-login" type="button">닫기</button></div>
+  </form>
+</dialog>
 <script>
-const M = [
+// SEED_MEMBERS_START
+let M = [
  {n:'이소연',co:'해피드로잉',f:'미술교육',g:'교육',c:['유아·초등 학부모','부모·가족'],s:['리더십 교육','사진','학원·교습소','교육출판','문구·화방','심리상담','공방']},
  {n:'이해경',co:'데일카네기',f:'리더십 교육',g:'교육',nw:1,c:['기업 인사·총무','중기업 대표'],s:['경영컨설팅','고용지원금','미술교육','노무사','채용·헤드헌팅','기업보험','강연장 대관']},
 
@@ -257,32 +341,32 @@ const M = [
  {n:'임춘식',co:'꽃가람',f:'꽃·화환',g:'선물',c:['신혼·웨딩','부모·가족','창업 준비자'],s:['상조서비스','기름·곡물 가공품','인쇄·디자인','웨딩플래너','장례식장','이벤트기획','조경']},
  {n:'오예준',co:'청년커튼',f:'커튼·블라인드',g:'선물',nw:1,c:['이사·입주 가구','숙박·병원·상가 사업주'],s:['중문','주거 인테리어','상업 인테리어','에어컨','도배','바닥재','가구','입주청소']}
 ];
-
-const GROUPS=['교육','법률·기업도움','미정','공간','기업','뷰티','선물'];
-const FIELD2M={}; M.forEach(m=>FIELD2M[m.f]=m);
-const KEY='pioneer-sunshine-v2';
-let edits={};
-try{ edits=JSON.parse(localStorage.getItem(KEY)||'{}'); }catch(e){ edits={}; }
-const save=()=>{ try{ localStorage.setItem(KEY,JSON.stringify(edits)); }catch(e){} };
-const syn=m=>edits[m.n]||m.s;
-let sel=M.findIndex(m=>m.n==='박미성');
+// SEED_MEMBERS_END
+const GROUPS_BASE=['교육','법률·기업도움','미정','공간','기업','뷰티','선물'];
+const DEFAULT_M=JSON.parse(JSON.stringify(M));
+let sel=0, FIELD2M=Object.create(null);
+const syn=m=>m.s||[];
+function reindex(){ FIELD2M=Object.create(null); M.forEach(m=>{ if(m.f) FIELD2M[m.f]=m; }); if(sel>=M.length) sel=0; }
+function groups(){ const g=GROUPS_BASE.filter(x=>M.some(m=>m.g===x)); M.forEach(m=>{ if(m.g&&!g.includes(m.g)) g.push(m.g); }); return g; }
+const esc=t=>String(t==null?'':t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 document.querySelectorAll('.step').forEach(b=>b.addEventListener('click',()=>{
   document.querySelectorAll('.step').forEach(x=>x.setAttribute('aria-selected',String(x===b)));
-  ['v1','v2','v3'].forEach(v=>document.getElementById(v).hidden=(v!==b.dataset.v));
+  ['v1','v2','v3','v4'].forEach(v=>document.getElementById(v).hidden=(v!==b.dataset.v));
 }));
 
+/* ---------- 1. 나의 선샤인 ---------- */
 const mlist=document.getElementById('mlist'), q=document.getElementById('q');
 function renderList(){
   const term=q.value.trim(); mlist.innerHTML='';
-  GROUPS.forEach(g=>{
+  groups().forEach(g=>{
     const rows=M.map((m,i)=>({m,i})).filter(({m})=>m.g===g && (!term||(m.n+m.f+m.co).includes(term)));
     if(!rows.length) return;
     const h=document.createElement('div'); h.className='gname'; h.textContent=g; mlist.appendChild(h);
     rows.forEach(({m,i})=>{
       const b=document.createElement('button');
       b.className='mrow'; b.setAttribute('aria-current',String(i===sel));
-      b.innerHTML=`<strong>${m.n}</strong>${m.nw?'<span class="new">신입</span>':''}${m.real?'<span class="new" style="background:var(--red)">실데이터</span>':''}<small>${m.f} · ${m.co}</small>`;
+      b.innerHTML=`<strong>${esc(m.n)}</strong>${m.nw?'<span class="new">신입</span>':''}${m.real?'<span class="new" style="background:var(--red)">실데이터</span>':''}<small>${esc(m.f)} · ${esc(m.co)}</small>`;
       b.onclick=()=>{sel=i; renderList(); renderSun();};
       mlist.appendChild(b);
     });
@@ -291,121 +375,376 @@ function renderList(){
 q.addEventListener('input',renderList);
 
 function renderSun(){
-  const m=M[sel], list=syn(m), stage=document.getElementById('stage'), rays=document.getElementById('rays');
+  const m=M[sel], stage=document.getElementById('stage'), rays=document.getElementById('rays');
   stage.querySelectorAll('.node,.core').forEach(e=>e.remove()); rays.innerHTML='';
+  if(!m){
+    const empty='<div class="empty-state">등록된 멤버가 없습니다. 로그인 후 멤버 관리에서 추가하세요.</div>';
+    document.getElementById('stagelist').innerHTML=empty;
+    document.getElementById('wantbox').innerHTML=empty;
+    return;
+  }
+  const list=syn(m);
   const core=document.createElement('div'); core.className='core';
-  core.innerHTML=`<div class="lab">핵심고객</div><div class="cust">${m.c.join('<br>')}</div><div class="field">${m.n} · ${m.f}</div>`;
+  core.innerHTML=`<div class="lab">핵심고객</div><div class="cust">${(m.c||['미입력']).map(esc).join('<br>')}</div><div class="field">${esc(m.n)} · ${esc(m.f)}</div>`;
   stage.appendChild(core);
-
-  const n=list.length, RX=39.5, RY=38.5;
+  const n=Math.max(list.length,1), RX=39.5, RY=38.5;
   list.forEach((f,i)=>{
-    const a=-Math.PI/2+(i*2*Math.PI/n);
-    const x=50+RX*Math.cos(a), y=50+RY*Math.sin(a);
-    const found=FIELD2M[f];
+    const a=-Math.PI/2+(i*2*Math.PI/n), x=50+RX*Math.cos(a), y=50+RY*Math.sin(a);
+    const found=FIELD2M[f]&&FIELD2M[f]!==m?FIELD2M[f]:null;
     const d=document.createElement('div'); d.className='node'; d.style.left=x+'%'; d.style.top=y+'%';
-    d.innerHTML=`<div class="card ${found?'':'gap'}"><div class="f">${f}</div>
-      <div class="who">${found?found.n+' 대표':'비어 있음 · 초대 타깃'}</div>
-      <button class="x" title="삭제" aria-label="${f} 삭제">×</button></div>`;
-    d.querySelector('.x').onclick=ev=>{ev.stopPropagation(); edits[m.n]=list.filter(v=>v!==f); save(); renderSun(); refreshAll();};
+    d.innerHTML=`<div class="card ${found?'':'gap'}"><div class="f">${esc(f)}</div>
+      <div class="who">${found?esc(found.n)+' 대표':'비어 있음 · 초대 타깃'}</div></div>`;
     stage.appendChild(d);
     const ln=document.createElementNS('http://www.w3.org/2000/svg','line');
-    ln.setAttribute('x1',500); ln.setAttribute('y1',345);
-    ln.setAttribute('x2',x*10); ln.setAttribute('y2',y*6.9);
-    ln.setAttribute('stroke',found?'var(--sun)':'var(--gap)');
-    ln.setAttribute('stroke-width',found?'2':'1.5');
+    ln.setAttribute('x1',500); ln.setAttribute('y1',345); ln.setAttribute('x2',x*10); ln.setAttribute('y2',y*6.9);
+    ln.setAttribute('stroke',found?'var(--sun)':'var(--gap)'); ln.setAttribute('stroke-width',found?'2':'1.5');
     if(!found) ln.setAttribute('stroke-dasharray','4 4');
     ln.setAttribute('opacity','.5'); rays.appendChild(ln);
   });
-
   document.getElementById('stagelist').innerHTML=
     `<div class="lcore"><div style="font-size:10px;letter-spacing:.12em;color:var(--sun);font-weight:700">핵심고객</div>
-     <div style="font-family:'Gothic A1',sans-serif;font-weight:900;font-size:16px">${m.c.join(' · ')}</div>
-     <div style="font-size:12px;color:var(--ink-2);margin-top:4px">${m.n} · ${m.f}</div></div>`
-    + list.map(f=>{const gm=FIELD2M[f];
-        return `<div class="lrow ${gm?'':'gap'}"><span style="font-weight:600">${f}</span><span style="font-size:11.5px;color:${gm?'var(--red)':'var(--gap)'};font-weight:600">${gm?gm.n+' 대표':'초대 타깃'}</span></div>`;}).join('');
-
-  const gaps=list.filter(f=>!FIELD2M[f]);
-  document.getElementById('wantbox').innerHTML =
-    `<div class="want"><b>${m.n} 대표 · ${m.g} 파워팀</b> — 상생직군 ${list.length}개 중 ${list.length-gaps.length}개는 챕터 안에서 바로 연결 가능, ${gaps.length}개는 초대로 채워야 합니다.`
-    + (m.w?`<br>원하는 비지터 : ${m.w}`:'') + (m.v?`<br>좋은 리퍼럴 : ${m.v}`:'')+ (m.tg?`<br><b>이 말이 들리면 연결</b> : ${m.tg.map(t=>'"'+t+'"').join(' · ')}`:'')+ (m.real?'':'<br><span style="color:var(--ink-3)">※ 핵심고객·상생직군은 추정치. 신상명세표·C단계 질문지가 들어오면 교체됩니다.</span>') + `</div>`;
+     <div style="font-family:'Gothic A1',sans-serif;font-weight:900;font-size:16px">${(m.c||['미입력']).map(esc).join(' · ')}</div>
+     <div style="font-size:12px;color:var(--ink-2);margin-top:4px">${esc(m.n)} · ${esc(m.f)}</div></div>`
+    + list.map(f=>{const gm=FIELD2M[f]&&FIELD2M[f]!==m?FIELD2M[f]:null;
+        return `<div class="lrow ${gm?'':'gap'}"><span style="font-weight:600">${esc(f)}</span><span style="font-size:11.5px;color:${gm?'var(--red)':'var(--gap)'};font-weight:600">${gm?esc(gm.n)+' 대표':'초대 타깃'}</span></div>`;}).join('');
+  const gaps=list.filter(f=>!FIELD2M[f]||FIELD2M[f]===m);
+  document.getElementById('wantbox').innerHTML=
+    `<div class="want"><b>${esc(m.n)} 대표 · ${esc(m.g)} 파워팀</b> — 상생직군 ${list.length}개 중 ${list.length-gaps.length}개는 챕터 안에서 바로 연결 가능, ${gaps.length}개는 초대로 채워야 합니다.`
+    + (m.w?`<br>원하는 비지터 : ${esc(m.w)}`:'') + (m.v?`<br>좋은 리퍼럴 : ${esc(m.v)}`:'')
+    + (m.tg?`<br><b>이 말이 들리면 연결</b> : ${m.tg.map(t=>'"'+esc(t)+'"').join(' · ')}`:'')
+    + (m.real?'':'<br><span style="color:var(--ink-3)">※ 핵심고객·상생직군은 추정치. 신상명세표·C단계 질문지가 들어오면 교체됩니다.</span>')
+    + `</div>`;
 }
-document.getElementById('addb').onclick=()=>{
-  const el=document.getElementById('addf'), v=el.value.trim(); if(!v) return;
-  const m=M[sel], cur=syn(m).slice(); if(!cur.includes(v)) cur.push(v);
-  edits[m.n]=cur; save(); el.value=''; renderSun(); refreshAll();
-};
-document.getElementById('resetb').onclick=()=>{ delete edits[M[sel].n]; save(); renderSun(); refreshAll(); };
-
+/* ---------- 집계 ---------- */
 function teams(){
-  const t={};
-  GROUPS.forEach(g=>t[g]={members:[],gaps:{},cust:{}});
-  M.forEach(m=>{
-    const d=t[m.g]; d.members.push(m);
-    m.c.forEach(c=>d.cust[c]=(d.cust[c]||0)+1);
-    syn(m).forEach(f=>{ if(!FIELD2M[f]) d.gaps[f]=(d.gaps[f]||0)+1; });
-  });
+  const t=Object.create(null); groups().forEach(g=>t[g]={members:[],gaps:Object.create(null),cust:Object.create(null)});
+  M.forEach(m=>{ const d=t[m.g]; if(!d) return; d.members.push(m);
+    (m.c||[]).forEach(c=>d.cust[c]=(d.cust[c]||0)+1);
+    syn(m).forEach(f=>{ if(!FIELD2M[f]) d.gaps[f]=(d.gaps[f]||0)+1; }); });
   return t;
 }
 function eureka(){
-  const g={};
+  const g=Object.create(null);
   M.forEach(m=>syn(m).forEach(f=>{ if(!FIELD2M[f]) (g[f]=g[f]||[]).push(m.n); }));
   return Object.entries(g).map(([f,who])=>({f,who})).sort((a,b)=>b.who.length-a.who.length||a.f.localeCompare(b.f));
 }
 
+/* ---------- 2. 파워팀 ---------- */
 function renderTeams(){
   const t=teams(), box=document.getElementById('teamgrid'); box.innerHTML='';
-  GROUPS.forEach(name=>{
-    const d=t[name]; if(!d.members.length) return;
+  groups().forEach(name=>{
+    const d=t[name]; if(!d||!d.members.length) return;
     const gaps=Object.entries(d.gaps).sort((a,b)=>b[1]-a[1]).slice(0,6);
     const shared=Object.entries(d.cust).sort((a,b)=>b[1]-a[1]);
     const el=document.createElement('div'); el.className='tsun';
-    el.innerHTML=`<h3>${name}</h3>
+    el.innerHTML=`<h3>${esc(name)}</h3>
       <div class="meta">멤버 ${d.members.length}명 · 결원 ${Object.keys(d.gaps).length}개 업종</div>
       <div class="ptitle" style="margin:0 0 6px">공유 핵심고객</div>
-      <div class="chips" style="margin-bottom:12px">${shared.map(([c,n])=>`<span class="chip ${n>1?'sun':''}">${c}${n>1?' <span class="num">'+n+'</span>':''}</span>`).join('')}</div>
+      <div class="chips" style="margin-bottom:12px">${shared.map(([c,n])=>`<span class="chip ${n>1?'sun':''}">${esc(c)}${n>1?' <span class="num">'+n+'</span>':''}</span>`).join('')||'<span class="chip">미입력</span>'}</div>
       <div class="ptitle" style="margin:0 0 6px">현재 멤버</div>
-      <div class="dots" style="margin-bottom:12px">${d.members.map(m=>`<span class="dot">${m.n} · ${m.f}</span>`).join('')}</div>
+      <div class="dots" style="margin-bottom:12px">${d.members.map(m=>`<span class="dot">${esc(m.n)} · ${esc(m.f)}</span>`).join('')}</div>
       <div class="ptitle" style="margin:0 0 6px">채우면 팀이 완성되는 자리</div>
-      <div class="dots">${gaps.length?gaps.map(([f,c])=>`<span class="dot hollow">${f} <span class="num">${c}</span></span>`).join(''):'<span class="chip">없음</span>'}</div>`;
+      <div class="dots">${gaps.length?gaps.map(([f,c])=>`<span class="dot hollow">${esc(f)} <span class="num">${c}</span></span>`).join(''):'<span class="chip">없음</span>'}</div>`;
     box.appendChild(el);
   });
 }
 
+/* ---------- 3. 챕터 전체 지도 ---------- */
 function renderChapter(){
   const t=teams(), box=document.getElementById('chaptermap'); box.innerHTML='';
-  GROUPS.forEach(name=>{
-    const d=t[name]; if(!d.members.length) return;
+  groups().forEach(name=>{
+    const d=t[name]; if(!d||!d.members.length) return;
     const gapN=Object.keys(d.gaps).length, total=d.members.length+gapN;
     const pct=Math.round(d.members.length/total*100);
     const el=document.createElement('div'); el.className='tsun';
-    el.innerHTML=`<h3>${name}</h3><div class="meta">충원율 ${pct}% · 멤버 ${d.members.length} / 필요 ${total}</div>
-      <div class="dots">${d.members.map(m=>`<span class="dot">${m.n}</span>`).join('')}
-      ${Object.entries(d.gaps).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([f])=>`<span class="dot hollow">${f}</span>`).join('')}</div>
+    el.innerHTML=`<h3>${esc(name)}</h3><div class="meta">충원율 ${pct}% · 멤버 ${d.members.length} / 필요 ${total}</div>
+      <div class="dots">${d.members.map(m=>`<span class="dot">${esc(m.n)}</span>`).join('')}
+      ${Object.entries(d.gaps).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([f])=>`<span class="dot hollow">${esc(f)}</span>`).join('')}</div>
       <div class="fillbar"><i style="width:${pct}%"></i></div>`;
     box.appendChild(el);
   });
-
   const eu=eureka(), max=eu.length?eu[0].who.length:1, box2=document.getElementById('eureka'); box2.innerHTML='';
   eu.slice(0,15).forEach((r,i)=>{
     const el=document.createElement('div'); el.className='eu';
     el.innerHTML=`<div class="rk">${String(i+1).padStart(2,'0')}</div>
-      <div><div class="nm">${r.f}</div><div class="who">${r.who.join(' · ')}</div>
+      <div><div class="nm">${esc(r.f)}</div><div class="who">${r.who.map(esc).join(' · ')}</div>
       <div class="bar" style="width:${Math.max(8,Math.round(r.who.length/max*100))}%"></div></div>
       <div class="cnt">${r.who.length}<small>명 지목</small></div>`;
     box2.appendChild(el);
   });
-
-  const cm={};
-  M.forEach(m=>m.c.forEach(c=>{ (cm[c]=cm[c]||[]).push(m.n+'('+m.g+')'); }));
+  const cm=Object.create(null);
+  M.forEach(m=>(m.c||[]).forEach(c=>{ (cm[c]=cm[c]||[]).push(m.n+'('+m.g+')'); }));
   const rows=Object.entries(cm).sort((a,b)=>b[1].length-a[1].length);
   document.getElementById('custtable').innerHTML=
     `<thead><tr><th>핵심고객</th><th>이 고객을 공유하는 멤버</th><th style="text-align:right">인원</th></tr></thead><tbody>`
-    + rows.map(([c,ns])=>`<tr><td style="font-weight:600">${c}</td><td style="color:var(--ink-2)">${ns.join(', ')}</td><td class="num" style="text-align:right">${ns.length}</td></tr>`).join('')
+    + rows.map(([c,ns])=>`<tr><td style="font-weight:600">${esc(c)}</td><td style="color:var(--ink-2)">${esc(ns.join(', '))}</td><td class="num" style="text-align:right">${ns.length}</td></tr>`).join('')
     + `</tbody>`;
 }
 
-function refreshAll(){ renderTeams(); renderChapter(); }
-renderList(); renderSun(); refreshAll();
+/* ---------- Supabase 연결 · 공개 설정 ---------- */
+const SUPABASE_URL = 'https://alcvloqlzxpeqtagyffy.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFsY3Zsb3FsenhwZXF0YWd5ZmZ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk5NDI5NjgsImV4cCI6MjEwNTUxODk2OH0._YrXhnG2cZSLtZHNwe0wcJiTL8_Vqt6mGFwOksGSAeE';
+// 이 두 상수에는 프로젝트 URL과 anon 공개 키만 입력합니다.
+const COLUMNS='id,name,company,field,team,customers,synergies,wants,good_referral,triggers,is_new,is_real,sort_order,updated_at';
+const COLUMN_MAP={n:'name',co:'company',f:'field',g:'team',c:'customers',s:'synergies',w:'wants',v:'good_referral',tg:'triggers',nw:'is_new',real:'is_real'};
+let db=null, session=null, online=false, busy=false, connecting=false, authBusy=false;
+let readVersion=0, channel=null, realtimeOK=false, refreshTimer=null, pendingRefresh=false;
+const el=id=>document.getElementById(id);
+const canWrite=()=>Boolean(db&&online&&session?.user?.email&&!session.user.is_anonymous&&!busy&&!authBusy);
+const fromRow=r=>({id:r.id,n:r.name,co:r.company,f:r.field,g:r.team,c:r.customers||[],s:r.synergies||[],w:r.wants,v:r.good_referral,tg:r.triggers||[],nw:r.is_new,real:r.is_real,sortOrder:r.sort_order,updatedAt:r.updated_at});
+const toRow=m=>Object.fromEntries(Object.entries(COLUMN_MAP).filter(([k])=>Object.hasOwn(m,k)).map(([k,v])=>[v,m[k]]));
+function message(id,text,error=false){el(id).textContent=text;el(id).className='msg '+(error?'error':'success');}
+function explain(error){
+  const detail=String(error?.message||error||'알 수 없는 오류');
+  if(error?.code==='PGRST116') return '다른 사람이 이 멤버를 수정하거나 삭제했습니다. 최신 내용을 확인한 후 다시 수정하세요.';
+  if(error?.code==='42501'||/row-level security|permission denied/i.test(detail)) return '저장 권한이 없습니다. 다시 로그인하고, 계속되면 관리자에게 쓰기 권한 설정을 확인해 달라고 요청하세요.';
+  if(/JWT|token.*expired|invalid.*token/i.test(detail)) return '로그인이 만료되었습니다. 로그아웃 후 이메일 링크로 다시 로그인하세요.';
+  if(/relation.*does not exist|PGRST205/i.test(detail+' '+error?.code)) return '멤버 테이블을 찾지 못했습니다. 관리자가 Supabase 초기 SQL을 실행한 후 다시 연결하세요.';
+  if(/Failed to fetch|NetworkError|AbortError|timeout|시간 초과/i.test(detail)) return '서버에 연결하지 못했습니다. 인터넷과 Supabase 상태를 확인한 후 다시 연결하세요. 저장 중이었다면 명단에서 반영 여부를 먼저 확인하세요.';
+  if(error?.status===429||/rate.limit/i.test(detail)) return '요청이 너무 많습니다. 잠시 기다린 뒤 다시 시도하세요.';
+  return detail+' 내용을 확인하고 다시 시도하세요. 계속되면 관리자에게 이 메시지를 전달하세요.';
+}
+async function request(query){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),12000);
+  try{const result=await query.abortSignal(controller.signal);if(result.error)throw result.error;return result.data;}
+  finally{clearTimeout(timer);}
+}
+async function timed(promise){
+  let timer;
+  try{return await Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('연결 시간 초과')),15000);})]);}
+  finally{clearTimeout(timer);}
+}
+function setRoster(next){
+  const selected=M[sel]; M=next;
+  sel=Math.max(0,M.findIndex(m=>selected?.id?m.id===selected.id:m.n===selected?.n));
+  renderAll();
+}
+function connection(detail='',error=false){
+  el('connection-badge').textContent=online?(realtimeOK?'공유 명단 · 실시간 연결':'공유 명단 · 연결됨'):'오프라인 · 읽기 전용';
+  el('connection-detail').textContent=detail;
+  el('connection-detail').className='status-detail'+(error?' error':'');
+  el('retryb').hidden=online&&realtimeOK;
+  el('retryb').disabled=connecting||busy;
+  el('roster-badge').textContent=online?'공유 명단 · '+M.length+'명':'경청표 26.09.02 기준 · 31명';
+}
+function permissions(){
+  const writable=canWrite(), email=session?.user?.email||'';
+  el('auth-email').textContent=email;el('auth-email').hidden=!email;
+  el('loginb').hidden=!!email;el('logoutb').hidden=!email;
+  el('loginb').disabled=authBusy;el('logoutb').disabled=authBusy||busy;
+  el('admin-note').textContent=!email?'수정하려면 로그인하세요':!online?'오프라인 · 읽기 전용입니다. 서버 연결을 복구한 후 수정하세요.':busy?'서버에 저장하고 있습니다. 완료될 때까지 기다려 주세요.':'수정 내용은 저장 성공 후 모든 사람에게 공유됩니다. 핵심고객과 상생직군은 쉼표로 구분합니다.';
+  el('admintable').querySelectorAll('input').forEach(input=>input.readOnly=!writable);
+  el('admintable').querySelectorAll('.del').forEach(button=>button.disabled=!writable);
+  ['newrow','bulkb','importb'].forEach(id=>el(id).disabled=!writable);
+  el('bulk').readOnly=!writable;el('io').readOnly=!writable;
+}
+async function loadMembers(background=false){
+  if(!db)return false;
+  const version=++readVersion;
+  try{
+    const rows=await request(db.from('members').select(COLUMNS).order('sort_order').order('name'));
+    if(version!==readVersion)return false;
+    if(background&&el('admintable').contains(document.activeElement)){pendingRefresh=true;return false;}
+    online=true;setRoster(rows.map(fromRow));
+    connection(rows.length?'':'등록된 멤버가 없습니다. 멤버 관리에서 추가하거나 초기 명단을 넣어 주세요.');
+    return true;
+  }catch(error){
+    if(version!==readVersion)return false;
+    if(background&&el('admintable').contains(document.activeElement)){
+      online=false;pendingRefresh=true;permissions();connection(explain(error),true);return false;
+    }
+    online=false;setRoster(JSON.parse(JSON.stringify(DEFAULT_M)));
+    connection(explain(error),true);return false;
+  }
+}
+function scheduleRefresh(){
+  pendingRefresh=true;clearTimeout(refreshTimer);
+  refreshTimer=setTimeout(async()=>{
+    if(busy||el('admintable').contains(document.activeElement))return;
+    pendingRefresh=false;await loadMembers(true);
+  },180);
+}
+el('admintable').addEventListener('focusout',()=>{if(pendingRefresh)scheduleRefresh();});
+function subscribe(){
+  if(channel)return;
+  channel=db.channel('public-members').on('postgres_changes',{event:'*',schema:'public',table:'members'},scheduleRefresh).subscribe(status=>{
+    realtimeOK=status==='SUBSCRIBED';
+    if(realtimeOK){connection();scheduleRefresh();}
+    else if(['CHANNEL_ERROR','TIMED_OUT','CLOSED'].includes(status))connection(online?'실시간 연결을 복구하고 있습니다. 명단은 주기적으로 다시 확인합니다.':el('connection-detail').textContent,!online);
+  });
+}
+async function connect(){
+  if(connecting||busy)return;
+  connecting=true;connection('서버 연결을 확인하고 있습니다.');
+  try{
+    if(!SUPABASE_URL||!SUPABASE_ANON_KEY)throw new Error('프로젝트 연결 정보가 없습니다. 관리자에게 프로젝트 URL과 anon 공개 키 설정을 요청하세요.');
+    if(!/^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/i.test(SUPABASE_URL))throw new Error('프로젝트 URL 형식이 올바르지 않습니다. Supabase의 Project URL을 확인하세요.');
+    let role='';try{role=JSON.parse(atob(SUPABASE_ANON_KEY.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).role;}catch{}
+    if(role!=='anon')throw new Error('anon 공개 키가 올바르지 않습니다. 관리자가 공개 키 설정을 확인해야 합니다.');
+    if(!window.supabase)throw new Error('로그인 라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인하고 페이지를 새로고침하세요.');
+    if(!db){
+      db=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+      db.auth.onAuthStateChange((_event,next)=>{session=next;permissions();});
+    }
+    const sessionTask=timed(db.auth.getSession()).then(({data,error})=>{if(error)throw error;session=data.session;permissions();}).catch(error=>{session=null;permissions();message('auth-status',explain(error),true);});
+    await Promise.all([loadMembers(),sessionTask]);subscribe();
+  }catch(error){online=false;setRoster(JSON.parse(JSON.stringify(DEFAULT_M)));connection(explain(error),true);}
+  finally{connecting=false;el('retryb').disabled=false;permissions();}
+}
+el('retryb').onclick=()=>connect();
+window.addEventListener('online',()=>connect());
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&db)scheduleRefresh();});
+setInterval(()=>{if(!document.hidden&&db)scheduleRefresh();},30000);
+
+/* ---------- 이메일 로그인 ---------- */
+el('loginb').onclick=()=>{message('login-message','');el('login-dialog').showModal();el('login-email').focus();};
+el('close-login').onclick=()=>el('login-dialog').close();
+el('login-form').onsubmit=async event=>{
+  event.preventDefault();if(authBusy)return;
+  if(!db){message('login-message','로그인 연결을 사용할 수 없습니다. 상단의 연결 안내를 확인하고 다시 연결하세요.',true);return;}
+  authBusy=true;el('send-link').disabled=true;permissions();message('login-message','로그인 메일을 보내고 있습니다.');
+  try{
+    const {error}=await timed(db.auth.signInWithOtp({email:el('login-email').value.trim(),options:{emailRedirectTo:location.href}}));
+    if(error)throw error;
+    message('login-message','메일함을 확인하세요. 로그인 링크를 열어 주세요. 메일이 없으면 스팸함도 확인하세요.');
+  }catch(error){message('login-message',explain(error),true);}
+  finally{authBusy=false;el('send-link').disabled=false;permissions();}
+};
+el('logoutb').onclick=async()=>{
+  if(!db||authBusy||busy)return;
+  authBusy=true;permissions();
+  try{const {error}=await timed(db.auth.signOut());if(error)throw error;session=null;message('auth-status','로그아웃했습니다.');}
+  catch(error){message('auth-status',explain(error),true);}
+  finally{authBusy=false;permissions();}
+};
+
+/* ---------- 4. 멤버 관리: 서버 응답 후에만 반영 ---------- */
+const FIELDS=[['n','성함',80],['co','회사명',130],['f','전문분야',140],['g','파워팀',100],['c','핵심고객',180],['s','상생직군',300]];
+async function write(action,messageId='adminmsg'){
+  if(!canWrite()){message(messageId,online?'수정하려면 로그인하세요.':'오프라인에서는 수정할 수 없습니다. 먼저 다시 연결하세요.',true);renderAdmin();return false;}
+  busy=true;++readVersion;permissions();message(messageId,'서버에 저장하고 있습니다.');
+  let outcome='',error=null;
+  try{outcome=await action();}catch(e){error=e;}
+  const refreshed=await loadMembers();
+  busy=false;permissions();
+  if(error)message(messageId,explain(error),true);
+  else message(messageId,(typeof outcome==='string'?outcome:'저장했습니다.')+(refreshed?'':' 저장은 완료됐지만 명단을 다시 불러오지 못했습니다. 다시 연결해 확인하세요.'),!refreshed);
+  if(pendingRefresh)scheduleRefresh();
+  return !error&&refreshed;
+}
+function matchVersion(query,member){
+  query=query.eq('id',member.id);
+  return member.updatedAt?query.eq('updated_at',member.updatedAt):query;
+}
+async function updateMember(member,patch){
+  if(!session?.user?.email)throw new Error('로그인이 해제되었습니다. 다시 로그인하세요.');
+  return request(matchVersion(db.from('members').update(patch),member).select('id').single());
+}
+function renderAdmin(){
+  const box=el('admintable');
+  box.innerHTML=`<thead><tr>${FIELDS.map(([,label,width])=>`<th style="min-width:${width}px">${label}</th>`).join('')}<th>관리</th></tr></thead>`
+    +`<tbody>${M.map((m,i)=>`<tr data-i="${i}">`+FIELDS.map(([key,label])=>{
+      const value=Array.isArray(m[key])?m[key].join(', '):(m[key]||'');
+      return `<td data-label="${label}"><input class="cell" data-k="${key}" aria-label="${esc(m.n+' '+label)}" value="${esc(value)}" readonly></td>`;
+    }).join('')+`<td data-label="관리"><button class="mini del" aria-label="${esc(m.n)} 삭제" disabled>삭제</button></td></tr>`).join('')}</tbody>`;
+  box.querySelectorAll('input.cell').forEach(input=>{
+    input.onchange=()=>{
+      const member=M[+input.closest('tr').dataset.i],key=input.dataset.k,value=input.value.trim();
+      const parsed=['c','s'].includes(key)?value.split(',').map(x=>x.trim()).filter(Boolean):value;
+      if(key==='n'&&!value){message('adminmsg','성함은 비워 둘 수 없습니다. 성함을 입력하세요.',true);renderAdmin();return;}
+      if(JSON.stringify(member[key]||'')===JSON.stringify(parsed))return;
+      write(()=>updateMember(member,{[COLUMN_MAP[key]]:key==='g'?(value||'미정'):parsed}));
+    };
+  });
+  box.querySelectorAll('.del').forEach(button=>{
+    button.onclick=()=>{
+      const member=M[+button.closest('tr').dataset.i];
+      if(!canWrite()||!confirm(member.n+' 대표를 공유 명단에서 삭제할까요? 모든 사람에게 반영됩니다.'))return;
+      write(async()=>{await request(matchVersion(db.from('members').delete(),member).select('id').single());return '삭제했습니다.';});
+    };
+  });
+  el('cnt').textContent=M.length;el('list-title').textContent='멤버 '+M.length+'명 · 파워팀순';permissions();
+}
+el('newrow').onclick=async()=>{
+  let inserted;
+  const saved=await write(async()=>{
+    const nextOrder=Math.max(-1,...M.map(m=>m.sortOrder||0))+1;
+    inserted=await request(db.from('members').insert({name:'새 멤버',sort_order:nextOrder}).select('id').single());
+    return '멤버를 추가했습니다. 성함과 정보를 입력하세요.';
+  });
+  if(saved){const index=M.findIndex(m=>m.id===inserted.id);el('admintable').querySelector(`tr[data-i="${index}"] input`)?.focus();}
+};
+function validateImport(value){
+  if(!Array.isArray(value)||!value.length)throw new Error('한 명 이상 들어 있는 JSON 배열을 붙여 넣으세요.');
+  return value.map((m,index)=>{
+    if(!m||typeof m!=='object'||Array.isArray(m)||typeof m.n!=='string'||!m.n.trim())throw new Error((index+1)+'번째 항목의 성함(n)을 확인하세요.');
+    const output={n:m.n.trim()};
+    for(const key of Object.keys(COLUMN_MAP)){
+      if(key==='n'||!Object.hasOwn(m,key))continue;
+      if(['c','s','tg'].includes(key)){
+        if(!Array.isArray(m[key])||m[key].some(v=>typeof v!=='string'))throw new Error(output.n+'의 '+key+' 항목은 문자열 배열이어야 합니다.');
+        output[key]=m[key].map(v=>v.trim()).filter(Boolean);
+      }else if(['nw','real'].includes(key)){
+        if(![true,false,0,1].includes(m[key]))throw new Error(output.n+'의 '+key+' 항목은 true 또는 false여야 합니다.');
+        output[key]=Boolean(m[key]);
+      }else{
+        if(typeof m[key]!=='string')throw new Error(output.n+'의 '+key+' 항목은 문자열이어야 합니다.');
+        output[key]=m[key].trim();
+      }
+    }
+    if(Object.hasOwn(output,'g')&&!output.g)output.g='미정';return output;
+  });
+}
+async function applyBatch(items){
+  const rows=(await request(db.from('members').select(COLUMNS).order('sort_order').order('name'))).map(fromRow);
+  const seen=new Set(),plans=[];
+  for(const item of items){
+    if(seen.has(item.n))throw new Error('입력에 '+item.n+' 성함이 중복됩니다. 한 명씩 구분한 후 다시 반영하세요.');
+    seen.add(item.n);
+    const matches=rows.filter(m=>m.n===item.n);
+    if(matches.length>1)throw new Error(item.n+' 성함의 동명이인이 있습니다. 멤버 관리 표에서 회사를 확인해 직접 수정하세요.');
+    plans.push({member:matches[0],item});
+  }
+  let added=0,updated=0,nextOrder=Math.max(-1,...rows.map(m=>m.sortOrder||0))+1;
+  try{
+    for(const {member,item} of plans){
+      if(!session?.user?.email)throw new Error('로그인이 해제되었습니다. 다시 로그인하세요.');
+      if(member){await updateMember(member,toRow(item));updated++;}
+      else{await request(db.from('members').insert({...toRow(item),sort_order:nextOrder++}).select('id').single());added++;}
+    }
+  }catch(error){throw new Error('추가 '+added+'명 · 갱신 '+updated+'명까지 저장했습니다. '+explain(error)+' 현재 명단을 확인한 후 남은 항목만 다시 반영하세요.');}
+  return '추가 '+added+'명 · 갱신 '+updated+'명 반영했습니다.';
+}
+el('bulkb').onclick=async()=>{
+  let items;
+  try{
+    const text=el('bulk').value.trim();if(!text)throw new Error('반영할 명단을 먼저 붙여 넣으세요.');
+    items=text.split(/\r?\n/).filter(line=>line.trim()).map((line,index)=>{
+      const parts=line.split(line.includes('\t')?'\t':',').map(v=>v.trim());
+      if(parts.length!==4||!parts[0])throw new Error((index+1)+'번째 줄을 성함, 회사명, 전문분야, 파워팀의 네 칸으로 입력하세요.');
+      return {n:parts[0],co:parts[1],f:parts[2],g:parts[3]||'미정'};
+    });
+  }catch(error){message('bulkmsg',explain(error),true);return;}
+  if(await write(()=>applyBatch(items),'bulkmsg'))el('bulk').value='';
+};
+el('exportb').onclick=async()=>{
+  const output=M.map(m=>Object.fromEntries(Object.keys(COLUMN_MAP).filter(key=>Object.hasOwn(m,key)).map(key=>[key,m[key]])));
+  el('io').value=JSON.stringify(output,null,1);el('io').select();
+  try{await navigator.clipboard.writeText(el('io').value);message('iomsg','클립보드에 복사했습니다.');}
+  catch{message('iomsg','명단을 아래 칸에 표시했습니다. 전체 선택해 복사하세요.');}
+};
+el('importb').onclick=async()=>{
+  let items;
+  try{items=validateImport(JSON.parse(el('io').value));}
+  catch(error){message('iomsg',error instanceof SyntaxError?'JSON 형식이 올바르지 않습니다. 내보내기로 만든 내용을 그대로 붙여 넣으세요.':explain(error),true);return;}
+  await write(()=>applyBatch(items),'iomsg');
+};
+
+function renderAll(){ reindex(); renderList(); renderSun(); renderTeams(); renderChapter(); renderAdmin(); }
+sel=Math.max(0,M.findIndex(m=>m.n==='박미성'));renderAll();
+document.addEventListener('DOMContentLoaded',connect,{once:true});
+
 </script>
 
 </body>

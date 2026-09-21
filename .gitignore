@@ -1,0 +1,8 @@
+# Supabase 비밀키는 환경변수로만 사용합니다.
+.env
+.env.*
+!.env.example
+*.local
+node_modules/
+.codex-tmp/
+diagnostics-output/
