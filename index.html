@@ -43,150 +43,194 @@
 body{
   margin:0; background:var(--paper); color:var(--ink);
   font-family:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
-  font-size:14px; line-height:1.6; -webkit-font-smoothing:antialiased;
+  font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased;
 }
-.wrap{max-width:1180px; margin:0 auto; padding-inline:16px; padding-block:0 56px}
+.wrap{max-width:1240px; margin:0 auto; padding-inline:24px; padding-block:0 64px}
 h1,h2,h3{font-family:"Gothic A1","Apple SD Gothic Neo",sans-serif; margin:0; text-wrap:balance; letter-spacing:-.02em}
 .num{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums}
 
-header{padding-block:28px 18px; border-bottom:1px solid var(--line)}
-.eyebrow{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--red); font-weight:600}
-h1{font-size:clamp(26px,4.4vw,38px); font-weight:900; margin-top:6px}
-.sub{color:var(--ink-2); margin-top:8px; max-width:64ch}
+header{padding-block:26px 18px; border-bottom:1px solid var(--line)}
+.eyebrow{font-size:14px; letter-spacing:.06em; color:var(--red); font-weight:600}
+.eyebrow::before{content:'';display:inline-block;width:12px;height:12px;margin-right:9px;border-radius:50%;background:var(--sun);box-shadow:0 0 0 5px var(--sun-soft)}
+h1{font-size:clamp(30px,4.4vw,44px); font-weight:900; margin-top:16px}
+.sub{color:var(--ink-2); margin-block:10px 18px; max-width:70ch}
 .sub b{color:var(--ink); font-weight:600}
-.badge{display:inline-block; font-size:11px; padding:2px 8px; border-radius:99px; background:var(--sun-soft); color:var(--sun); border:1px solid color-mix(in srgb,var(--sun) 35%,transparent); font-weight:600; vertical-align:2px}
+.sub,.note,.dialog-intro,.login-help{word-break:keep-all}
+.badge{display:inline-block; font-size:14px; padding:4px 10px; border-radius:99px; background:var(--sun-soft); color:var(--ink-2); border:1px solid color-mix(in srgb,var(--sun) 35%,transparent); font-weight:600; vertical-align:2px}
 
-nav{display:flex; gap:8px; flex-wrap:wrap; margin-block:20px 24px; position:sticky; top:env(safe-area-inset-top,0px); background:var(--paper); padding-block:8px; z-index:5}
+nav{display:flex; gap:10px; flex-wrap:wrap; margin-block:16px 24px; position:sticky; top:env(safe-area-inset-top,0px); background:var(--paper); padding-block:10px; z-index:5}
 .step{display:flex; align-items:center; gap:9px; border:1px solid var(--line-2); background:var(--surface); color:var(--ink-2);
-  padding:9px 15px 9px 10px; border-radius:10px; cursor:pointer; font:inherit; font-weight:500; transition:.15s}
+  flex:1; min-height:54px; padding:11px 16px; border-radius:12px; cursor:pointer; font:inherit; font-weight:600; transition:.15s}
 .step:hover{border-color:var(--ink-3)}
-.step .idx{width:20px;height:20px;border-radius:6px;background:var(--surface-2);color:var(--ink-3);display:grid;place-items:center;font-size:11px;font-weight:700;font-family:"IBM Plex Mono",monospace}
-.step[aria-selected="true"]{background:var(--ink); color:var(--paper); border-color:var(--ink)}
-.step[aria-selected="true"] .idx{background:var(--red); color:#fff}
+.step .idx{flex-shrink:0;width:28px;height:28px;border-radius:8px;background:var(--sun-soft);color:var(--ink-2);display:grid;place-items:center;font-size:14px;font-weight:700;font-family:"IBM Plex Mono",monospace}
+.step[aria-selected="true"]{background:var(--red-soft); color:var(--red); border-color:var(--red);box-shadow:inset 0 -3px 0 var(--red)}
+.step[aria-selected="true"] .idx{background:var(--red); color:var(--surface)}
 .step:focus-visible{outline:2px solid var(--red); outline-offset:2px}
 
-.cols{display:grid; grid-template-columns:238px 1fr; gap:22px; align-items:start}
-.cols.rev{grid-template-columns:1fr 360px}
-@media (max-width:860px){.cols,.cols.rev{grid-template-columns:1fr}}
+.cols{display:grid; grid-template-columns:264px minmax(0,1fr); gap:22px; align-items:start}
+.cols.rev{grid-template-columns:minmax(0,1fr) 380px}
+@media (max-width:1140px){.cols,.cols.rev{grid-template-columns:1fr}}
 .panel{background:var(--surface); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow)}
-.panel-pad{padding:18px}
-.ptitle{font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-3); font-weight:600; margin-bottom:10px}
+.panel-pad{padding:22px}
+.ptitle{font-size:16px; letter-spacing:-.01em; color:var(--ink-2); font-weight:600; margin-bottom:12px}
 
-.mlist{max-height:600px; overflow:auto; padding:4px}
-@media (max-width:860px){.mlist{max-height:220px}}
-.gname{font-size:10.5px; letter-spacing:.1em; color:var(--sun); font-weight:700; padding:10px 9px 4px}
+.mlist{max-height:690px; overflow:auto; padding:4px}
+@media (max-width:1140px){.mlist{max-height:260px}}
+.gname{font-size:14px; color:var(--ink-2); font-weight:700; padding:9px 10px; margin-top:9px; border-radius:8px; background:var(--sun-soft)}
 .mrow{width:100%; text-align:left; border:0; background:none; font:inherit; color:var(--ink); cursor:pointer;
-  padding:6px 9px; border-radius:8px; display:block}
+  min-height:64px; padding:10px; border-radius:8px; display:block}
 .mrow:hover{background:var(--surface-2)}
-.mrow[aria-current="true"]{background:var(--red); color:#fff}
-.mrow[aria-current="true"] small{color:rgba(255,255,255,.82)}
+.mrow[aria-current="true"]{background:var(--red-soft); color:var(--red);box-shadow:inset 3px 0 0 var(--red)}
+.mrow[aria-current="true"] small{color:var(--ink-2)}
 .mrow strong{font-weight:600}
-.mrow small{display:block; color:var(--ink-3); font-size:11.5px; line-height:1.4}
+.mrow small{display:block; color:var(--ink-2); font-size:14px; line-height:1.5; margin-top:2px}
 .search{width:100%; border:1px solid var(--line-2); background:var(--surface-2); color:var(--ink);
-  border-radius:9px; padding:8px 10px; font:inherit; font-size:13px; margin-bottom:6px}
+  border-radius:10px; min-height:50px; padding:11px 12px; font:inherit; font-size:16px; margin-bottom:8px}
 .search:focus{outline:2px solid var(--red); outline-offset:1px}
-.new{font-size:9.5px; background:var(--sun); color:#fff; border-radius:4px; padding:1px 4px; margin-left:4px; vertical-align:1px; font-weight:700}
+.new{font-size:12px; background:var(--sun-soft); color:var(--ink); border:1px solid var(--sun); border-radius:4px; padding:1px 4px; margin-left:4px; vertical-align:1px; font-weight:700}
 
-.stage{position:relative; width:100%; aspect-ratio:1.45/1; min-height:440px}
+.stage{position:relative; width:100%; aspect-ratio:1.45/1; min-height:510px}
 .rays{position:absolute; inset:0; width:100%; height:100%}
-.node{position:absolute; transform:translate(-50%,-50%); width:130px}
-.card{background:var(--surface); border:1px solid var(--line-2); border-radius:10px; padding:8px 10px; text-align:center; box-shadow:var(--shadow); position:relative}
-.card .f{font-weight:600; font-size:12.5px; line-height:1.3}
-.card .who{font-size:11px; color:var(--red); font-weight:600; margin-top:3px}
+.node{position:absolute; transform:translate(-50%,-50%); width:156px}
+.card{background:var(--surface); border:1px solid var(--line-2); border-radius:12px; padding:11px 9px; text-align:center; box-shadow:var(--shadow); position:relative}
+.card .f{font-weight:600; font-size:16px; line-height:1.35;word-break:keep-all}
+.card .who{font-size:14px; color:var(--red); font-weight:600; margin-top:5px;line-height:1.4}
 .card.gap{border-style:dashed; border-color:var(--gap); background:var(--gap-soft)}
-.card.gap .who{color:var(--gap)}
+.card.gap .who{color:var(--ink-2)}
 .card .x{position:absolute; top:-7px; right:-7px; width:18px;height:18px; border-radius:99px; border:1px solid var(--line-2);
   background:var(--surface); color:var(--ink-3); font-size:11px; line-height:1; cursor:pointer; display:none; padding:0}
 .card:hover .x, .card:focus-within .x{display:block}
-.core{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:200px; height:200px; border-radius:99px;
+.core{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:232px; min-height:232px; border-radius:50%;
   background:radial-gradient(circle at 50% 36%, var(--sun-soft), var(--surface) 74%);
   border:3px solid var(--sun); display:grid; place-content:center; text-align:center; padding:14px; box-shadow:var(--shadow)}
-.core .lab{font-size:10px; letter-spacing:.12em; color:var(--sun); font-weight:700}
-.core .cust{font-family:"Gothic A1",sans-serif; font-weight:900; font-size:14.5px; line-height:1.35; margin-top:5px}
-.core .field{margin-top:7px; padding-top:7px; border-top:1px solid var(--line); font-size:11.5px; color:var(--ink-2)}
+.core .lab{font-size:14px; color:var(--ink-2); font-weight:700}
+.core .cust{font-family:"Gothic A1",sans-serif; font-weight:900; font-size:16px; line-height:1.4; margin-top:5px;word-break:keep-all}
+.core .field{margin-top:8px; padding-top:8px; border-top:1px solid var(--line); font-size:14px; color:var(--ink-2)}
 .stagelist{display:none; flex-direction:column; gap:8px}
 @media (max-width:760px){.stage{display:none} .stagelist{display:flex}}
-.lcore{background:var(--sun-soft); border:2px solid var(--sun); border-radius:12px; padding:12px}
-.lrow{display:flex; justify-content:space-between; gap:10px; align-items:center; border:1px solid var(--line-2); border-radius:10px; padding:9px 12px; background:var(--surface)}
+.lcore{background:var(--sun-soft); border:2px solid var(--sun); border-radius:12px; padding:18px}
+.lcore-label{font-size:14px;color:var(--ink-2);font-weight:600}
+.lcore-customers{font-family:"Gothic A1",sans-serif;font-weight:900;font-size:20px;line-height:1.5;margin-block:4px}
+.lcore-member{font-size:16px;color:var(--ink-2);margin-top:6px}
+.lrow{display:flex; justify-content:space-between; gap:10px; align-items:center; min-height:58px; border:1px solid var(--line-2); border-radius:10px; padding:12px 14px; background:var(--surface)}
+.lrow .lwho{font-size:14px;font-weight:600;text-align:right}
 .lrow.gap{border-style:dashed; border-color:var(--gap); background:var(--gap-soft)}
 
-.chips{display:flex; flex-wrap:wrap; gap:6px}
-.chip{font-size:11.5px; padding:3px 9px; border-radius:99px; background:var(--surface-2); border:1px solid var(--line); color:var(--ink-2)}
-.chip.sun{background:var(--sun-soft); border-color:color-mix(in srgb,var(--sun) 35%,transparent); color:var(--sun); font-weight:600}
+.chips{display:flex; flex-wrap:wrap; gap:7px}
+.chip{font-size:14px; padding:5px 10px; border-radius:99px; background:var(--surface-2); border:1px solid var(--line); color:var(--ink-2)}
+.chip.sun{background:var(--sun-soft); border-color:color-mix(in srgb,var(--sun) 35%,transparent); color:var(--ink); font-weight:600}
 .grid{display:grid; gap:14px}
-.g3{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}
+.g3{grid-template-columns:repeat(auto-fit,minmax(290px,1fr))}
 .addrow{display:flex; gap:8px; margin-top:12px; flex-wrap:wrap}
 .addrow input{flex:1; min-width:180px}
-.btn{border:1px solid var(--ink); background:var(--ink); color:var(--paper); border-radius:9px; padding:8px 14px; font:inherit; font-weight:600; font-size:13px; cursor:pointer}
+.btn{border:1px solid var(--ink); background:var(--ink); color:var(--paper); border-radius:10px; min-height:48px; padding:11px 18px; font:inherit; font-weight:600; font-size:16px; cursor:pointer}
+.btn.primary{background:var(--red);border-color:var(--red);color:var(--surface)}
 .btn.ghost{background:none; color:var(--ink-2); border-color:var(--line-2)}
 .btn:focus-visible{outline:2px solid var(--red); outline-offset:2px}
-.want{margin-top:14px; border-left:3px solid var(--sun); background:var(--surface-2); padding:9px 12px; border-radius:0 8px 8px 0; font-size:12.5px; color:var(--ink-2)}
+.want{margin-top:18px; border-left:4px solid var(--sun); background:var(--sun-soft); padding:14px 16px; border-radius:0 10px 10px 0; font-size:16px; color:var(--ink-2)}
 .want b{color:var(--ink)}
 
 .eu{display:grid; grid-template-columns:26px 1fr auto; gap:10px; align-items:center; padding:9px 0; border-bottom:1px solid var(--line)}
 .eu:last-child{border-bottom:0}
-.eu .rk{font-family:"IBM Plex Mono",monospace; font-weight:600; color:var(--ink-3); font-size:12px}
+.eu .rk{font-family:"IBM Plex Mono",monospace; font-weight:600; color:var(--ink-2); font-size:14px}
 .eu .bar{height:7px; border-radius:99px; background:var(--gap); opacity:.8; margin-top:5px}
-.eu .nm{font-weight:600; font-size:13.5px}
-.eu .who{font-size:11px; color:var(--ink-3); margin-top:2px; line-height:1.45}
-.eu .cnt{font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:16px; color:var(--red); text-align:right}
-.eu .cnt small{display:block; font-family:"IBM Plex Sans KR",sans-serif; font-size:10px; color:var(--ink-3); font-weight:400}
+.eu .nm{font-weight:600; font-size:17px}
+.eu .who{font-size:14px; color:var(--ink-2); margin-top:3px; line-height:1.5}
+.eu .cnt{font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:20px; color:var(--red); text-align:right}
+.eu .cnt small{display:block; font-family:"IBM Plex Sans KR",sans-serif; font-size:13px; color:var(--ink-2); font-weight:400}
 
-.tsun{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px; box-shadow:var(--shadow)}
-.tsun h3{font-size:15px; font-weight:700}
-.tsun .meta{font-size:11px; color:var(--ink-3); margin:3px 0 11px; font-family:"IBM Plex Mono",monospace}
+.tsun{background:var(--surface); border:1px solid var(--line); border-top:4px solid var(--sun); border-radius:14px; padding:20px; box-shadow:var(--shadow)}
+.tsun:nth-child(3n+2){border-top-color:var(--red)}
+.tsun:nth-child(3n){border-top-color:var(--gap)}
+.tsun h3{font-size:22px; font-weight:700}
+.tsun .meta{font-size:14px; color:var(--ink-2); margin:5px 0 16px}
 .dots{display:flex; flex-wrap:wrap; gap:5px}
-.dot{font-size:11px; padding:3px 8px; border-radius:7px; background:var(--red-soft); color:var(--red); font-weight:600; border:1px solid color-mix(in srgb,var(--red) 22%,transparent)}
-.dot.hollow{background:none; color:var(--gap); border:1px dashed var(--gap); font-weight:500}
+.dot{font-size:14px; padding:5px 9px; border-radius:7px; background:var(--red-soft); color:var(--red); font-weight:600; border:1px solid color-mix(in srgb,var(--red) 22%,transparent)}
+.dot.hollow{background:none; color:var(--ink-2); border:1px dashed var(--gap); font-weight:500}
 .fillbar{height:5px; border-radius:99px; background:var(--line); overflow:hidden; margin-top:11px}
 .fillbar i{display:block; height:100%; background:var(--red)}
-table{width:100%; border-collapse:collapse; font-size:13px}
-th,td{text-align:left; padding:8px 10px; border-bottom:1px solid var(--line)}
-th{font-size:11px; letter-spacing:.08em; color:var(--ink-3); font-weight:600}
+table{width:100%; border-collapse:collapse; font-size:16px}
+th,td{text-align:left; padding:12px 10px; border-bottom:1px solid var(--line)}
+th{font-size:14px; color:var(--ink-2); font-weight:600;background:var(--surface-2)}
 .scrollx{overflow-x:auto}
-.note{font-size:12px; color:var(--ink-3); margin-top:14px; line-height:1.6}
-.legend{display:flex; gap:14px; flex-wrap:wrap; font-size:11.5px; color:var(--ink-2); margin-top:12px}
+.note{font-size:15px; color:var(--ink-2); margin-top:14px; line-height:1.65}
+.legend{display:flex; gap:14px; flex-wrap:wrap; font-size:14px; color:var(--ink-2); margin-top:16px}
 .legend i{display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:5px; vertical-align:-1px}
-input.cell{width:100%; border:1px solid transparent; background:none; color:var(--ink); font:inherit; font-size:12.5px; padding:5px 7px; border-radius:6px}
+input.cell{width:100%;min-width:0;min-height:48px; border:1px solid transparent; background:none; color:var(--ink); font:inherit; font-size:16px; padding:10px 8px; border-radius:8px}
 input.cell:hover{border-color:var(--line)}
 input.cell:focus{outline:none; border-color:var(--red); background:var(--surface-2)}
-.mini{border:1px solid var(--line-2); background:var(--surface); color:var(--ink-3); border-radius:6px; padding:4px 9px; font:inherit; font-size:11.5px; cursor:pointer}
+.mini{border:1px solid var(--line-2); background:var(--surface); color:var(--ink-2); border-radius:8px;min-height:48px; padding:9px 12px; font:inherit; font-size:15px; cursor:pointer}
 .mini:hover{border-color:var(--red); color:var(--red)}
-#admintable td{padding:2px 4px; vertical-align:middle}
-textarea.io{width:100%; min-height:110px; border:1px solid var(--line-2); background:var(--surface-2); color:var(--ink); border-radius:9px; padding:9px 11px; font-family:"IBM Plex Mono",monospace; font-size:11.5px; line-height:1.55; resize:vertical}
+#admintable td{padding:5px 4px; vertical-align:middle}
+textarea.io{width:100%; min-height:140px; border:1px solid var(--line-2); background:var(--surface-2); color:var(--ink); border-radius:9px; padding:12px; font:inherit; font-size:16px; line-height:1.6; resize:vertical}
 textarea.io:focus{outline:2px solid var(--red); outline-offset:1px}
-.msg{font-size:12px; color:var(--red); font-weight:600; margin-top:7px; min-height:17px}
-.warnbox{border:1px dashed var(--gap); background:var(--gap-soft); color:var(--ink-2); border-radius:10px; padding:11px 13px; font-size:12.5px; line-height:1.65; margin-bottom:16px}
+.msg{font-size:16px; color:var(--red); font-weight:600; margin-top:9px; min-height:0}
+.msg:empty{display:none}
+.warnbox{border:1px solid var(--gap); background:var(--gap-soft); color:var(--ink-2); border-radius:12px; padding:16px 18px; font-size:16px; line-height:1.65; margin-bottom:16px}
 .warnbox b{color:var(--ink)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 .header-top,.auth-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
-.auth-actions{justify-content:flex-end;font-size:12px;min-width:0}
+.auth-actions{justify-content:flex-end;font-size:15px;min-width:0}
 #auth-email{overflow-wrap:anywhere;max-width:100%}
-.connection{margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.auth-state{padding:3px 10px;border:1px solid var(--gap);border-radius:99px;background:var(--gap-soft);font-size:14px;color:var(--ink-2)}
+.connection{margin-top:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .connection .badge{vertical-align:0}
-.status-detail{font-size:12px;color:var(--ink-2);overflow-wrap:anywhere}
+.status-detail{font-size:14px;color:var(--ink-2);overflow-wrap:anywhere}
 .status-detail.error,.msg.error{color:var(--red)}
 .msg.success{color:var(--ink-2)}
 button:disabled{opacity:.45;cursor:not-allowed}
 input[readonly],textarea[readonly]{color:var(--ink-2);cursor:default}
 .cols>*,.grid>*,.panel,.lrow>*,.eu>*{min-width:0}
 .wrap{overflow-wrap:anywhere}
-dialog{width:min(420px,calc(100% - 32px));max-height:calc(100% - 32px);overflow:auto;border:1px solid var(--line);border-radius:14px;padding:22px;background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+dialog{width:min(520px,calc(100% - 32px));max-height:calc(100% - 32px);overflow:auto;border:1px solid var(--line);border-top:5px solid var(--red);border-radius:18px;padding:28px;background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
 dialog::backdrop{background:rgba(0,0,0,.45)}
-dialog h2{font-size:20px;margin-bottom:12px}
-dialog label{display:block;margin-bottom:6px}
-.dialog-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+dialog h2{font-size:28px;margin-bottom:10px}
+dialog label{display:block;margin-bottom:8px;font-weight:600}
+.dialog-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
+.dialog-actions .primary{flex:1}
+.dialog-intro{margin-block:0 20px;color:var(--ink-2);font-size:16px}
+.login-help{padding:14px 16px;margin-top:16px;background:var(--sun-soft);border-radius:10px;color:var(--ink-2);font-size:15px}
+.login-help strong{color:var(--ink)}
+#login-message:not(:empty){padding:14px;background:var(--gap-soft);border:1px solid var(--gap);border-radius:10px;color:var(--ink)}
+#login-message.error{background:var(--red-soft);border-color:var(--red);color:var(--red)}
+.login-guide{margin-top:24px;padding:22px 24px;background:var(--sun-soft);border:1px solid color-mix(in srgb,var(--sun) 45%,transparent);border-radius:16px}
+.guide-heading{display:flex;justify-content:space-between;gap:18px;align-items:center}
+.guide-heading h2{font-size:23px;line-height:1.4}
+.guide-heading p{margin:5px 0 0;color:var(--ink-2);font-size:15px}
+.guide-heading .btn{flex-shrink:0}
+.login-steps{list-style:none;margin:18px 0 0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.login-steps li{display:flex;align-items:center;gap:12px;border-radius:10px;padding:12px 14px;background:var(--surface);border:1px solid color-mix(in srgb,var(--sun) 25%,transparent);font-size:16px}
+.login-steps .number{display:grid;place-items:center;width:32px;height:32px;flex-shrink:0;border-radius:50%;background:var(--red-soft);color:var(--red);font-weight:600}
+.login-steps strong{font-weight:600}
+.login-steps small{display:block;color:var(--ink-2);font-size:14px}
+.view-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}
+.view-heading h2{font-size:26px}
+.view-heading p{margin:4px 0 0;font-size:16px;color:var(--ink-2)}
+.list-hint{font-size:14px;color:var(--ink-2);margin:0 0 12px}
+.admin-access{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:18px;padding:16px 18px;border:1px solid var(--gap);border-radius:12px;background:var(--gap-soft)}
+.admin-access .warnbox{margin:0;padding:0;border:0;background:none}
+.admin-access .btn{flex-shrink:0}
+.field-tip{margin:0 0 18px;color:var(--ink-2);font-size:15px}
 .empty-state{padding:24px;color:var(--ink-2);text-align:center}
 @media(max-width:600px){
+  .wrap{padding-inline:16px}
+  header{padding-top:20px}.header-top{gap:14px}.auth-actions{margin-left:auto}
+  h1{margin-top:20px}.sub{font-size:16px}
   .g3{grid-template-columns:minmax(0,1fr)}
-  nav{gap:6px}.step{flex:1 1 45%;padding:9px 8px;font-size:12px}
-  .panel-pad{padding:14px}.lrow{align-items:flex-start}.lrow>span:last-child{flex-shrink:0}
+  nav{gap:8px;margin-bottom:20px}.step{flex:1 1 45%;padding:10px;font-size:16px;gap:7px}
+  .panel-pad{padding:16px}.lrow{align-items:flex-start}.lrow>span:last-child{flex-shrink:0}
+  .login-guide{padding:16px;margin-top:18px}.guide-heading{display:block}.guide-heading h2{font-size:20px}
+  .guide-heading .btn{width:100%;margin-top:12px}.login-steps{gap:6px;margin-top:12px}.login-steps li{flex-direction:column;gap:5px;padding:9px 3px;text-align:center}
+  .login-steps .number{width:26px;height:26px;font-size:14px}.login-steps small{display:none}.login-steps strong{font-size:14px}
+  .view-heading{display:block}.view-heading h2{font-size:24px}
+  .admin-access{display:block}.admin-access .btn{width:100%;margin-top:12px}
+  dialog{padding:22px}dialog h2{font-size:26px}.dialog-actions .btn{width:100%}
   #admintable,#admintable tbody,#admintable tr,#admintable td{display:block;width:100%}
   #admintable thead{display:none}
-  #admintable tr{padding:10px 0;border-bottom:1px solid var(--line-2)}
-  #admintable td{display:grid;grid-template-columns:80px minmax(0,1fr);align-items:center;border:0;padding:3px 0}
-  #admintable td::before{content:attr(data-label);font-size:11px;color:var(--ink-3)}
-  #admintable input.cell{min-width:0;background:var(--surface-2)}
+  #admintable tr{padding:14px 12px;border:1px solid var(--line-2);border-top:3px solid var(--sun);border-radius:12px;margin-bottom:16px;background:var(--surface)}
+  #admintable td{display:grid;grid-template-columns:76px minmax(0,1fr);gap:5px;align-items:center;border:0;padding:5px 0}
+  #admintable td::before{content:attr(data-label);font-size:14px;color:var(--ink-2);font-weight:600}
+  #admintable input.cell{min-width:0;background:var(--surface-2);border-color:var(--line)}
   #admintable .del{justify-self:start}
   #custtable{table-layout:fixed}#custtable th,#custtable td{padding:8px 4px}#custtable th:last-child{width:42px}
 }
@@ -199,10 +243,22 @@ dialog label{display:block;margin-bottom:6px}
 <header>
   <div class="header-top">
     <div class="eyebrow">BNI 부산 파이오니아 · 8기</div>
-    <div class="auth-actions"><span id="auth-email" hidden></span><button class="mini" id="loginb">로그인</button><button class="mini" id="logoutb" hidden>로그아웃</button></div>
+    <div class="auth-actions"><span class="auth-state" id="auth-state" hidden>로그인됨</span><span id="auth-email" hidden></span><button class="btn primary" id="loginb">로그인</button><button class="btn ghost" id="logoutb" hidden>로그아웃</button></div>
   </div>
   <h1>파이오니아 선샤인</h1>
-  <p class="sub">핵심고객을 가운데 놓고 <b>상생직군</b>을 둘러 그리면 나의 선샤인이 완성되고, 선샤인이 겹치는 멤버끼리 <b>파워팀</b>이 되며, 끝내 비어 있는 자리가 <b>다음 비지터 초대 명단</b>으로 남습니다. <span class="badge" id="roster-badge">경청표 26.09.02 기준 31명</span></p>
+  <p class="sub">함께할 멤버를 찾고, 서로의 비즈니스를 연결하세요.<br><b>나의 핵심고객 · 상생직군 · 파워팀</b>을 한눈에 볼 수 있습니다.</p>
+  <span class="badge" id="roster-badge">경청표 26.09.02 기준 31명</span>
+  <section class="login-guide" id="login-guide" aria-labelledby="guide-title">
+    <div class="guide-heading">
+      <div><h2 id="guide-title">멤버 정보 수정은 이메일 로그인</h2><p>둘러보기는 누구나. 수정은 이메일 인증 후.</p></div>
+      <button class="btn primary" id="guide-login">이메일로 로그인</button>
+    </div>
+    <ol class="login-steps">
+      <li><span class="number" aria-hidden="true">1</span><div><strong>이메일 입력</strong><small>내가 쓰는 이메일</small></div></li>
+      <li><span class="number" aria-hidden="true">2</span><div><strong>메일함 확인</strong><small>로그인 메일 열기</small></div></li>
+      <li><span class="number" aria-hidden="true">3</span><div><strong>링크 누르기</strong><small>로그인 완료</small></div></li>
+    </ol>
+  </section>
   <div class="connection" role="status"><span class="badge" id="connection-badge">오프라인 · 읽기 전용</span><span class="status-detail" id="connection-detail">서버 연결을 확인하고 있습니다.</span><button class="mini" id="retryb">다시 연결</button></div>
   <div class="msg" id="auth-status" role="status"></div>
 </header>
@@ -215,6 +271,7 @@ dialog label{display:block;margin-bottom:6px}
 </nav>
 
 <section id="v1">
+  <div class="view-heading"><div><h2>나의 선샤인</h2><p>멤버를 선택하면 함께할 상생직군을 볼 수 있어요.</p></div></div>
   <div class="cols">
     <div class="panel panel-pad">
       <div class="ptitle" id="list-title">멤버 31명 · 파워팀순</div>
@@ -238,11 +295,13 @@ dialog label{display:block;margin-bottom:6px}
 </section>
 
 <section id="v2" hidden>
+  <div class="view-heading"><div><h2>파워팀</h2><p>같은 고객을 만나는 멤버들과 함께할 기회를 찾아보세요.</p></div></div>
   <div class="grid g3" id="teamgrid"></div>
   <p class="note">'미정' 팀 5명은 아직 공유 고객이 정해지지 않은 상태이므로, 아래 핵심고객 표를 근거로 기존 팀에 편입하거나 신규 팀으로 독립시키는 판단이 필요합니다.</p>
 </section>
 
 <section id="v3" hidden>
+  <div class="view-heading"><div><h2>챕터 전체 지도</h2><p>우리 챕터의 연결 현황과 초대하면 좋은 업종을 살펴보세요.</p></div></div>
   <div class="cols rev">
     <div class="panel panel-pad">
       <div class="ptitle">파워팀별 충원 현황</div>
@@ -261,7 +320,8 @@ dialog label{display:block;margin-bottom:6px}
 </section>
 
 <section id="v4" hidden>
-  <div class="warnbox" id="admin-note">수정하려면 로그인하세요</div>
+  <div class="view-heading"><div><h2>멤버 관리</h2><p>멤버 정보를 확인하고, 로그인 후 수정할 수 있어요.</p></div></div>
+  <div class="admin-access"><div class="warnbox" id="admin-note">수정하려면 로그인하세요</div><button class="btn primary" id="admin-login">이메일로 로그인</button></div>
   <div class="msg" id="adminmsg" role="status" aria-live="polite"></div>
   <div class="panel panel-pad">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
@@ -293,11 +353,13 @@ dialog label{display:block;margin-bottom:6px}
 <dialog id="login-dialog" aria-labelledby="login-title">
   <form id="login-form">
     <h2 id="login-title">이메일로 로그인</h2>
-    <label for="login-email">이메일 주소</label>
-    <input class="search" type="email" id="login-email" autocomplete="email" placeholder="name@example.com" required>
-    <p class="note">메일로 받은 로그인 링크를 열면 멤버 정보를 수정할 수 있습니다.</p>
+    <p class="dialog-intro">비밀번호 없이, 메일로 받은 링크를 누르면 됩니다.</p>
+    <label for="login-email">본인 이메일 주소</label>
+    <input class="search" type="email" id="login-email" autocomplete="email" inputmode="email" autocapitalize="none" spellcheck="false" placeholder="예: sunshine@naver.com" aria-describedby="login-help" required>
+    <div class="login-help" id="login-help"><strong>이렇게 로그인하세요</strong><br>① 아래 버튼을 눌러 메일을 받으세요.<br>② 메일함에서 로그인 메일을 여세요.<br>③ 메일 속 링크를 누르면 완료됩니다.</div>
+    <p class="note">인증 후 <b>멤버 관리</b>에서 정보를 수정할 수 있어요.<br>처음 방문하셔도 같은 방법으로 이용하세요.</p>
     <div class="msg" id="login-message" role="status"></div>
-    <div class="dialog-actions"><button class="btn" id="send-link" type="submit">로그인 링크 보내기</button><button class="btn ghost" id="close-login" type="button">닫기</button></div>
+    <div class="dialog-actions"><button class="btn primary" id="send-link" type="submit">내 이메일로 로그인 링크 받기</button><button class="btn ghost" id="close-login" type="button">닫기</button></div>
   </form>
 </dialog>
 <script>
@@ -366,7 +428,7 @@ function renderList(){
     rows.forEach(({m,i})=>{
       const b=document.createElement('button');
       b.className='mrow'; b.setAttribute('aria-current',String(i===sel));
-      b.innerHTML=`<strong>${esc(m.n)}</strong>${m.nw?'<span class="new">신입</span>':''}${m.real?'<span class="new" style="background:var(--red)">실데이터</span>':''}<small>${esc(m.f)} · ${esc(m.co)}</small>`;
+      b.innerHTML=`<strong>${esc(m.n)}</strong>${m.nw?'<span class="new">신입</span>':''}${m.real?'<span class="new" style="background:var(--red-soft);border-color:var(--red)">실데이터</span>':''}<small>${esc(m.f)} · ${esc(m.co)}</small>`;
       b.onclick=()=>{sel=i; renderList(); renderSun();};
       mlist.appendChild(b);
     });
@@ -393,7 +455,7 @@ function renderSun(){
     const found=FIELD2M[f]&&FIELD2M[f]!==m?FIELD2M[f]:null;
     const d=document.createElement('div'); d.className='node'; d.style.left=x+'%'; d.style.top=y+'%';
     d.innerHTML=`<div class="card ${found?'':'gap'}"><div class="f">${esc(f)}</div>
-      <div class="who">${found?esc(found.n)+' 대표':'비어 있음 · 초대 타깃'}</div></div>`;
+      <div class="who">${found?esc(found.n)+' 대표':'초대 타깃'}</div></div>`;
     stage.appendChild(d);
     const ln=document.createElementNS('http://www.w3.org/2000/svg','line');
     ln.setAttribute('x1',500); ln.setAttribute('y1',345); ln.setAttribute('x2',x*10); ln.setAttribute('y2',y*6.9);
@@ -402,17 +464,17 @@ function renderSun(){
     ln.setAttribute('opacity','.5'); rays.appendChild(ln);
   });
   document.getElementById('stagelist').innerHTML=
-    `<div class="lcore"><div style="font-size:10px;letter-spacing:.12em;color:var(--sun);font-weight:700">핵심고객</div>
-     <div style="font-family:'Gothic A1',sans-serif;font-weight:900;font-size:16px">${(m.c||['미입력']).map(esc).join(' · ')}</div>
-     <div style="font-size:12px;color:var(--ink-2);margin-top:4px">${esc(m.n)} · ${esc(m.f)}</div></div>`
+    `<div class="lcore"><div class="lcore-label">핵심고객</div>
+     <div class="lcore-customers">${(m.c||['미입력']).map(esc).join(' · ')}</div>
+     <div class="lcore-member">${esc(m.n)} · ${esc(m.f)}</div></div>`
     + list.map(f=>{const gm=FIELD2M[f]&&FIELD2M[f]!==m?FIELD2M[f]:null;
-        return `<div class="lrow ${gm?'':'gap'}"><span style="font-weight:600">${esc(f)}</span><span style="font-size:11.5px;color:${gm?'var(--red)':'var(--gap)'};font-weight:600">${gm?esc(gm.n)+' 대표':'초대 타깃'}</span></div>`;}).join('');
+        return `<div class="lrow ${gm?'':'gap'}"><span style="font-weight:600">${esc(f)}</span><span class="lwho" style="color:${gm?'var(--red)':'var(--ink-2)'}">${gm?esc(gm.n)+' 대표':'초대 타깃'}</span></div>`;}).join('');
   const gaps=list.filter(f=>!FIELD2M[f]||FIELD2M[f]===m);
   document.getElementById('wantbox').innerHTML=
     `<div class="want"><b>${esc(m.n)} 대표 · ${esc(m.g)} 파워팀</b> — 상생직군 ${list.length}개 중 ${list.length-gaps.length}개는 챕터 안에서 바로 연결 가능, ${gaps.length}개는 초대로 채워야 합니다.`
     + (m.w?`<br>원하는 비지터 : ${esc(m.w)}`:'') + (m.v?`<br>좋은 리퍼럴 : ${esc(m.v)}`:'')
     + (m.tg?`<br><b>이 말이 들리면 연결</b> : ${m.tg.map(t=>'"'+esc(t)+'"').join(' · ')}`:'')
-    + (m.real?'':'<br><span style="color:var(--ink-3)">※ 핵심고객·상생직군은 추정치. 신상명세표·C단계 질문지가 들어오면 교체됩니다.</span>')
+    + (m.real?'':'<br><span style="color:var(--ink-2)">※ 핵심고객·상생직군은 추정치. 신상명세표·C단계 질문지가 들어오면 교체됩니다.</span>')
     + `</div>`;
 }
 /* ---------- 집계 ---------- */
@@ -531,7 +593,11 @@ function connection(detail='',error=false){
 function permissions(){
   const writable=canWrite(), email=session?.user?.email||'';
   el('auth-email').textContent=email;el('auth-email').hidden=!email;
+  el('auth-state').hidden=!email;
+  el('login-guide').hidden=!!email;
   el('loginb').hidden=!!email;el('logoutb').hidden=!email;
+  el('admin-login').hidden=!!email;
+  el('guide-login').disabled=authBusy;el('admin-login').disabled=authBusy;
   el('loginb').disabled=authBusy;el('logoutb').disabled=authBusy||busy;
   el('admin-note').textContent=!email?'수정하려면 로그인하세요':!online?'오프라인 · 읽기 전용입니다. 서버 연결을 복구한 후 수정하세요.':busy?'서버에 저장하고 있습니다. 완료될 때까지 기다려 주세요.':'수정 내용은 저장 성공 후 모든 사람에게 공유됩니다. 핵심고객과 상생직군은 쉼표로 구분합니다.';
   el('admintable').querySelectorAll('input').forEach(input=>input.readOnly=!writable);
@@ -599,6 +665,8 @@ setInterval(()=>{if(!document.hidden&&db)scheduleRefresh();},30000);
 
 /* ---------- 이메일 로그인 ---------- */
 el('loginb').onclick=()=>{message('login-message','');el('login-dialog').showModal();el('login-email').focus();};
+el('guide-login').onclick=()=>el('loginb').click();
+el('admin-login').onclick=()=>el('loginb').click();
 el('close-login').onclick=()=>el('login-dialog').close();
 el('login-form').onsubmit=async event=>{
   event.preventDefault();if(authBusy)return;
@@ -607,7 +675,7 @@ el('login-form').onsubmit=async event=>{
   try{
     const {error}=await timed(db.auth.signInWithOtp({email:el('login-email').value.trim(),options:{emailRedirectTo:location.href}}));
     if(error)throw error;
-    message('login-message','메일함을 확인하세요. 로그인 링크를 열어 주세요. 메일이 없으면 스팸함도 확인하세요.');
+    message('login-message','메일함을 확인하세요. '+el('login-email').value.trim()+'로 보낸 메일 속 로그인 링크를 누르면 됩니다. 메일이 없으면 스팸함도 확인하세요.');
   }catch(error){message('login-message',explain(error),true);}
   finally{authBusy=false;el('send-link').disabled=false;permissions();}
 };
