@@ -621,31 +621,38 @@ try {
     const directory = fileURLToPath(new URL('../diagnostics-output', import.meta.url));
     await mkdir(directory, { recursive: true });
     const { page, context } = await pageFor({ online: true, auth: true });
-    for (const theme of ['light', 'dark']) {
-      await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
-      for (const view of ['v1', 'v4']) {
-        await page.click(view === 'v1' ? '#t1' : '#t4');
-        await page.evaluate(() => scrollTo(0, 0));
-        const name = `browser-400-${theme}-${view}.png`;
-        await page.screenshot({ path: path.join(directory, name), fullPage: view === 'v1', animations: 'disabled' });
-        console.log(`SCREENSHOT diagnostics-output/${name}`);
+    for (const viewport of [{ label: '400', width: 400, height: 900 }, { label: 'desktop', width: 1440, height: 1000 }]) {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      for (const theme of ['light', 'dark']) {
+        await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
+        for (const view of ['v1', 'v2', 'v3', 'v4']) {
+          await page.click(`#t${view.slice(1)}`);
+          await page.evaluate(() => scrollTo(0, 0));
+          const name = `browser-${viewport.label}-${theme}-${view}.png`;
+          await page.screenshot({ path: path.join(directory, name), fullPage: view !== 'v4', animations: 'disabled' });
+          console.log(`SCREENSHOT diagnostics-output/${name}`);
+          if (view === 'v4') {
+            await page.locator('#admintable').evaluate(element => scrollTo(0, scrollY + element.getBoundingClientRect().top - document.querySelector('nav').getBoundingClientRect().height - 20));
+            const rosterName = `browser-${viewport.label}-${theme}-v4-roster.png`;
+            await page.screenshot({ path: path.join(directory, rosterName), animations: 'disabled' });
+            console.log(`SCREENSHOT diagnostics-output/${rosterName}`);
+          }
+        }
       }
     }
-    await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; scrollTo(0, 0); });
-    await page.click('#t1');
-    await page.screenshot({ path: path.join(directory, 'browser-desktop-light-v1.png'), fullPage: true, animations: 'disabled' });
-    console.log('SCREENSHOT diagnostics-output/browser-desktop-light-v1.png');
     await context.close();
     const reader = await pageFor({ online: true });
     await reader.page.click('#loginb');
-    for (const theme of ['light', 'dark']) {
-      await reader.page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
-      for (const mode of ['login', 'signup', 'reset']) {
-        await reader.page.click(`#auth-${mode}-mode`);
-        const name = `browser-400-${theme}-auth-${mode}.png`;
-        await reader.page.screenshot({ path: path.join(directory, name), animations: 'disabled' });
-        console.log(`SCREENSHOT diagnostics-output/${name}`);
+    for (const viewport of [{ label: '400', width: 400, height: 900 }, { label: 'desktop', width: 1440, height: 1000 }]) {
+      await reader.page.setViewportSize({ width: viewport.width, height: viewport.height });
+      for (const theme of ['light', 'dark']) {
+        await reader.page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
+        for (const mode of ['login', 'signup', 'reset']) {
+          await reader.page.click(`#auth-${mode}-mode`);
+          const name = `browser-${viewport.label}-${theme}-auth-${mode}.png`;
+          await reader.page.screenshot({ path: path.join(directory, name), animations: 'disabled' });
+          console.log(`SCREENSHOT diagnostics-output/${name}`);
+        }
       }
     }
     await reader.context.close();
@@ -658,7 +665,7 @@ try {
         await rolePage.page.screenshot({ path: path.join(directory, name), animations: 'disabled' });
         console.log(`SCREENSHOT diagnostics-output/${name}`);
         const content = role === 'admin' ? rolePage.page.locator('#accounts-panel') : role === 'viewer' ? rolePage.page.locator('#member-access-panel') : rolePage.page.locator('#admintable .own-row').first();
-        await content.evaluate(element => scrollTo(0, scrollY + element.getBoundingClientRect().top - 145));
+        await content.evaluate(element => scrollTo(0, scrollY + element.getBoundingClientRect().top - document.querySelector('nav').getBoundingClientRect().height - 20));
         const contentName = role === 'admin' ? `browser-400-${theme}-accounts.png` : `browser-400-${theme}-${role}-content.png`;
         await rolePage.page.screenshot({ path: path.join(directory, contentName), animations: 'disabled' });
       }
