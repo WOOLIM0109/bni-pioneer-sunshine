@@ -25,20 +25,31 @@ function makeMock(initial, options) {
     members: clone(initial), log: [], pending: [], holdWrites: false, revision: 0,
     pendingReads: [], holdReads: false, completedReads: 0,
     pendingAccessReads: [], holdAccessReads: false, completedAccessReads: 0,
-    failReads: options.failReads, failWrites: false, failAccess: options.failAccess, failRpc: false, authError: null, callbacks: [],
+    pendingStorageWrites: [], holdStorageWrites: false, failStorageWrites: false, failStorageReads: false,
+    pendingPrivateReads: [], holdPrivateReads: false, pendingAnalysis: [], holdAnalysis: false, failAnalysis: false, aiConfigured: true,
+    storageObjects: Object.create(null), interviews: [],
+    details: initial.map(row => ({ member_id: row.id, good_referral: `PRIVATE_REFERRAL_${row.id}`, triggers: [`PRIVATE_TRIGGER_${row.id}`], customer_companies: [`PRIVATE_COMPANY_${row.id}`], revision: 1 })),
+    failReads: options.failReads, failWrites: false, failAccess: options.failAccess, failRpc: false, failRpcName: null, holdRpcName: null, authError: null, callbacks: [],
     accounts: [account('test-user', options.role || 'admin', options.role === 'member' ? initial[0]?.id : null), account('second-user', 'viewer'), { ...account('pending-user', 'viewer'), requested_member_id: initial[1]?.id, request_status: 'pending' }, { ...account('reject-user', 'viewer'), requested_member_id: initial[2]?.id, request_status: 'pending' }],
     session: options.auth ? { user: { id: 'test-user', email: 'member@example.test' } } : null,
     release() { this.holdWrites = false; this.pending.splice(0).forEach(resolve => resolve()); },
     releaseReads() { this.holdReads = false; this.pendingReads.splice(0).forEach(resolve => resolve()); },
     releaseAccessReads() { this.holdAccessReads = false; this.pendingAccessReads.splice(0).forEach(resolve => resolve()); },
+    releaseStorageWrites() { this.holdStorageWrites = false; this.pendingStorageWrites.splice(0).forEach(resolve => resolve()); },
+    releasePrivateReads() { this.holdPrivateReads = false; this.pendingPrivateReads.splice(0).forEach(resolve => resolve()); },
+    releaseAnalysis() { this.holdAnalysis = false; this.pendingAnalysis.splice(0).forEach(resolve => resolve()); },
     realtime() { this.callbacks.forEach(callback => callback({ eventType: 'UPDATE' })); },
     setSession(session, event = session ? 'SIGNED_IN' : 'SIGNED_OUT') { this.session = session; this.authCallback?.(event, session); }
   };
   const permissionError = () => ({ data: null, error: { message: 'row-level security policy denied access', code: '42501' } });
   const currentAccount = () => state.accounts.find(row => row.user_id === state.session?.user.id);
+  const timestamp = () => new Date(Date.now() + ++state.revision).toISOString();
+  const conflict = () => ({ data: null, error: { message: '다른 관리자가 문서 또는 멤버를 변경했습니다. 다시 열어 최신 내용을 확인하세요.', code: '40001' } });
+  const detailFor = memberId => state.details.find(row => row.member_id === memberId) || { member_id: memberId, good_referral: '', triggers: [], customer_companies: [], revision: 0 };
+  const publicInterview = row => Object.fromEntries(['id', 'member_id', 'original_name', 'mime_type', 'file_size', 'status', 'revision', 'created_at', 'updated_at'].map(key => [key, row[key]]));
   class Query {
-    constructor(table) { this.table = table; this.action = 'select'; this.filters = []; this.orders = []; }
-    select() { return this; }
+    constructor(table) { this.table = table; this.action = 'select'; this.filters = []; this.orders = []; this.columns = '*'; }
+    select(columns = '*') { this.columns = columns; return this; }
     insert(value) { this.action = 'insert'; this.value = clone(value); return this; }
     update(value) { this.action = 'update'; this.value = clone(value); return this; }
     delete() { this.action = 'delete'; return this; }
@@ -50,7 +61,7 @@ function makeMock(initial, options) {
     maybeSingle() { this.one = true; this.optional = true; return this; }
     abortSignal() { return this; }
     async execute() {
-      state.log.push({ action: this.action, table: this.table, value: this.value });
+      state.log.push({ action: this.action, table: this.table, columns: this.columns, value: this.value });
       const accessRead = this.table === 'member_accounts' && this.action === 'select';
       const accessUser = state.session?.user.id;
       const accessAdmin = currentAccount()?.role === 'admin';
@@ -65,12 +76,14 @@ function makeMock(initial, options) {
         data = accountSnapshot.filter(matches);
       } else if (this.table !== 'members') {
         return permissionError();
+      } else if (['good_referral', 'triggers', 'customer_companies'].some(key => this.columns.split(',').includes(key) || Object.hasOwn(this.value || {}, key))) {
+        return permissionError();
       } else if (this.action !== 'select' && currentAccount()?.role !== 'admin' && !(this.action === 'update' && currentAccount()?.role === 'member' && state.members.filter(matches).every(row => row.id === currentAccount().member_id))) {
         return permissionError();
       } else if (this.action === 'insert') {
         data = (Array.isArray(this.value) ? this.value : [this.value]).map((row, i) => ({
           id: crypto.randomUUID(), company: '', field: '', team: '미정', customers: [], synergies: [], wants: '',
-          good_referral: '', triggers: [], is_new: false, is_real: false, sort_order: state.members.length + i,
+          is_new: false, is_real: false, sort_order: state.members.length + i,
           updated_at: new Date(Date.now() + ++state.revision).toISOString(), updated_by: state.session?.user.email || '', ...row
         }));
         state.members.push(...data);
@@ -88,6 +101,7 @@ function makeMock(initial, options) {
       if (this.one && data.length !== 1 && !(this.optional && !data.length)) return { data: null, error: { code: 'PGRST116', message: 'JSON object requested, multiple (or no) rows returned' } };
       if (accessRead) state.completedAccessReads++;
       else if (this.action === 'select') state.completedReads++;
+      if (this.columns !== '*') data = data.map(row => Object.fromEntries(this.columns.split(',').map(key => key.trim()).filter(key => Object.hasOwn(row, key)).map(key => [key, row[key]])));
       return { data: clone(this.one ? data[0] ?? null : data), error: null, count: data.length };
     }
     then(resolve, reject) { return this.execute().then(resolve, reject); }
@@ -96,10 +110,61 @@ function makeMock(initial, options) {
     constructor(name, value) { this.name = name; this.value = value; }
     abortSignal() { return this; }
     async execute() {
-      state.log.push({ action: 'rpc', name: this.name, value: clone(this.value) });
-      if (state.holdWrites) await new Promise(resolve => state.pending.push(resolve));
-      if (state.failRpc) return { data: null, error: { message: '테스트 권한 저장 실패', code: 'TEST_FAILURE' } };
+      const readOnly = ['get_member_details', 'list_member_interviews', 'get_member_interview'].includes(this.name);
+      state.log.push({ action: 'rpc', name: this.name, value: clone(this.value), readOnly });
+      if (readOnly) {
+        const reader = clone(currentAccount() || null);
+        let data;
+        if (this.name === 'get_member_details') {
+          if (!reader || reader.role === 'viewer') return { data: [], error: null };
+          data = clone(state.details.filter(row => (reader.role === 'admin' || row.member_id === reader.member_id) && (!this.value?.target_member_id || row.member_id === this.value.target_member_id)));
+        } else {
+          if (reader?.role !== 'admin') return permissionError();
+          data = this.name === 'list_member_interviews'
+            ? clone(state.interviews.filter(row => !this.value?.target_member_id || row.member_id === this.value.target_member_id).map(publicInterview))
+            : clone(state.interviews.find(row => row.id === this.value?.target_interview_id) || null);
+        }
+        if (state.holdPrivateReads) await new Promise(resolve => state.pendingPrivateReads.push(resolve));
+        if (state.failRpc && (!state.failRpcName || state.failRpcName === this.name)) return { data: null, error: { message: '테스트 비공개 정보 조회 실패', code: 'TEST_FAILURE' } };
+        return { data, error: null };
+      }
+      if (state.holdWrites && (!state.holdRpcName || state.holdRpcName === this.name)) await new Promise(resolve => state.pending.push(resolve));
+      if (state.failRpc && (!state.failRpcName || state.failRpcName === this.name)) return { data: null, error: { message: '테스트 권한 저장 실패', code: 'TEST_FAILURE' } };
       const own = currentAccount();
+      if (this.name === 'update_member_details') {
+        if (own?.role !== 'admin' && !(own?.role === 'member' && own.member_id === this.value.target_member_id)) return permissionError();
+        const detail = detailFor(this.value.target_member_id), member = state.members.find(row => row.id === this.value.target_member_id);
+        if (!member || detail.revision !== this.value.expected_revision) return conflict();
+        const next = { ...detail, ...clone(this.value.details_patch), revision: detail.revision + 1 };
+        state.details = state.details.filter(row => row.member_id !== next.member_id).concat(next);
+        member.updated_at = timestamp();
+        return { data: { ...clone(next), member_updated_at: member.updated_at }, error: null };
+      }
+      if (['create_member_interview', 'save_member_interview_draft', 'apply_member_interview'].includes(this.name)) {
+        if (own?.role !== 'admin') return permissionError();
+        const input = this.value;
+        if (this.name === 'create_member_interview') {
+          const object = state.storageObjects[`member-interviews/${input.storage_path}`];
+          if (!object || !input.storage_path.startsWith(`${input.target_member_id}/`)) return { data: null, error: { message: '비공개 원본 파일을 먼저 업로드하세요.', code: '22023' } };
+          const row = { id: crypto.randomUUID(), member_id: input.target_member_id, storage_path: input.storage_path, original_name: input.original_name, mime_type: object.type, file_size: object.size, raw_text: '', extracted: {}, public_patch: {}, private_patch: {}, status: 'draft', revision: 1, created_at: timestamp(), updated_at: timestamp(), created_by: own.user_id, updated_by: own.user_id, applied_at: null, history: [] };
+          state.interviews.push(row);
+          return { data: clone(row), error: null };
+        }
+        const row = state.interviews.find(row => row.id === input.target_interview_id);
+        if (!row || row.revision !== input.expected_revision) return conflict();
+        if (this.name === 'save_member_interview_draft') {
+          Object.assign(row, clone(input.draft_patch), { revision: row.revision + 1, updated_at: timestamp(), updated_by: own.user_id });
+          return { data: clone(row), error: null };
+        }
+        const member = state.members.find(member => member.id === row.member_id);
+        if (!member || member.updated_at !== input.expected_member_updated_at || row.status === 'applied') return conflict();
+        const detail = detailFor(row.member_id);
+        Object.assign(member, clone(input.public_patch || {}), { updated_at: timestamp() });
+        const next = { ...detail, ...clone(input.private_patch || {}), revision: detail.revision + 1 };
+        state.details = state.details.filter(item => item.member_id !== next.member_id).concat(next);
+        Object.assign(row, { public_patch: clone(input.public_patch || {}), private_patch: clone(input.private_patch || {}), revision: row.revision + 1, status: 'applied', applied_at: timestamp(), updated_at: timestamp() });
+        return { data: { interview_id: row.id, revision: row.revision, status: 'applied', member_id: row.member_id, member_updated_at: member.updated_at, details_revision: next.revision }, error: null };
+      }
       if (this.name === 'request_member_access') {
         if (!own) return permissionError();
         Object.assign(own, { requested_member_id: this.value.target_member_id, request_status: 'pending' });
@@ -115,9 +180,65 @@ function makeMock(initial, options) {
     }
     then(resolve, reject) { return this.execute().then(resolve, reject); }
   }
+  class StorageBucket {
+    constructor(bucket) { this.bucket = bucket; }
+    async upload(objectPath, body, uploadOptions = {}) {
+      state.log.push({ action: 'storage-upload', bucket: this.bucket, path: objectPath, options: clone(uploadOptions), name: body.name || '', size: body.size, type: body.type });
+      if (state.holdStorageWrites) await new Promise(resolve => state.pendingStorageWrites.push(resolve));
+      if (currentAccount()?.role !== 'admin') return permissionError();
+      if (state.failStorageWrites) return { data: null, error: { message: '테스트 비공개 원본 저장 실패', code: 'TEST_STORAGE_FAILURE' } };
+      const key = `${this.bucket}/${objectPath}`;
+      if (state.storageObjects[key] && !uploadOptions.upsert) return { data: null, error: { message: 'The resource already exists', statusCode: '409' } };
+      state.storageObjects[key] = { body, name: body.name || '', type: uploadOptions.contentType || body.type, size: body.size };
+      return { data: { path: objectPath, id: crypto.randomUUID(), fullPath: key }, error: null };
+    }
+    async download(objectPath) {
+      state.log.push({ action: 'storage-download', bucket: this.bucket, path: objectPath });
+      if (currentAccount()?.role !== 'admin') return permissionError();
+      if (state.failStorageReads) return { data: null, error: { message: '테스트 비공개 원본 읽기 실패', code: 'TEST_STORAGE_FAILURE' } };
+      const entry = state.storageObjects[`${this.bucket}/${objectPath}`];
+      return entry ? { data: entry.body, error: null } : { data: null, error: { message: 'Object not found', statusCode: '404' } };
+    }
+    async remove(paths) {
+      state.log.push({ action: 'storage-remove', bucket: this.bucket, paths: clone(paths) });
+      if (currentAccount()?.role !== 'admin') return permissionError();
+      paths.forEach(objectPath => delete state.storageObjects[`${this.bucket}/${objectPath}`]);
+      return { data: paths.map(name => ({ name })), error: null };
+    }
+    async createSignedUrl(objectPath, expiresIn) {
+      state.log.push({ action: 'storage-sign', bucket: this.bucket, path: objectPath, expiresIn });
+      if (currentAccount()?.role !== 'admin') return permissionError();
+      return { data: { signedUrl: `https://private-fixture.invalid/${encodeURIComponent(this.bucket)}/${encodeURIComponent(objectPath)}` }, error: null };
+    }
+    getPublicUrl(objectPath) {
+      state.log.push({ action: 'storage-public-url', bucket: this.bucket, path: objectPath });
+      return { data: { publicUrl: `https://public-fixture.invalid/${encodeURIComponent(objectPath)}` } };
+    }
+  }
   window.supabase = { createClient: () => ({
     from: table => new Query(table),
     rpc: (name, value) => new Rpc(name, value),
+    storage: { from: bucket => new StorageBucket(bucket) },
+    functions: { invoke: async (name, options = {}) => {
+      const readOnly = options.method === 'GET';
+      state.log.push({ action: 'function', name, value: clone(options.body || {}), method: options.method || 'POST', readOnly });
+      if (currentAccount()?.role !== 'admin') return permissionError();
+      if (readOnly) return { data: { configured: state.aiConfigured }, error: null };
+      const row = state.interviews.find(item => item.id === options.body?.interview_id);
+      if (!row || row.revision !== options.body?.expected_revision) return conflict();
+      if (state.holdAnalysis) await new Promise(resolve => state.pendingAnalysis.push(resolve));
+      if (state.failAnalysis) return { data: null, error: { message: '테스트 AI 분석 실패. 다시 시도해 주세요.', code: 'TEST_ANALYSIS_FAILURE' } };
+      const suggestions = state.analysisSuggestions || [
+        { key: 'customers', value: ['지역 소상공인', '학원 운영자'], reason: '공통 고객 유형을 정리했습니다.', evidence: 'AI_PRIVATE_EVIDENCE 고객 유형 원문', confidence: 'high', basis: 'stated' },
+        { key: 'synergies', value: ['앱·웹개발', '세무사'], reason: '공통 고객을 만나는 직군입니다.', evidence: 'AI_PRIVATE_EVIDENCE 연결 근거 원문', confidence: 'medium', basis: 'inferred' },
+        { key: 'team', value: ['기업'], reason: '기업 고객을 공유합니다.', evidence: '', confidence: 'medium', basis: 'inferred' },
+        { key: 'good_referral', value: ['INTERVIEW_PRIVATE_REFERRAL 검증 고객'], reason: '대표가 직접 요청했습니다.', evidence: 'AI_PRIVATE_EVIDENCE 좋은 리퍼럴 원문', confidence: 'high', basis: 'stated' },
+        { key: 'triggers', value: ['INTERVIEW_PRIVATE_TRIGGER 정부지원 사업이 궁금해요', 'INTERVIEW_PRIVATE_TRIGGER 서류 준비가 어려워요'], reason: '인터뷰에 나온 요청 문장입니다.', evidence: 'AI_PRIVATE_EVIDENCE 트리거 원문', confidence: 'high', basis: 'stated' },
+        { key: 'customer_companies', value: ['INTERVIEW_PRIVATE_COMPANY 샘플기업'], reason: '고객사명은 비공개 항목입니다.', evidence: 'AI_PRIVATE_EVIDENCE 고객사 원문', confidence: 'high', basis: 'stated' }
+      ];
+      Object.assign(row, { extracted: { summary: '인터뷰 검증 요약', detected_name: state.members.find(member => member.id === row.member_id)?.name || '', warnings: [], suggestions: clone(suggestions) }, revision: row.revision + 1, updated_at: timestamp() });
+      return { data: clone(row), error: null };
+    } },
     auth: {
       getSession: async () => ({ data: { session: state.session }, error: null }),
       getUser: async () => ({ data: { user: state.session?.user ?? null }, error: null }),
@@ -188,7 +309,7 @@ async function pageFor({ online = false, auth = false, records = seed, failReads
 }
 
 function mapSeed(rows) {
-  return rows.map((m, index) => ({ id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`, name: m.n, company: m.co || '', field: m.f || '', team: m.g || '미정', customers: m.c || [], synergies: m.s || [], wants: m.w || '', good_referral: m.v || '', triggers: m.tg || [], is_new: !!m.nw, is_real: !!m.real, sort_order: index, updated_at: '2026-09-21T00:00:00.000Z', updated_by: '' }));
+  return rows.map((m, index) => ({ id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`, name: m.n, company: m.co || '', field: m.f || '', team: m.g || '미정', customers: m.c || [], synergies: m.s || [], wants: m.w || '', is_new: !!m.nw, is_real: !!m.real, sort_order: index, updated_at: '2026-09-21T00:00:00.000Z', updated_by: '' }));
 }
 
 async function check(name, run) {
@@ -204,10 +325,34 @@ async function assertPasswordPrivate(page, password) {
   }), password);
   assert.deepEqual(exposure, { storage: false, text: false, url: false, rosterPayload: false }, 'Passwords may only be sent to the SDK authentication method.');
 }
+const INTERVIEW_SOURCE = 'PRIVATE_INTERVIEW_SOURCE 검증용 원본입니다.\n이름: 인터뷰 테스트 멤버\n핵심 고객: 지역 소상공인과 학원 운영자\n상생 직군: 앱·웹개발, 세무사\n좋은 리퍼럴: 정부지원 사업을 준비하는 대표\n고객사: PRIVATE_SOURCE_COMPANY 비공개 고객사\n이 말이 들리면 연결: 서류 준비가 어려워요.\n이 자료는 테스트 메모리에서만 사용합니다.';
+async function uploadInterview(page, memberId = seed[0].id) {
+  await page.click('#t4');
+  await page.selectOption('#interview-member', memberId);
+  await page.setInputFiles('#interview-file', { name: '검증-인터뷰.txt', mimeType: 'text/plain', buffer: Buffer.from(INTERVIEW_SOURCE, 'utf8') });
+  await page.click('#interview-upload');
+  await page.waitForFunction(() => window.__db.interviews.some(row => row.raw_text.includes('PRIVATE_INTERVIEW_SOURCE')));
+  return page.evaluate(() => window.__db.interviews.at(-1).id);
+}
+async function analyzeInterview(page) {
+  await page.click('#interview-analyze');
+  await page.waitForFunction(() => document.querySelectorAll('#interview-review [data-field] .interview-check').length > 0);
+}
+async function assertPublicExportPrivate(page) {
+  await page.click('#t4');
+  await page.click('#exportb');
+  const exported = await page.inputValue('#io');
+  const rows = JSON.parse(exported);
+  assert(rows.every(row => !['v', 'tg', 'good_referral', 'triggers', 'customer_companies', 'raw_text', 'extracted', 'storage_path', 'private_patch'].some(key => Object.hasOwn(row, key))), 'Public exports must contain only public roster fields.');
+  assert(!/PRIVATE_|INTERVIEW_PRIVATE_|member-interviews\//.test(exported), 'Private content and object paths must not reach public JSON exports.');
+  const leak = await page.evaluate(() => ({ roster: /PRIVATE_|INTERVIEW_PRIVATE_/.test(JSON.stringify(M)), storage: [...Object.entries(localStorage), ...Object.entries(sessionStorage)].some(pair => /PRIVATE_|INTERVIEW_PRIVATE_|member-interviews\//.test(JSON.stringify(pair))) }));
+  assert.deepEqual(leak, { roster: false, storage: false }, 'Private documents/details must stay out of the public roster and browser persistence.');
+}
 try {
   await check('Offline fallback renders all 31 seed members and permits only export', async () => {
     const { page, context } = await pageFor();
     assert.equal(await page.evaluate(() => M.length), 31);
+    assert(await page.evaluate(() => M.every(member => !['v', 'tg', 'good_referral', 'triggers', 'customer_companies'].some(key => Object.hasOwn(member, key)))), 'Offline seed data is shipped publicly and must not embed private referral fields.');
     seed = mapSeed(await page.evaluate(() => M));
     assert.match(await page.locator('body').innerText(), /오프라인.*읽기 전용/);
     assert(await page.locator('#connection-badge').isVisible(), 'Offline status must remain visible when project settings are missing.');
@@ -229,7 +374,7 @@ try {
     await page.click('#t4');
     assert.match(await page.locator('#v4').innerText(), /수정하려면 로그인하세요/);
     assert(await page.locator('#admintable input').evaluateAll(inputs => inputs.every(input => input.readOnly)));
-    assert.equal(await page.evaluate(() => window.__db.log.filter(x => x.action !== 'select').length), 0);
+    assert.equal(await page.evaluate(() => window.__db.log.filter(x => x.action !== 'select' && !x.readOnly).length), 0);
     await context.close();
   });
   await check('A failed database read falls back to seed data and disables authenticated writes', async () => {
@@ -478,7 +623,7 @@ try {
     assert(await target.locator('.account-member').isVisible());
     assert(await target.locator('.account-member').isEnabled());
     assert.equal(await target.locator('.account-member').inputValue(), seed[2].id, 'Changing a draft role away from member and back must preserve the selected member.');
-    assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.action === 'rpc' || (item.table && item.action !== 'select')).length), 0, 'Role/member selections alone must not save account permissions.');
+    assert.equal(await page.evaluate(() => window.__db.log.filter(item => !item.readOnly && (item.action === 'rpc' || (item.table && item.action !== 'select'))).length), 0, 'Role/member selections alone must not save account permissions.');
     await target.locator('.account-member').selectOption(seed[1].id);
     await page.evaluate(() => { window.__db.holdWrites = true; });
     await target.locator('.account-save').click();
@@ -542,14 +687,14 @@ try {
     await page.click('#bulkb');
     await page.waitForFunction(() => M.some(m => m.n === '새일괄멤버'));
     assert.equal(await page.evaluate(name => M.find(m => m.n === name).co, name), '일괄회사');
-    assert.deepEqual(await page.evaluate(() => [...new Set(window.__db.log.filter(x => x.action !== 'select').map(x => x.action))].sort()), ['insert', 'update']);
+    assert.deepEqual(await page.evaluate(() => [...new Set(window.__db.log.filter(x => x.action !== 'select' && !x.readOnly).map(x => x.action))].sort()), ['insert', 'update']);
     await page.evaluate(name => { window.__db.members.push({ ...window.__db.members.find(m => m.name === name), id: crypto.randomUUID() }); window.__db.realtime(); }, name);
     await page.waitForFunction(() => M.length === 33);
-    const count = await page.evaluate(() => window.__db.log.filter(x => x.action !== 'select').length);
+    const count = await page.evaluate(() => window.__db.log.filter(x => x.action !== 'select' && !x.readOnly).length);
     await page.fill('#bulk', `${name}, 모호한수정, 분야, 미정`);
     await page.click('#bulkb');
     await page.waitForFunction(() => /동명이인|중복|같은 이름/.test(document.getElementById('bulkmsg').textContent));
-    assert.equal(await page.evaluate(() => window.__db.log.filter(x => x.action !== 'select').length), count);
+    assert.equal(await page.evaluate(() => window.__db.log.filter(x => x.action !== 'select' && !x.readOnly).length), count);
     await context.close();
   });
   await check('JSON import rejects invalid fields and maps valid existing/new members without deleting others', async () => {
@@ -558,14 +703,15 @@ try {
     await page.fill('#io', JSON.stringify([{ n: seed[0].name, c: '잘못된 문자열' }]));
     await page.click('#importb');
     await page.waitForFunction(() => document.getElementById('iomsg').classList.contains('error'));
-    assert.equal(await page.evaluate(() => window.__db.log.filter(x => x.action !== 'select').length), 0);
-    const imported = { n: seed[0].name, co: 'JSON 회사', c: ['JSON 고객'], s: ['JSON 직군'], w: 'JSON 비지터', v: 'JSON 리퍼럴', tg: ['JSON 트리거'], nw: true, real: true };
+    assert.equal(await page.evaluate(() => window.__db.log.filter(x => x.action !== 'select' && !x.readOnly).length), 0);
+    const imported = { n: seed[0].name, co: 'JSON 회사', c: ['JSON 고객'], s: ['JSON 직군'], w: 'JSON 비지터', nw: true, real: true };
     await page.fill('#io', JSON.stringify([imported, { n: 'JSON 새 멤버', co: '새 회사', f: '새 전문분야', g: '미정', c: [], s: [] }]));
     await page.click('#importb');
     await page.waitForFunction(() => M.some(m => m.n === 'JSON 새 멤버'));
     assert.equal(await page.evaluate(() => M.length), 32);
     const persisted = await page.evaluate(name => window.__db.members.find(m => m.name === name), seed[0].name);
-    assert.deepEqual([persisted.company, persisted.customers, persisted.synergies, persisted.wants, persisted.good_referral, persisted.triggers, persisted.is_new, persisted.is_real], ['JSON 회사', ['JSON 고객'], ['JSON 직군'], 'JSON 비지터', 'JSON 리퍼럴', ['JSON 트리거'], true, true]);
+    assert.deepEqual([persisted.company, persisted.customers, persisted.synergies, persisted.wants, persisted.is_new, persisted.is_real], ['JSON 회사', ['JSON 고객'], ['JSON 직군'], 'JSON 비지터', true, true]);
+    assert(!Object.hasOwn(persisted, 'good_referral') && !Object.hasOwn(persisted, 'triggers'), 'Public imports must not contain private referral details.');
     assert.equal(persisted.field, seed[0].field, 'Omitted fields remain unchanged on existing members.');
     assert.equal(await page.evaluate(() => window.__db.members.filter(m => m.id.startsWith('00000000-0000-4000-8000-')).length), 31);
     await context.close();
@@ -602,6 +748,222 @@ try {
     assert(!/오프라인/.test(await page.locator('#connection-badge').innerText()));
     await page.click('#t3');
     assert.match(await page.locator('#custtable').innerText(), /constructor/);
+    await context.close();
+  });
+  await check('Private member details stay permission-scoped and never enter public exports', async () => {
+    for (const role of ['anonymous', 'viewer', 'member', 'admin']) {
+      const { page, context } = await pageFor({ online: true, auth: role !== 'anonymous', role: role === 'anonymous' ? 'viewer' : role });
+      await page.click('#t4');
+      if (role === 'member' || role === 'admin') await page.waitForFunction(() => window.__db.log.some(row => row.name === 'get_member_details'));
+      await assertPublicExportPrivate(page);
+      if (role === 'anonymous' || role === 'viewer') {
+        const exposure = await page.evaluate(() => /PRIVATE_|INTERVIEW_PRIVATE_/.test(document.body.innerText + Array.from(document.querySelectorAll('input,textarea')).map(input => input.value).join(' ')));
+        assert.equal(exposure, false, `${role} must not receive private member details.`);
+      } else if (role === 'member') {
+        const other = await page.locator('#admintable tbody tr:nth-child(2) input').evaluateAll(inputs => inputs.map(input => input.value).join(' '));
+        assert(!other.includes('PRIVATE_'), 'A member must not see another member’s referral details.');
+      }
+      await context.close();
+    }
+  });
+  await check('Only administrators can operate interview uploads, including direct event dispatch', async () => {
+    for (const role of ['anonymous', 'viewer', 'member']) {
+      const { page, context } = await pageFor({ online: true, auth: role !== 'anonymous', role: role === 'anonymous' ? 'viewer' : role });
+      await page.click('#t4');
+      assert(await page.locator('#interview-panel').isHidden(), `${role}: interview upload must be hidden.`);
+      await page.setInputFiles('#interview-file', { name: '차단검증.txt', mimeType: 'text/plain', buffer: Buffer.from(INTERVIEW_SOURCE) });
+      await page.evaluate(() => document.getElementById('interview-upload').dispatchEvent(new Event('click', { bubbles: true })));
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      assert.equal(await page.evaluate(() => window.__db.log.filter(row => row.action.startsWith('storage-') || row.name === 'create_member_interview' || (row.action === 'function' && !row.readOnly)).length), 0, `${role}: hidden controls must still enforce authorization.`);
+      await context.close();
+    }
+  });
+  await check('Interview upload stores a private original for the exact selected member UUID without changing the roster', async () => {
+    const records = seed.map(row => ({ ...row }));
+    records[1] = { ...records[1], name: records[0].name, company: '동명이인 구분 회사' };
+    const { page, context } = await pageFor({ online: true, auth: true, records });
+    const before = await page.evaluate(() => JSON.stringify(M));
+    const id = await uploadInterview(page, records[1].id);
+    const result = await page.evaluate(async id => {
+      const row = window.__db.interviews.find(item => item.id === id);
+      const file = window.__db.storageObjects[`member-interviews/${row.storage_path}`];
+      return { row, original: await file.body.text(), upload: window.__db.log.find(item => item.action === 'storage-upload'), create: window.__db.log.find(item => item.name === 'create_member_interview') };
+    }, id);
+    assert.equal(result.row.member_id, records[1].id, 'Selection must use UUID even when names are duplicated.');
+    assert.equal(result.create.value.target_member_id, records[1].id);
+    assert.match(result.row.storage_path, new RegExp(`^${records[1].id}/[a-zA-Z0-9-]+\\.txt$`));
+    assert.equal(result.upload.bucket, 'member-interviews');
+    assert.notEqual(result.upload.options.upsert, true, 'Every original must use a new object path.');
+    assert.equal(result.original, INTERVIEW_SOURCE);
+    assert.equal(result.row.raw_text, INTERVIEW_SOURCE);
+    assert.equal(await page.evaluate(() => JSON.stringify(M)), before, 'Uploading/extracting must not mutate public roster data.');
+    assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.action === 'function' && !item.readOnly).length), 0, 'AI analysis must require its own explicit action.');
+    assert.equal(await page.locator('#interview-raw').inputValue(), INTERVIEW_SOURCE);
+    assert(await page.locator('#interview-raw').evaluate(input => input.readOnly));
+    assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.action === 'storage-public-url').length), 0);
+    await assertPublicExportPrivate(page);
+    await context.close();
+  });
+  await check('Unsupported files and storage failures cannot create interviews or alter member data', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true });
+    await page.click('#t4');
+    await page.selectOption('#interview-member', seed[0].id);
+    await page.setInputFiles('#interview-file', { name: 'unsupported.exe', mimeType: 'application/octet-stream', buffer: Buffer.from('not a document') });
+    await page.locator('#interview-upload').evaluate(button => button.dispatchEvent(new Event('click', { bubbles: true })));
+    await page.waitForFunction(() => /형식|PDF|DOCX|TXT|지원/.test(document.getElementById('interview-file-note').textContent + document.getElementById('interview-message').textContent));
+    assert.equal(await page.evaluate(() => window.__db.log.filter(row => row.action === 'storage-upload').length), 0);
+    await page.setInputFiles('#interview-file', { name: '저장실패.txt', mimeType: 'text/plain', buffer: Buffer.from(INTERVIEW_SOURCE) });
+    await page.evaluate(() => { window.__db.failStorageWrites = true; });
+    await page.click('#interview-upload');
+    await page.waitForFunction(() => /실패/.test(document.getElementById('interview-message').textContent + document.getElementById('interview-file-note').textContent));
+    assert.equal(await page.evaluate(() => window.__db.interviews.length), 0);
+    assert.equal(await page.evaluate(() => window.__db.log.filter(row => row.name === 'create_member_interview' || row.name === 'apply_member_interview').length), 0);
+    assert.deepEqual(await page.evaluate(() => M[0].c), seed[0].customers);
+    await context.close();
+  });
+  await check('PDF and DOCX upload flows preserve originals and use the extractor result', async () => {
+    // Parser correctness is checked separately; this checks the UI/storage contract
+    // with a deterministic extractor and no downloaded PDF/DOCX code.
+    for (const [format, mime, signature] of [['pdf', 'application/pdf', '%PDF-1.7\nPDF_UI_FIXTURE'], ['docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'PK\u0003\u0004DOCX_UI_FIXTURE']]) {
+      const { page, context } = await pageFor({ online: true, auth: true });
+      await page.evaluate(text => {
+        window.__extractionCalls = [];
+        extractInterviewFile = async (file, options) => {
+          window.__extractionCalls.push({ name: file.name, maxBytes: options.maxBytes, maxPages: options.maxPages, maxChars: options.maxChars });
+          return { text, format: file.name.split('.').at(-1), fileName: file.name, fileSize: file.size, pageCount: 1, warnings: [] };
+        };
+      }, INTERVIEW_SOURCE);
+      await page.click('#t4');
+      await page.selectOption('#interview-member', seed[0].id);
+      await page.setInputFiles('#interview-file', { name: `원본검증.${format}`, mimeType: mime, buffer: Buffer.from(signature) });
+      await page.click('#interview-upload');
+      await page.waitForFunction(() => window.__db.interviews.some(row => row.raw_text.includes('PRIVATE_INTERVIEW_SOURCE')));
+      const saved = await page.evaluate(async () => {
+        const row = window.__db.interviews[0], original = window.__db.storageObjects[`member-interviews/${row.storage_path}`];
+        return { name: row.original_name, type: original.type, body: await original.body.text(), calls: window.__extractionCalls };
+      });
+      assert.equal(saved.name, `원본검증.${format}`);
+      assert.equal(saved.type, mime);
+      assert.equal(saved.body, signature);
+      assert.equal(saved.calls.length, 1);
+      assert.equal(saved.calls[0].maxPages, 60);
+      assert.equal(saved.calls[0].maxChars, 120000);
+      assert.equal(await page.inputValue('#interview-raw'), INTERVIEW_SOURCE);
+      await context.close();
+    }
+  });
+  await check('AI proposals remain unchecked until review; only selected fields commit after the server response', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true });
+    const id = await uploadInterview(page);
+    await analyzeInterview(page);
+    assert(await page.locator('#interview-review .interview-check').evaluateAll(inputs => inputs.every(input => !input.checked)), 'Suggested values must not be automatically selected for publication.');
+    assert.deepEqual(await page.evaluate(() => M[0].c), seed[0].customers);
+    const customers = page.locator('#interview-review [data-field="customers"]');
+    assert.match(await customers.innerText(), new RegExp(seed[0].customers[0]));
+    assert(await customers.locator('.interview-reason').innerText());
+    await customers.locator('.interview-check').check();
+    await page.locator('#interview-review [data-field="good_referral"] .interview-check').check();
+    assert(await page.locator('#interview-apply').isDisabled(), 'Publishing requires an explicit public-data review confirmation.');
+    await page.check('#interview-confirm');
+    await page.evaluate(() => { window.__db.holdWrites = true; window.__db.holdRpcName = 'apply_member_interview'; });
+    await page.click('#interview-apply');
+    await page.waitForFunction(() => window.__db.pending.length > 0 && window.__db.log.some(row => row.name === 'apply_member_interview'));
+    assert.deepEqual(await page.evaluate(() => M[0].c), seed[0].customers);
+    assert.notEqual(await page.evaluate(id => window.__db.interviews.find(row => row.id === id).status, id), 'applied');
+    await page.evaluate(() => window.__db.release());
+    await page.waitForFunction(() => M[0].c.includes('지역 소상공인'));
+    const request = await page.evaluate(() => window.__db.log.find(row => row.name === 'apply_member_interview').value);
+    assert.deepEqual(Object.keys(request.public_patch).sort(), ['customers']);
+    assert.deepEqual(Object.keys(request.private_patch).sort(), ['good_referral']);
+    assert.deepEqual(await page.evaluate(() => M[0].s), seed[0].synergies, 'Unchecked synergy suggestions must remain unchanged.');
+    assert.equal(await page.evaluate(memberId => window.__db.details.find(row => row.member_id === memberId).good_referral, seed[0].id), 'INTERVIEW_PRIVATE_REFERRAL 검증 고객');
+    assert.equal(await page.evaluate(id => window.__db.interviews.find(row => row.id === id).status, id), 'applied');
+    await assertPublicExportPrivate(page);
+    await context.close();
+  });
+  await check('Failed or stale interview applies leave both public and private saved data unchanged', async () => {
+    for (const failure of ['server', 'stale']) {
+      const { page, context } = await pageFor({ online: true, auth: true });
+      await uploadInterview(page);
+      await analyzeInterview(page);
+      await page.locator('#interview-review [data-field="customers"] .interview-check').check();
+      await page.locator('#interview-review [data-field="triggers"] .interview-check').check();
+      await page.check('#interview-confirm');
+      await page.evaluate(failure => {
+        if (failure === 'server') { window.__db.failRpc = true; window.__db.failRpcName = 'apply_member_interview'; }
+        else window.__db.members[0].updated_at = '2026-10-01T00:00:00.000Z';
+      }, failure);
+      await page.click('#interview-apply');
+      await page.waitForFunction(() => document.getElementById('interview-message').classList.contains('error'));
+      assert.deepEqual(await page.evaluate(() => window.__db.members[0].customers), seed[0].customers);
+      assert.deepEqual(await page.evaluate(id => window.__db.details.find(row => row.member_id === id).triggers, seed[0].id), [`PRIVATE_TRIGGER_${seed[0].id}`]);
+      assert.notEqual(await page.evaluate(() => window.__db.interviews[0].status), 'applied');
+      await context.close();
+    }
+  });
+  await check('Realtime roster refresh preserves unsaved interview selections and edited proposals', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true });
+    await uploadInterview(page);
+    await analyzeInterview(page);
+    const row = page.locator('#interview-review [data-field="customers"]');
+    await row.locator('.interview-value').fill('직접 검토한 공개 고객 유형\n편집 중인 두 번째 유형');
+    await row.locator('.interview-check').check();
+    const unchecked = page.locator('#interview-review [data-field="synergies"]');
+    await unchecked.locator('.interview-value').fill('아직 선택하지 않은 직군 초안');
+    assert(!await unchecked.locator('.interview-check').isChecked());
+    await page.locator('#admin-note').click();
+    const reads = await page.evaluate(() => window.__db.completedAccessReads);
+    await page.evaluate(() => { window.__db.members[2].company = '다른 사람의 실시간 수정'; window.__db.realtime(); });
+    await page.waitForFunction(reads => window.__db.completedAccessReads > reads, reads);
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.equal(await row.locator('.interview-value').inputValue(), '직접 검토한 공개 고객 유형\n편집 중인 두 번째 유형');
+    assert(await row.locator('.interview-check').isChecked());
+    assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.name === 'apply_member_interview').length), 0);
+    await page.click('#interview-save');
+    await page.waitForFunction(() => /보관|저장/.test(document.getElementById('interview-message').textContent));
+    assert.deepEqual(await page.evaluate(() => M[0].c), seed[0].customers, 'Saving a review draft must not publish it.');
+    await page.selectOption('#interview-history', await page.evaluate(() => window.__db.interviews[0].id));
+    await page.click('#interview-open');
+    await page.waitForFunction(() => /불러왔습니다/.test(document.getElementById('interview-message').textContent));
+    assert.equal(await row.locator('.interview-value').inputValue(), '직접 검토한 공개 고객 유형\n편집 중인 두 번째 유형');
+    assert(await row.locator('.interview-check').isChecked());
+    assert.equal(await unchecked.locator('.interview-value').inputValue(), '아직 선택하지 않은 직군 초안');
+    assert(!await unchecked.locator('.interview-check').isChecked(), 'Saving an edited unchecked proposal must not select it for publication.');
+    await context.close();
+  });
+  await check('Losing administrator access clears private review state and discards late AI responses', async () => {
+    for (const loss of ['role', 'session']) {
+      const { page, context } = await pageFor({ online: true, auth: true });
+      await uploadInterview(page);
+      await page.evaluate(() => { window.__db.holdAnalysis = true; });
+      await page.click('#interview-analyze');
+      await page.waitForFunction(() => window.__db.pendingAnalysis.length > 0);
+      await page.evaluate(loss => {
+        if (loss === 'session') window.__db.setSession(null);
+        else { window.__db.accounts.find(row => row.user_id === 'test-user').role = 'viewer'; window.__db.setSession(window.__db.session, 'TOKEN_REFRESHED'); }
+      }, loss);
+      await page.waitForFunction(() => document.getElementById('interview-panel').hidden);
+      await page.evaluate(async () => { window.__db.releaseAnalysis(); await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); });
+      assert.equal(await page.inputValue('#interview-raw'), '');
+      assert.equal(await page.inputValue('#interview-file'), '');
+      assert(!/PRIVATE_|INTERVIEW_PRIVATE_/.test(await page.locator('#interview-review').innerHTML()));
+      assert.equal(await page.evaluate(() => window.__db.log.filter(row => row.name === 'apply_member_interview').length), 0);
+      await assertPublicExportPrivate(page);
+      await context.close();
+    }
+  });
+  await check('Late private document reads cannot repopulate the page after logout', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true });
+    const id = await uploadInterview(page);
+    await page.selectOption('#interview-history', id);
+    await page.evaluate(() => { window.__db.holdPrivateReads = true; });
+    await page.click('#interview-open');
+    await page.waitForFunction(() => window.__db.pendingPrivateReads.length > 0);
+    await page.evaluate(() => window.__db.setSession(null));
+    await page.waitForFunction(() => document.getElementById('interview-panel').hidden);
+    await page.evaluate(async () => { window.__db.releasePrivateReads(); await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); });
+    assert.equal(await page.inputValue('#interview-raw'), '');
+    assert(!/PRIVATE_|INTERVIEW_PRIVATE_/.test(await page.locator('#interview-review').innerHTML()));
     await context.close();
   });
   await check('Every tab fits a 400px viewport in both themes', async () => {
@@ -700,5 +1062,29 @@ try {
       await rolePage.page.screenshot({ path: path.join(directory, `browser-400-dark-${role}-password.png`), animations: 'disabled' });
       await rolePage.context.close();
     }
+    const interviewPage = await pageFor({ online: true, auth: true });
+    await interviewPage.page.click('#t4');
+    for (const viewport of [{ label: '400', width: 400, height: 900 }, { label: 'desktop', width: 1440, height: 1000 }]) {
+      await interviewPage.page.setViewportSize({ width: viewport.width, height: viewport.height });
+      for (const theme of ['light', 'dark']) {
+        await interviewPage.page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
+        await interviewPage.page.locator('#interview-panel').evaluate(element => scrollTo(0, scrollY + element.getBoundingClientRect().top - document.querySelector('nav').getBoundingClientRect().height - 20));
+        await interviewPage.page.screenshot({ path: path.join(directory, `browser-${viewport.label}-${theme}-interview-upload.png`), animations: 'disabled' });
+      }
+    }
+    await uploadInterview(interviewPage.page);
+    await analyzeInterview(interviewPage.page);
+    await interviewPage.page.locator('#interview-review [data-field="customers"] .interview-check').check();
+    for (const viewport of [{ label: '400', width: 400, height: 900 }, { label: 'desktop', width: 1440, height: 1000 }]) {
+      await interviewPage.page.setViewportSize({ width: viewport.width, height: viewport.height });
+      for (const theme of ['light', 'dark']) {
+        await interviewPage.page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
+        await interviewPage.page.locator('#interview-review').evaluate(element => scrollTo(0, scrollY + element.getBoundingClientRect().top - document.querySelector('nav').getBoundingClientRect().height - 20));
+        const sizes = await interviewPage.page.evaluate(() => ({ width: innerWidth, html: document.documentElement.scrollWidth, body: document.body.scrollWidth }));
+        assert(sizes.html <= sizes.width && sizes.body <= sizes.width, `${theme} interview review: ${JSON.stringify(sizes)}`);
+        await interviewPage.page.screenshot({ path: path.join(directory, `browser-${viewport.label}-${theme}-interview-review.png`), animations: 'disabled' });
+      }
+    }
+    await interviewPage.context.close();
   }
 } finally { await browser.close(); }

@@ -278,6 +278,33 @@ select{font:inherit;min-height:48px;border:1px solid var(--line-2);border-radius
   #custtable{table-layout:fixed}#custtable th,#custtable td{padding:8px 4px}#custtable th:last-child{width:42px}
 }
 </style>
+<style>
+/* 인터뷰 문서 · 관리자 검토 */
+.interview-panel{margin:18px 0 24px;border:.1pt solid var(--red);font-size:18px;line-height:1.65;min-width:0}
+.interview-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+.interview-heading h3{font-size:25px;margin:4px 0;font-weight:700;letter-spacing:-.02em}
+.interview-kicker{font-size:15px;color:var(--red);font-weight:700}
+.interview-private{border:.1pt solid var(--red);border-radius:6px;padding:5px 12px;color:var(--red);font-size:15px;font-weight:600}
+.interview-intro{margin:14px 0 22px}.interview-panel .note{font-size:16px;line-height:1.65;margin:8px 0;color:var(--ink-2)}
+.interview-steps{display:flex;gap:14px;flex-wrap:wrap;padding:0;list-style:none;margin:20px 0 26px}
+.interview-steps li{display:flex;gap:9px;align-items:center;font-size:17px;font-weight:600}.interview-steps b{display:grid;place-items:center;background:var(--brand);color:white;border-radius:50%;width:28px;height:28px;font-size:15px}
+.interview-file-choice{display:flex;align-items:center;gap:12px;flex-wrap:wrap;border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--paper)}#interview-filename{font-size:16px;overflow-wrap:anywhere;min-width:0;flex:1 1 120px}
+.interview-upload-grid{display:grid;grid-template-columns:1fr 1fr;gap:22px}.interview-upload-grid>div{min-width:0}
+.interview-panel label{display:block;font-weight:600;margin-bottom:8px}.interview-panel select,.interview-panel input[type=file],.interview-panel textarea{width:100%;max-width:100%;min-width:0;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink);font:inherit;padding:12px;box-sizing:border-box}
+.interview-panel input[type=file]{font-size:16px}.interview-panel input[type=file]::file-selector-button{border:0;border-radius:5px;padding:8px 10px;font:inherit;margin-right:8px;background:var(--surface-2);color:var(--ink);cursor:pointer}
+.interview-actions{display:flex;gap:12px;flex-wrap:wrap;margin:16px 0}.interview-panel button{white-space:normal}
+.interview-history-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;border-top:1px solid var(--line);padding-top:20px;margin-top:22px}.interview-history-row label{margin:0}
+.interview-document{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:26px 0 16px}.interview-document strong{overflow-wrap:anywhere}.interview-document span{font-size:15px;color:var(--ink-2)}
+#interview-original{background:var(--surface-2);padding:14px;border-radius:8px;border:1px solid var(--line)}#interview-original summary{cursor:pointer;font-weight:600}#interview-raw{margin-top:12px;font-size:16px;line-height:1.65;resize:vertical}
+.interview-ai{display:flex;align-items:center;gap:20px;justify-content:space-between;margin:24px 0 8px}.interview-ai>div{min-width:0}.interview-ai button{flex-shrink:0}
+#interview-review-wrap h4{font-size:23px;margin:24px 0 8px}#interview-summary{margin:10px 0}#interview-warnings{padding-left:24px;color:var(--ink-2)}
+.interview-review-row{border:1px solid var(--line);border-radius:10px;padding:18px;margin:16px 0;background:var(--paper)}
+.interview-review-row.selected{border:.1pt solid var(--red)}.interview-field-title{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px}.interview-field-title label{display:flex;gap:10px;align-items:center;margin:0}.interview-field-title span{font-size:14px;color:var(--ink-2);font-weight:500}
+.interview-panel input[type=checkbox]{width:21px;height:21px;accent-color:var(--red);flex-shrink:0}.interview-compare{display:grid;grid-template-columns:1fr 1fr;gap:20px}.interview-compare>div{min-width:0}.interview-compare small{display:block;font-size:15px;color:var(--ink-2);margin-bottom:6px}.interview-current{white-space:pre-wrap;overflow-wrap:anywhere;margin:0;padding:12px;background:var(--surface-2);border-radius:8px;min-height:80px}.interview-value{resize:vertical;min-height:110px;line-height:1.65}.interview-reason{font-size:16px;line-height:1.7;margin:12px 0 0;overflow-wrap:anywhere}.interview-evidence{font-size:15px;color:var(--ink-2);white-space:pre-wrap;overflow-wrap:anywhere;margin:6px 0}
+.interview-panel .interview-confirm{display:flex;align-items:flex-start;gap:10px;font-weight:400;font-size:17px;margin:18px 0}.interview-confirm input{margin-top:4px}
+@media(max-width:760px){.interview-heading h3{font-size:22px}.interview-panel{padding:20px 16px}.interview-upload-grid,.interview-compare,.interview-history-row{grid-template-columns:1fr}.interview-ai{align-items:stretch;flex-direction:column;gap:10px}.interview-history-row{gap:8px}.interview-review-row{padding:14px}.interview-steps{gap:10px}.interview-steps li{font-size:15px}.interview-steps b{width:24px;height:24px}.interview-actions>button{flex:1 1 140px}}
+
+</style>
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 
 </head>
@@ -382,6 +409,33 @@ select{font:inherit;min-height:48px;border:1px solid var(--line-2);border-radius
     <p class="note">요청한 이름·회사와 이메일을 확인한 뒤 승인하세요. ‘본인 정보 수정’ 권한을 줄 때만 해당 멤버를 연결합니다. 관리자는 연결 없이 전체 명단과 가입자 권한을 관리하고, 읽기 권한은 정보 조회만 가능합니다.</p>
     <div class="scrollx"><table id="accountstable"></table></div><div class="msg" id="accounts-message" role="status"></div>
   </section>
+  <section class="panel panel-pad interview-panel" id="interview-panel" hidden aria-labelledby="interview-title">
+    <div class="interview-heading"><div><span class="interview-kicker">관리자 전용</span><h3 id="interview-title">인터뷰로 선샤인 다듬기</h3></div><span class="interview-private">원문 비공개</span></div>
+    <p class="interview-intro">질문지를 올리면 AI가 핵심고객, 상생직군과 파워팀을 제안합니다.<br>내용을 확인하고 선택한 항목만 선샤인에 반영하세요.</p>
+    <ol class="interview-steps"><li><b>1</b> 멤버 · 문서 선택</li><li><b>2</b> AI 제안 검토</li><li><b>3</b> 선택한 내용 반영</li></ol>
+    <div class="interview-upload-grid">
+      <div><label for="interview-member">어느 멤버의 인터뷰인가요?</label><select id="interview-member"></select><p class="note">성함과 회사를 함께 확인하세요.</p></div>
+      <div><label for="interview-pick">인터뷰 문서</label><div class="interview-file-choice"><button class="btn ghost" id="interview-pick" type="button">파일 선택</button><span id="interview-filename">선택한 파일 없음</span><input id="interview-file" type="file" accept=".pdf,.docx,.txt" aria-label="인터뷰 문서 파일" hidden></div><p class="note" id="interview-file-note">PDF · Word(.docx) · 텍스트(.txt), 최대 10MB. 한 번에 한 멤버의 문서를 올리세요.</p></div>
+    </div>
+    <div class="interview-actions"><button class="btn primary" id="interview-upload">문서 올리기</button><button class="btn ghost" id="interview-new">새 문서 준비</button></div>
+    <div class="interview-history-row"><label for="interview-history">이 멤버의 보관 문서</label><select id="interview-history"><option value="">멤버를 먼저 선택하세요</option></select><button class="btn ghost" id="interview-open">불러오기</button></div>
+    <div id="interview-work" hidden>
+      <div class="interview-document"><strong id="interview-document-name"></strong><span id="interview-document-state"></span><button class="btn ghost" id="interview-download">원본 내려받기</button></div>
+      <details id="interview-original"><summary>문서에서 읽은 내용 보기 · 관리자만</summary><textarea id="interview-raw" rows="8" readonly aria-label="인터뷰 원문"></textarea></details>
+      <div class="interview-ai"><div><strong>선샤인 연결 제안 받기</strong><p class="note">분석할 때 문서 내용을 OpenAI로 전송합니다. 제안은 바로 공개되지 않으며, 다시 분석하면 새 사용료가 발생합니다.</p></div><button class="btn primary" id="interview-analyze">AI 분석하기</button></div>
+      <p class="note" id="interview-ai-status"></p>
+      <div id="interview-review-wrap" hidden>
+        <h4>현재 내용과 비교해 주세요</h4><p id="interview-summary"></p><ul id="interview-warnings"></ul>
+        <p class="note">체크한 항목만 바뀝니다. 체크하지 않은 항목은 그대로 유지됩니다. 목록은 한 줄에 하나씩 수정하세요.</p>
+        <div id="interview-review"></div>
+        <label class="interview-confirm"><input type="checkbox" id="interview-real"> 핵심고객·상생직군을 인터뷰와 대조했으며, 검토 완료로 표시합니다.</label>
+        <label class="interview-confirm"><input type="checkbox" id="interview-confirm"> 대상 멤버가 맞고, 공개할 내용에 고객사 실명·연락처 등 비공개 정보가 없는지 확인했습니다.</label>
+        <div class="interview-actions"><button class="btn ghost" id="interview-save">검토 내용 보관</button><button class="btn primary" id="interview-apply">선택한 내용 반영</button></div>
+      </div>
+    </div>
+    <div class="msg" id="interview-message" role="status" aria-live="polite"></div>
+  </section>
+
   <div class="msg" id="adminmsg" role="status" aria-live="polite"></div>
   <div class="panel panel-pad">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
@@ -401,7 +455,7 @@ select{font:inherit;min-height:48px;border:1px solid var(--line-2);border-radius
     </div>
     <div class="panel panel-pad">
       <div class="ptitle">내보내기 · 불러오기</div>
-      <p class="note" style="margin:0 0 9px">내보내기로 현재 명단을 복사합니다. JSON을 붙여넣고 불러오면 성함을 기준으로 갱신하거나 추가합니다. 기존 멤버를 삭제하지 않으며, 동명이인이 있으면 반영을 멈춥니다.</p>
+      <p class="note" style="margin:0 0 9px">내보내기로 공개 명단을 복사합니다. 인터뷰 원문과 비공개 항목은 포함되지 않습니다. JSON을 붙여넣고 불러오면 성함을 기준으로 갱신하거나 추가합니다. 기존 멤버를 삭제하지 않으며, 동명이인이 있으면 반영을 멈춥니다.</p>
       <textarea class="io" id="io" placeholder="여기에 JSON이 표시되거나, 받은 JSON을 붙여넣습니다"></textarea>
       <div style="margin-top:9px;display:flex;gap:8px"><button class="btn" id="exportb">내보내기</button><button class="btn ghost" id="importb" disabled>불러오기</button></div>
       <div class="msg" id="iomsg"></div>
@@ -449,8 +503,8 @@ let M = [
  {n:'조은영',co:'에어월드시스템BS',f:'냉동공조',g:'공간',nw:1,c:['제조·공장 대표','요식업 점주','숙박·병원·상가 사업주'],s:['에어컨','상업 인테리어','축산물 유통','요식업(고기구이)','전기공사','소방설비','정수기 렌탈']},
  {n:'이상민',co:'Creation by Jm',f:'주거 인테리어',g:'공간',c:['이사·입주 가구','신축·리모델링 건축주'],s:['중문','커튼·블라인드','부동산중개','도배','바닥재','조명','가구','입주청소']},
 
- {n:'송승훈',co:'T.M LINK',f:'앱·웹개발',g:'기업',c:['소기업 대표','전문직','무역·여행업'],s:['인쇄·디자인','경영컨설팅','온라인마케팅','브랜드디자인','사진','번역','영상제작'],w:'다양한 언어가 들어간 명함이 필요한 분',v:'전문직 · 무역업 · 여행업'},
- {n:'박미성',co:'울림 컴퍼니',f:'경영컨설팅',g:'기업',real:1,c:['3년 내 (예비)창업자','정책자금·정부지원사업 희망 사업자','기업인증 필요 사업자','소개자료·브랜딩 필요 기업'],s:['앱·웹개발','홈페이지 제작','브랜딩 전문가','세무사','회계사·신용분석사','투자사·액셀러레이터','온·오프라인 마케팅','노무사','변리사(특허)'],w:'AI·블록체인·빅데이터 창업자 / 아이디어 기반 창업자 / 영업자료가 필요한 사업자',v:'정부지원사업에 도전하려는 창업기업 대표 · 제안서·사업계획서가 필요한 기업 담당자',tg:['세금 때문에 미치겠다','새 사업을 하고 싶은데 돈이 없다','수출이나 온라인 판매를 하고 싶다','하던 업을 업그레이드해 개발하고 싶다']},
+ {n:'송승훈',co:'T.M LINK',f:'앱·웹개발',g:'기업',c:['소기업 대표','전문직','무역·여행업'],s:['인쇄·디자인','경영컨설팅','온라인마케팅','브랜드디자인','사진','번역','영상제작'],w:'다양한 언어가 들어간 명함이 필요한 분'},
+ {n:'박미성',co:'울림 컴퍼니',f:'경영컨설팅',g:'기업',real:1,c:['3년 내 (예비)창업자','정책자금·정부지원사업 희망 사업자','기업인증 필요 사업자','소개자료·브랜딩 필요 기업'],s:['앱·웹개발','홈페이지 제작','브랜딩 전문가','세무사','회계사·신용분석사','투자사·액셀러레이터','온·오프라인 마케팅','노무사','변리사(특허)'],w:'AI·블록체인·빅데이터 창업자 / 아이디어 기반 창업자 / 영업자료가 필요한 사업자'},
  {n:'이도현',co:'AIA프리미어 파트너',f:'기업보험',g:'기업',c:['중기업 대표','제조·공장 대표'],s:['인보험','경영컨설팅','변호사','세무사','노무사','산업안전관리','외국보험']},
  {n:'정상현',co:'아메리츠파이낸셜',f:'외국보험',g:'기업',c:['해외 거주·주재원','중기업 대표'],s:['기업보험','세무사','번역','유학·이민 컨설팅','외환·송금','국제물류']},
 
@@ -547,12 +601,13 @@ function renderSun(){
   }
   document.fonts?.ready.then(checkFit);
   const gaps=list.filter(f=>!FIELD2M[f]||FIELD2M[f]===m);
+  const details=privateFor(m),referral=details?.good_referral,triggers=details?.triggers;
   document.getElementById('wantbox').innerHTML=
     `<div class="want"><div class="want-heading"><h3 class="want-title">${esc(m.n)} 대표</h3><span class="want-team">${esc(m.g)} 파워팀</span></div><p class="want-summary">상생직군 <b>${list.length}개</b> 중 <b>${list.length-gaps.length}개</b>는 챕터 안에서 바로 연결할 수 있습니다.<br>남은 <b>${gaps.length}개</b> 직군은 초대로 채울 수 있습니다.</p>`
-    + ((m.w||m.v||m.tg?.length)?'<dl class="want-details">'
+    + ((m.w||referral||triggers?.length)?'<dl class="want-details">'
       +(m.w?`<div class="want-detail"><dt>원하는 비지터</dt><dd>${esc(m.w)}</dd></div>`:'')
-      +(m.v?`<div class="want-detail"><dt>좋은 리퍼럴</dt><dd>${esc(m.v)}</dd></div>`:'')
-      +(m.tg?.length?`<div class="want-detail"><dt>이 말이 들리면 연결</dt><dd><ul class="want-triggers">${m.tg.map(t=>'<li>'+esc(t)+'</li>').join('')}</ul></dd></div>`:'')+'</dl>':'')
+      +(referral?`<div class="want-detail"><dt>좋은 리퍼럴<br><small>비공개 · 관리자와 본인</small></dt><dd>${esc(referral)}</dd></div>`:'')
+      +(triggers?.length?`<div class="want-detail"><dt>이 말이 들리면 연결<br><small>비공개 · 관리자와 본인</small></dt><dd><ul class="want-triggers">${triggers.map(t=>'<li>'+esc(t)+'</li>').join('')}</ul></dd></div>`:'')+'</dl>':'')
     + (m.real?'':'<p class="want-estimate">※ 핵심고객·상생직군은 추정치입니다. 신상명세표·C단계 질문지가 들어오면 교체됩니다.</p>')
     + `</div>`;
 }
@@ -626,8 +681,8 @@ function renderChapter(){
 const SUPABASE_URL = 'https://alcvloqlzxpeqtagyffy.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFsY3Zsb3FsenhwZXF0YWd5ZmZ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk5NDI5NjgsImV4cCI6MjEwNTUxODk2OH0._YrXhnG2cZSLtZHNwe0wcJiTL8_Vqt6mGFwOksGSAeE';
 // 이 두 상수에는 프로젝트 URL과 anon 공개 키만 입력합니다.
-const COLUMNS='id,name,company,field,team,customers,synergies,wants,good_referral,triggers,is_new,is_real,sort_order,updated_at';
-const COLUMN_MAP={n:'name',co:'company',f:'field',g:'team',c:'customers',s:'synergies',w:'wants',v:'good_referral',tg:'triggers',nw:'is_new',real:'is_real'};
+const COLUMNS='id,name,company,field,team,customers,synergies,wants,is_new,is_real,sort_order,updated_at';
+const COLUMN_MAP={n:'name',co:'company',f:'field',g:'team',c:'customers',s:'synergies',w:'wants',nw:'is_new',real:'is_real'};
 let db=null, session=null, online=false, busy=false, connecting=false, authBusy=false;
 let readVersion=0, channel=null, realtimeOK=false, refreshTimer=null, pendingRefresh=false;
 const ACCOUNT_COLUMNS='user_id,email,role,member_id,requested_member_id,request_status,updated_at';
@@ -647,7 +702,7 @@ const canEdit=member=>canWrite()&&allowedMember(member);
 const canManage=()=>canWrite()&&isAdmin();
 const editingAdmin=()=>el('v4').contains(document.activeElement)&&/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
 const authRedirect=()=>location.origin+location.pathname;
-const fromRow=r=>({id:r.id,n:r.name,co:r.company,f:r.field,g:r.team,c:r.customers||[],s:r.synergies||[],w:r.wants,v:r.good_referral,tg:r.triggers||[],nw:r.is_new,real:r.is_real,sortOrder:r.sort_order,updatedAt:r.updated_at});
+const fromRow=r=>({id:r.id,n:r.name,co:r.company,f:r.field,g:r.team,c:r.customers||[],s:r.synergies||[],w:r.wants,nw:r.is_new,real:r.is_real,sortOrder:r.sort_order,updatedAt:r.updated_at});
 const toRow=m=>Object.fromEntries(Object.entries(COLUMN_MAP).filter(([k])=>Object.hasOwn(m,k)).map(([k,v])=>[v,m[k]]));
 function message(id,text,error=false){el(id).textContent=text;el(id).className='msg '+(error?'error':'success');}
 function explain(error){
@@ -656,7 +711,7 @@ function explain(error){
   if(error?.code==='42501'||/row-level security|permission denied/i.test(detail)) return '수정 권한이 없거나 변경되었습니다. 멤버는 승인된 본인 정보만 수정할 수 있습니다. 관리자에게 권한을 확인해 주세요.';
   if(/JWT|token.*expired|invalid.*token/i.test(detail)) return '로그인이 만료되었습니다. 로그아웃 후 이메일과 비밀번호로 다시 로그인하세요.';
   if(error?.code==='23505') return '이미 다른 계정에 연결된 멤버입니다. 연결된 계정을 먼저 확인하고 권한을 해제해 주세요.';
-  if(error?.code==='23503') return '계정에 연결된 멤버는 바로 삭제할 수 없습니다. 가입자 권한 관리에서 연결된 계정을 읽기 권한으로 바꾼 뒤 삭제하세요.';
+  if(error?.code==='23503') return '계정에 연결되었거나 보관된 인터뷰가 있는 멤버는 바로 삭제할 수 없습니다. 연결된 계정과 보관 문서를 확인해 주세요.';
   if(/relation.*does not exist|PGRST205/i.test(detail+' '+error?.code)) return '멤버 테이블을 찾지 못했습니다. 관리자가 Supabase 초기 SQL을 실행한 후 다시 연결하세요.';
   if(/Failed to fetch|NetworkError|AbortError|timeout|시간 초과/i.test(detail)) return '서버에 연결하지 못했습니다. 인터넷과 Supabase 상태를 확인한 후 다시 연결하세요. 저장 중이었다면 명단에서 반영 여부를 먼저 확인하세요.';
   if(error?.status===429||/rate.limit/i.test(detail)) return '요청이 너무 많습니다. 잠시 기다린 뒤 다시 시도하세요.';
@@ -689,6 +744,7 @@ function connection(detail='',error=false){
   el('roster-badge').textContent=online?'공유 명단 · '+M.length+'명':'경청표 26.09.02 기준 · 31명';
 }
 function permissions(){
+  syncPrivateScope();
   const writable=canWrite(), email=session?.user?.email||'', admin=canManage();
   el('auth-email').textContent=email;el('auth-email').hidden=!email;
   el('auth-state').hidden=!email;
@@ -701,7 +757,7 @@ function permissions(){
   el('guide-login').disabled=authBusy;el('admin-login').disabled=authBusy;
   el('loginb').disabled=authBusy;el('logoutb').disabled=authBusy||busy;
   el('admin-note').textContent=!email?'수정하려면 로그인하세요':!online?'오프라인 · 읽기 전용입니다. 서버 연결을 복구한 뒤 수정하세요.':accessError?accessError:!accessReady?'수정 권한을 확인하고 있습니다.':busy?'서버에 저장하고 있습니다. 완료될 때까지 기다려 주세요.':isAdmin()?'관리자 · 전체 멤버와 가입자 권한을 관리할 수 있습니다. 수정 내용은 저장 성공 후 공유됩니다.':account?.role==='member'?'본인 정보 수정 · 노란색으로 표시된 내 정보만 수정할 수 있습니다. 입력 후 다른 칸을 누르면 저장됩니다.':'읽기 권한 · 아래에서 본인 확인을 요청하세요. 관리자 승인 후 내 정보를 수정할 수 있습니다.';
-  el('admintable').querySelectorAll('input').forEach(input=>{const member=M[+input.closest('tr').dataset.i];input.readOnly=!canEdit(member);});
+  el('admintable').querySelectorAll('input').forEach(input=>{const member=M[+input.closest('tr').dataset.i];input.readOnly=!canEdit(member)||(['v','tg'].includes(input.dataset.k)&&!privateReady);});
   el('admintable').querySelectorAll('tbody tr').forEach(row=>{const own=account?.role==='member'&&M[+row.dataset.i]?.id===account.member_id;row.classList.toggle('own-row',own);const marker=row.querySelector('.own-marker');if(marker)marker.hidden=!own;});
   el('admintable').querySelectorAll('.del').forEach(button=>button.disabled=!admin);
   ['newrow','bulkb','importb'].forEach(id=>el(id).disabled=!admin);
@@ -717,6 +773,7 @@ function permissions(){
     row.querySelector('.account-member-hint').textContent=role==='admin'?'전체 멤버 관리 · 연결 불필요':role==='viewer'?'읽기 전용 · 연결 불필요':'본인 확인 후 이 계정이 수정할 멤버를 선택하세요.';
   });
   el('login-form').querySelectorAll('button').forEach(button=>button.disabled=authBusy);
+  renderInterviewControls();
 }
 async function loadAccess(background=false){
   const userId=session?.user?.id,version=++accessVersion;
@@ -732,7 +789,7 @@ async function loadAccess(background=false){
     }
     if(background&&(el('accountstable').contains(document.activeElement)||el('member-access-panel').contains(document.activeElement)))pendingAccessRender=true;
     else renderAccess();
-    permissions();return true;
+    permissions();loadPrivateDetails();return true;
   }catch(error){
     if(version!==accessVersion||session?.user?.id!==userId)return false;
     account=null;accounts=[];accessReady=false;accessError='권한을 확인하지 못해 읽기만 가능합니다. 다시 연결해 주세요. 계속되면 관리자에게 계정 등록을 확인해 주세요.';
@@ -924,7 +981,7 @@ el('logoutb').onclick=async()=>{
 };
 
 /* ---------- 4. 멤버 관리: 서버 응답 후에만 반영 ---------- */
-const FIELDS=[['n','성함',110],['co','회사명',150],['f','전문분야',160],['g','파워팀',120],['c','핵심고객',200],['s','상생직군',260],['w','원하는 비지터',220],['v','좋은 리퍼럴',220],['tg','리퍼럴 트리거',260]];
+const FIELDS=[['n','성함',110],['co','회사명',150],['f','전문분야',160],['g','파워팀',120],['c','핵심고객',200],['s','상생직군',260],['w','원하는 비지터',220],['v','좋은 리퍼럴 · 비공개',220],['tg','리퍼럴 트리거 · 비공개',260]];
 async function write(action,messageId='adminmsg',scope=null){
   if(busy||authBusy)return false;
   if(!db||!online||!signedIn()){message(messageId,online?'수정하려면 로그인하세요.':'오프라인에서는 수정할 수 없습니다. 먼저 다시 연결하세요.',true);renderAdmin();return false;}
@@ -958,7 +1015,8 @@ function renderAdmin(){
   const box=el('admintable');
   box.innerHTML=`<thead><tr>${FIELDS.map(([,label,width])=>`<th style="min-width:${width}px">${label}</th>`).join('')}<th>관리</th></tr></thead>`
     +`<tbody>${M.map((m,i)=>`<tr data-i="${i}">`+FIELDS.map(([key,label])=>{
-      const value=Array.isArray(m[key])?m[key].join(', '):(m[key]||'');
+      const raw=key==='v'?privateFor(m)?.good_referral:key==='tg'?privateFor(m)?.triggers:m[key];
+      const value=Array.isArray(raw)?raw.join(', '):(raw||'');
       return `<td data-label="${label}"><input class="cell" data-k="${key}" aria-label="${esc(m.n+' '+label)}" value="${esc(value)}" readonly></td>`;
     }).join('')+`<td data-label="관리"><span class="own-marker" hidden>내 정보</span><button class="mini del" aria-label="${esc(m.n)} 삭제" disabled>삭제</button></td></tr>`).join('')}</tbody>`;
   box.querySelectorAll('input.cell').forEach(input=>{
@@ -966,6 +1024,12 @@ function renderAdmin(){
       const member=M[+input.closest('tr').dataset.i],key=input.dataset.k,value=input.value.trim();
       const parsed=['c','s','tg'].includes(key)?value.split(',').map(x=>x.trim()).filter(Boolean):value;
       if(key==='n'&&!value){message('adminmsg','성함은 비워 둘 수 없습니다. 성함을 입력하세요.',true);renderAdmin();return;}
+      if(['v','tg'].includes(key)){
+        if(!privateReady||!canEdit(member)){renderAdmin();return;}
+        const details=privateFor(member),column=key==='v'?'good_referral':'triggers';
+        if(JSON.stringify(details?.[column]||'')===JSON.stringify(parsed))return;
+        write(async()=>{await request(db.rpc('update_member_details',{target_member_id:member.id,expected_revision:details?.revision||0,details_patch:{[column]:parsed}}));return '비공개 정보를 저장했습니다.';},'adminmsg',member);return;
+      }
       if(JSON.stringify(member[key]||'')===JSON.stringify(parsed))return;
       write(()=>updateMember(member,{[COLUMN_MAP[key]]:key==='g'?(value||'미정'):parsed}),'adminmsg',member);
     };
@@ -992,6 +1056,7 @@ function validateImport(value){
   if(!Array.isArray(value)||!value.length)throw new Error('한 명 이상 들어 있는 JSON 배열을 붙여 넣으세요.');
   return value.map((m,index)=>{
     if(!m||typeof m!=='object'||Array.isArray(m)||typeof m.n!=='string'||!m.n.trim())throw new Error((index+1)+'번째 항목의 성함(n)을 확인하세요.');
+    if((m.v&&String(m.v).trim())||(Array.isArray(m.tg)&&m.tg.length))throw new Error('좋은 리퍼럴·트리거는 공개 명단으로 불러올 수 없습니다. 비공개 항목에서 따로 수정하세요.');
     const output={n:m.n.trim()};
     for(const key of Object.keys(COLUMN_MAP)){
       if(key==='n'||!Object.hasOwn(m,key))continue;
@@ -1054,6 +1119,338 @@ el('importb').onclick=async()=>{
   catch(error){message('iomsg',error instanceof SyntaxError?'JSON 형식이 올바르지 않습니다. 내보내기로 만든 내용을 그대로 붙여 넣으세요.':explain(error),true);return;}
   await write(()=>applyBatch(items),'iomsg');
 };
+
+// Inline-ready browser helper. No file/text uploads, HTML conversion, or storage writes.
+// Use returned text/warnings only with textarea.value / element.textContent.
+// Sources checked 2026-09-21:
+// https://github.com/mozilla/pdf.js/releases/tag/v6.3.289
+// https://github.com/mwilliamson/mammoth.js/blob/master/README.md
+// PDF and its worker use the same pinned version; DOCX runs in a disposable worker.
+const INTERVIEW_FILE_LIMITS=Object.freeze({maxBytes:10*1024*1024,maxPages:60,maxChars:120000,timeoutMs:45000,maxZipBytes:25*1024*1024,maxZipEntries:2000});
+const INTERVIEW_PDF_CDN='https://cdn.jsdelivr.net/npm/pdfjs-dist@6.3.289/';
+const INTERVIEW_DOCX_CDN='https://cdn.jsdelivr.net/npm/mammoth@1.12.3/mammoth.browser.min.js';
+let interviewPdfModule;
+class InterviewFileError extends Error{
+  constructor(code,message){super(message);this.name='InterviewFileError';this.code=code;}
+}
+function interviewFileFailure(code,message){return new InterviewFileError(code,message);}
+function interviewAbortReason(signal){return signal.reason instanceof Error?signal.reason:interviewFileFailure('cancelled','파일 읽기를 취소했습니다. 기존 입력 내용은 그대로 남아 있습니다.');}
+function interviewCheckAbort(signal){if(signal.aborted)throw interviewAbortReason(signal);}
+function interviewAwait(promise,signal){
+  interviewCheckAbort(signal);
+  return new Promise((resolve,reject)=>{
+    const onAbort=()=>{signal.removeEventListener('abort',onAbort);reject(interviewAbortReason(signal));};
+    signal.addEventListener('abort',onAbort,{once:true});
+    Promise.resolve(promise).then(value=>{signal.removeEventListener('abort',onAbort);if(signal.aborted)reject(interviewAbortReason(signal));else resolve(value);},error=>{signal.removeEventListener('abort',onAbort);reject(error);});
+  });
+}
+function interviewCleanText(text){return String(text).replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,'').replace(/[ \t]+\n/g,'\n').trim();}
+function interviewCheckText(text,limit){if(text.length>limit)throw interviewFileFailure('too_many_characters','문서 글자 수가 '+limit.toLocaleString()+'자를 넘습니다. 인터뷰 부분만 나누어 올려 주세요.');return text;}
+// Inspect the ZIP central directory before decompression. Limits are defense in depth;
+// metadata may lie, so parsing still runs off the UI thread and is terminated on timeout.
+function interviewCheckDocxZip(buffer,limits){
+  const b=new Uint8Array(buffer),v=new DataView(buffer),bad=()=>interviewFileFailure('invalid_docx','DOCX 파일 구조가 손상되었거나 지원하지 않는 형식입니다. Word에서 새 DOCX로 저장한 뒤 다시 올려 주세요.');
+  if(b.length<22)throw bad();
+  let end=-1;
+  for(let i=b.length-22;i>=Math.max(0,b.length-65557);i--){if(v.getUint32(i,true)===0x06054b50&&i+22+v.getUint16(i+20,true)===b.length){end=i;break;}}
+  if(end<0)throw bad();
+  const entries=v.getUint16(end+10,true),size=v.getUint32(end+12,true),offset=v.getUint32(end+16,true);
+  if(v.getUint16(end+4,true)||v.getUint16(end+6,true)||v.getUint16(end+8,true)!==entries||entries===65535||offset===0xffffffff||size===0xffffffff||offset+size>end)throw bad();
+  if(entries>limits.maxZipEntries)throw interviewFileFailure('complex_docx','문서 안의 파일이 너무 많습니다. 인터뷰 내용만 새 DOCX 문서로 복사해 올려 주세요.');
+  let pos=offset,total=0,documentFound=false,typesFound=false;
+  const names=new Set(),decoder=new TextDecoder();
+  for(let i=0;i<entries;i++){
+    if(pos+46>offset+size||v.getUint32(pos,true)!==0x02014b50)throw bad();
+    const flags=v.getUint16(pos+8,true),method=v.getUint16(pos+10,true),packed=v.getUint32(pos+20,true),unpacked=v.getUint32(pos+24,true),nameSize=v.getUint16(pos+28,true),extra=v.getUint16(pos+30,true),comment=v.getUint16(pos+32,true),local=v.getUint32(pos+42,true);
+    if(flags&1)throw interviewFileFailure('encrypted','암호가 설정된 문서는 읽을 수 없습니다. 암호를 해제한 사본을 올려 주세요.');
+    if(![0,8].includes(method)||unpacked===0xffffffff||packed===0xffffffff||local===0xffffffff||pos+46+nameSize+extra+comment>offset+size||local+30>b.length)throw bad();
+    const name=decoder.decode(b.subarray(pos+46,pos+46+nameSize));
+    if(names.has(name)||name.includes('..')||name.includes('\\')||name.startsWith('/'))throw bad();
+    names.add(name);
+    if(/vbaProject\.bin$/i.test(name))throw interviewFileFailure('macros','매크로가 포함된 문서는 지원하지 않습니다. 매크로 없는 DOCX 또는 PDF로 저장해 주세요.');
+    total+=unpacked;
+    if(total>limits.maxZipBytes||(name==='word/document.xml'&&unpacked>8*1024*1024))throw interviewFileFailure('expanded_too_large','압축을 푼 문서가 너무 큽니다. 이미지와 불필요한 페이지를 줄인 DOCX를 올려 주세요.');
+    if(v.getUint32(local,true)!==0x04034b50)throw bad();
+    const dataStart=local+30+v.getUint16(local+26,true)+v.getUint16(local+28,true);
+    if(dataStart+packed>offset)throw bad();
+    documentFound||=name==='word/document.xml';typesFound||=name==='[Content_Types].xml';
+    pos+=46+nameSize+extra+comment;
+  }
+  if(pos!==offset+size||!documentFound||!typesFound)throw bad();
+}
+async function interviewReadDocx(buffer,signal,limits){
+  interviewCheckDocxZip(buffer,limits);
+  if(typeof Worker==='undefined')throw interviewFileFailure('browser_unsupported','이 브라우저에서는 Word 문서를 읽을 수 없습니다. 최신 Chrome·Edge·Safari를 사용하거나 UTF-8 TXT로 저장해 다시 올려 주세요.');
+  const source=`self.onmessage=async function(event){try{importScripts(${JSON.stringify(INTERVIEW_DOCX_CDN)});const result=await self.mammoth.extractRawText({arrayBuffer:event.data.buffer});self.postMessage({text:result.value,warnings:(result.messages||[]).length});}catch(error){self.postMessage({failed:true});}};`;
+  const url=URL.createObjectURL(new Blob([source],{type:'application/javascript'}));
+  let worker;
+  try{
+    worker=new Worker(url);
+    const work=new Promise((resolve,reject)=>{
+      worker.onmessage=event=>event.data.failed?reject(interviewFileFailure('docx_read_failed','Word 문서를 읽지 못했습니다. 암호·손상 여부를 확인하고 새 DOCX 또는 PDF로 저장해 주세요.')):resolve(event.data);
+      worker.onerror=()=>reject(interviewFileFailure('docx_worker_failed','Word 읽기 도구를 불러오지 못했습니다. 인터넷 연결을 확인하고 다시 시도하거나 UTF-8 TXT로 저장해 다시 올려 주세요.'));
+      worker.postMessage({buffer},[buffer]);
+    });
+    const result=await interviewAwait(work,signal);
+    return {text:interviewCheckText(interviewCleanText(result.text),limits.maxChars),pageCount:null,warnings:result.warnings?['일부 Word 서식을 읽지 못했습니다. 원문과 추출 내용을 비교해 주세요.']:[]};
+  }finally{worker?.terminate();URL.revokeObjectURL(url);}
+}
+async function interviewReadPdf(buffer,signal,limits,progress){
+  const signature=new TextDecoder('latin1').decode(new Uint8Array(buffer,0,Math.min(buffer.byteLength,1024)));
+  if(!signature.includes('%PDF-'))throw interviewFileFailure('invalid_pdf','PDF 파일 형식이 올바르지 않습니다. 원본 문서에서 PDF로 다시 저장해 주세요.');
+  interviewPdfModule??=import(INTERVIEW_PDF_CDN+'legacy/build/pdf.min.mjs').catch(error=>{interviewPdfModule=null;throw error;});
+  let pdfjs;
+  try{pdfjs=await interviewAwait(interviewPdfModule,signal);}catch(error){interviewCheckAbort(signal);throw interviewFileFailure('pdf_library_failed','PDF 읽기 도구를 불러오지 못했습니다. 인터넷 연결과 브라우저 업데이트를 확인해 주세요.');}
+  pdfjs.GlobalWorkerOptions.workerSrc=INTERVIEW_PDF_CDN+'legacy/build/pdf.worker.min.mjs';
+  const task=pdfjs.getDocument({data:new Uint8Array(buffer),cMapUrl:INTERVIEW_PDF_CDN+'cmaps/',cMapPacked:true,standardFontDataUrl:INTERVIEW_PDF_CDN+'standard_fonts/',wasmUrl:INTERVIEW_PDF_CDN+'wasm/',disableFontFace:true,enableXfa:false,stopAtErrors:true,useWasm:false,verbosity:0});
+  const destroy=()=>{void task.destroy().catch(()=>{});};signal.addEventListener('abort',destroy,{once:true});
+  let doc;
+  try{
+    doc=await interviewAwait(task.promise,signal);
+    if(doc.numPages>limits.maxPages)throw interviewFileFailure('too_many_pages','PDF가 '+limits.maxPages+'쪽을 넘습니다. 인터뷰가 있는 페이지만 나누어 올려 주세요.');
+    const pages=[],emptyPages=[];let length=0;
+    for(let n=1;n<=doc.numPages;n++){
+      interviewCheckAbort(signal);progress({phase:'pdf',current:n,total:doc.numPages});
+      const page=await interviewAwait(doc.getPage(n),signal),reader=page.streamTextContent().getReader();
+      const parts=[];
+      try{while(true){const chunk=await interviewAwait(reader.read(),signal);if(chunk.done)break;for(const item of chunk.value.items){if(typeof item.str!=='string')continue;const piece=item.str+(item.hasEOL?'\n':' ');length+=piece.length;if(length>limits.maxChars)throw interviewFileFailure('too_many_characters','문서 글자 수가 '+limits.maxChars.toLocaleString()+'자를 넘습니다. 인터뷰 부분만 나누어 올려 주세요.');parts.push(piece);}}}
+      finally{void reader.cancel().catch(()=>{});page.cleanup();}
+      const text=interviewCleanText(parts.join(''));if(!text)emptyPages.push(n);pages.push(text);
+    }
+    const text=interviewCheckText(interviewCleanText(pages.join('\n\n')),limits.maxChars);
+    const warnings=['PDF의 표·여러 단으로 된 문장은 순서가 달라질 수 있습니다. 원문과 비교해 주세요.'];
+    if(emptyPages.length)warnings.push('글자가 추출되지 않은 페이지: '+emptyPages.join(', ')+'. 스캔 이미지인지 확인해 주세요.');
+    return {text,pageCount:doc.numPages,emptyPages,warnings,needsOCR:!text};
+  }catch(error){
+    interviewCheckAbort(signal);if(error instanceof InterviewFileError)throw error;
+    if(error?.name==='PasswordException')throw interviewFileFailure('encrypted','암호가 설정된 PDF는 읽을 수 없습니다. 암호를 해제한 사본을 올려 주세요.');
+    throw interviewFileFailure('pdf_read_failed','PDF가 손상되었거나 글자 구조를 읽을 수 없습니다. 원본 문서에서 PDF로 다시 저장하거나 UTF-8 TXT로 저장해 다시 올려 주세요.');
+  }finally{signal.removeEventListener('abort',destroy);await task.destroy().catch(()=>{});}
+}
+/** Extract a File locally. Returns {text,format,fileName,fileSize,pageCount,warnings,needsOCR?}.
+ * options: {signal,onProgress,maxBytes,maxPages,maxChars,timeoutMs,allowScannedPdf:false}.
+ * Only lower limits are allowed. Caller must retain its original File/draft on failure.
+ * Abort the prior controller when switching files/members; also check a UI generation
+ * before assigning results. Scanned PDFs may return needsOCR only when explicitly enabled.
+ */
+async function extractInterviewFile(file,options={}){
+  const limits={...INTERVIEW_FILE_LIMITS};
+  for(const key of ['maxBytes','maxPages','maxChars','timeoutMs'])if(options[key]!=null){if(!Number.isInteger(options[key])||options[key]<1)throw new TypeError('Invalid extraction limit');limits[key]=Math.min(options[key],limits[key]);}
+  if(!file||typeof file.arrayBuffer!=='function'||typeof file.name!=='string')throw interviewFileFailure('file_required','읽을 파일을 먼저 선택해 주세요.');
+  if(!file.size)throw interviewFileFailure('empty_file','빈 파일입니다. 내용이 들어 있는 문서를 선택해 주세요.');
+  if(file.size>limits.maxBytes)throw interviewFileFailure('file_too_large','파일은 '+Math.floor(limits.maxBytes/1024/1024)+'MB까지 읽을 수 있습니다. 인터뷰 부분만 나누어 올려 주세요.');
+  const format=file.name.split('.').pop().toLowerCase();
+  if(!['pdf','docx','txt'].includes(format))throw interviewFileFailure('unsupported_format','PDF, DOCX, UTF-8 TXT만 지원합니다. DOC·HWP·HWPX 파일은 Word나 한글에서 PDF 또는 DOCX로 저장해 올려 주세요.');
+  const controller=new AbortController(),signal=controller.signal;
+  const forwardAbort=()=>controller.abort(interviewFileFailure('cancelled','파일 읽기를 취소했습니다. 기존 입력 내용은 그대로 남아 있습니다.'));
+  if(options.signal?.aborted)forwardAbort();else options.signal?.addEventListener('abort',forwardAbort,{once:true});
+  const timer=setTimeout(()=>controller.abort(interviewFileFailure('timeout','문서를 읽는 시간이 너무 오래 걸립니다. 인터뷰 부분만 나누어 올리거나 UTF-8 TXT로 저장해 다시 올려 주세요.')),limits.timeoutMs);
+  const progress=data=>{try{options.onProgress?.(data);}catch{}};
+  try{
+    interviewCheckAbort(signal);progress({phase:'reading',current:0,total:1});
+    const buffer=await interviewAwait(file.arrayBuffer(),signal);let result;
+    if(format==='pdf')result=await interviewReadPdf(buffer,signal,limits,progress);
+    else if(format==='docx')result=await interviewReadDocx(buffer,signal,limits);
+    else{let text;try{text=new TextDecoder('utf-8',{fatal:true}).decode(buffer);}catch{throw interviewFileFailure('encoding','TXT 파일의 한글 인코딩을 읽지 못했습니다. 메모장에서 UTF-8로 다시 저장한 뒤 올려 주세요.');}if(text.includes('\u0000'))throw interviewFileFailure('binary_text','텍스트가 아닌 내용이 포함되어 있습니다. UTF-8 TXT 파일로 다시 저장해 주세요.');result={text:interviewCheckText(interviewCleanText(text),limits.maxChars),pageCount:null,warnings:[]};}
+    interviewCheckAbort(signal);
+    if(!result.text&&!(format==='pdf'&&options.allowScannedPdf))throw interviewFileFailure('no_text',format==='pdf'?'PDF에서 글자를 찾지 못했습니다. 스캔 PDF라면 OCR로 글자를 인식한 뒤 다시 올리거나 인터뷰 내용을 UTF-8 TXT로 저장해 올려 주세요.':'문서에서 글자를 찾지 못했습니다. 이미지 속 글자는 추출되지 않으므로 UTF-8 TXT로 저장해 다시 올려 주세요.');
+    progress({phase:'complete',current:1,total:1});
+    return {...result,format,fileName:file.name,fileSize:file.size};
+  }finally{clearTimeout(timer);options.signal?.removeEventListener('abort',forwardAbort);}
+}
+
+/* ---------- 비공개 정보 · 인터뷰 문서 ---------- */
+const INTERVIEW_FIELDS=[['customers','핵심고객 유형','c',true],['synergies','상생직군','s',true],['team','파워팀','g',false],['field','전문분야','f',false],['wants','원하는 비지터','w',false],['good_referral','좋은 리퍼럴','v',false,true],['triggers','리퍼럴 트리거','tg',true,true],['customer_companies','실제 고객사명','',true,true]];
+let privateDetails=new Map(),privateReady=false,privateRead=0,privateScope='';
+let interviewDoc=null,interviewBusy=false,interviewGeneration=0,interviewDirty=false,interviewBaseline=null,interviewConfigured=null,interviewController=null,interviewListRead=0;
+function clearInterview(){
+  ++interviewGeneration;++interviewListRead;interviewController?.abort();interviewController=null;interviewDoc=null;interviewBusy=false;interviewDirty=false;interviewBaseline=null;
+  el('interview-work').hidden=true;el('interview-file').value='';el('interview-filename').textContent='선택한 파일 없음';el('interview-raw').value='';el('interview-review').replaceChildren();el('interview-summary').textContent='';el('interview-warnings').replaceChildren();
+  el('interview-document-name').textContent='';el('interview-document-state').textContent='';el('interview-review-wrap').hidden=true;el('interview-confirm').checked=false;el('interview-real').checked=false;el('interview-original').open=false;message('interview-message','');
+}
+function syncPrivateScope(){
+  const scope=signedIn()&&accessReady?[session.user.id,account.role,account.member_id||''].join(':'):'';
+  if(scope===privateScope)return;
+  privateScope=scope;++privateRead;privateDetails.clear();privateReady=false;clearInterview();interviewConfigured=null;
+  el('interview-member').value='';el('interview-history').innerHTML='<option value="">멤버를 먼저 선택하세요</option>';el('interview-ai-status').textContent='';
+  el('admintable').querySelectorAll('input[data-k="v"],input[data-k="tg"]').forEach(input=>input.value='');
+  if(el('wantbox'))renderSun();
+}
+function privateFor(member){return online&&allowedMember(member)?privateDetails.get(member.id):null;}
+async function loadPrivateDetails(){
+  const generation=++privateRead,scope=privateScope;
+  if(!signedIn()||!accessReady||!['admin','member'].includes(account.role))return;
+  try{
+    const rows=await request(db.rpc('get_member_details',{target_member_id:null}));
+    if(generation!==privateRead||scope!==privateScope)return;
+    privateDetails=new Map((rows||[]).map(row=>[row.member_id,row]));privateReady=true;
+    if(!editingAdmin())renderAdmin();renderSun();permissions();
+  }catch(error){
+    if(generation!==privateRead||scope!==privateScope)return;
+    privateDetails.clear();privateReady=false;
+    el('admintable').querySelectorAll('input[data-k="v"],input[data-k="tg"]').forEach(input=>input.value='');renderSun();permissions();
+    message('adminmsg','비공개 항목을 불러오지 못했습니다. '+explain(error),true);
+  }
+}
+function renderInterviewControls(){
+  const visible=isAdmin();el('interview-panel').hidden=!visible;if(!visible)return;
+  const select=el('interview-member'),value=select.value;
+  const options=memberOptions(value);if(select.innerHTML!==options)select.innerHTML=options;
+  const enabled=canManage()&&!interviewBusy,hasDoc=!!interviewDoc;
+  select.disabled=!enabled;el('interview-file').disabled=!enabled||hasDoc;
+  el('interview-pick').disabled=!enabled||hasDoc;
+  el('interview-upload').disabled=!enabled||!select.value||!el('interview-file').files.length||hasDoc;
+  el('interview-new').disabled=!enabled;el('interview-history').disabled=!enabled;el('interview-open').disabled=!enabled||!el('interview-history').value;
+  el('interview-analyze').disabled=!enabled||!hasDoc||interviewConfigured===false||interviewDoc?.status==='applied';
+  el('interview-download').disabled=!enabled||!hasDoc;
+  const editable=enabled&&hasDoc&&interviewDoc.status!=='applied';
+  el('interview-review').querySelectorAll('input,textarea').forEach(control=>control.disabled=!editable);
+  el('interview-real').disabled=!editable;el('interview-confirm').disabled=!editable;
+  const count=el('interview-review').querySelectorAll('.interview-check:checked').length;
+  el('interview-save').disabled=!editable;el('interview-apply').disabled=!editable||!count||!el('interview-confirm').checked;
+  el('interview-apply').textContent=count?'선택한 '+count+'개 항목 반영':'선택한 내용 반영';
+}
+function interviewError(error){
+  if(error?.code==='40001'||/INTERVIEW_CONFLICT|VERSION_CONFLICT/i.test(error?.message||''))return '다른 곳에서 내용이 바뀌었습니다. 현재 검토안은 유지됩니다. 문서를 다시 불러와 최신 내용과 비교한 뒤 반영하세요.';
+  if(/PGRST202|PGRST205/.test(error?.code||''))return '인터뷰 보관 기능이 아직 연결되지 않았습니다. 관리자에게 서버 설정을 확인해 달라고 요청하세요.';
+  return explain(error);
+}
+async function interviewTask(action){
+  if(!canManage()||interviewBusy)return;
+  const scope=privateScope,generation=interviewGeneration;interviewBusy=true;renderInterviewControls();
+  const current=()=>scope===privateScope&&generation===interviewGeneration&&isAdmin();
+  try{await action(current);}
+  catch(error){if(current())message('interview-message',interviewError(error),true);}
+  finally{if(current()){interviewBusy=false;renderInterviewControls();}}
+}
+async function listInterviews(){
+  const memberId=el('interview-member').value,scope=privateScope,read=++interviewListRead;
+  el('interview-history').innerHTML='<option value="">'+(memberId?'문서 목록을 불러오는 중':'멤버를 먼저 선택하세요')+'</option>';renderInterviewControls();
+  if(!memberId||!isAdmin())return;
+  try{
+    const rows=await request(db.rpc('list_member_interviews',{target_member_id:memberId}));
+    if(scope!==privateScope||read!==interviewListRead||memberId!==el('interview-member').value)return;
+    el('interview-history').innerHTML='<option value="">'+(rows.length?'보관 문서를 선택하세요':'아직 보관한 문서가 없습니다')+'</option>'+rows.map(row=>`<option value="${esc(row.id)}">${esc(row.original_name)} · ${row.status==='applied'?'반영 완료':'검토 중'}</option>`).join('');
+    if(interviewDoc)el('interview-history').value=interviewDoc.id;
+  }catch(error){if(scope===privateScope&&read===interviewListRead)message('interview-message',interviewError(error),true);}
+  renderInterviewControls();
+}
+async function checkInterviewAI(){
+  if(!isAdmin()||interviewConfigured!==null)return;
+  const scope=privateScope;interviewConfigured='loading';
+  try{
+    const {data,error}=await db.functions.invoke('analyze-interview',{method:'GET'});
+    if(scope!==privateScope||!isAdmin())return;
+    if(error)throw error;interviewConfigured=!!data?.configured;
+    el('interview-ai-status').textContent=interviewConfigured?'':'AI 연결 설정이 필요합니다. 문서는 먼저 보관할 수 있으며, 설정을 마친 뒤 페이지를 새로고침하면 분석할 수 있습니다.';
+  }catch{if(scope===privateScope){interviewConfigured=null;el('interview-ai-status').textContent='AI 연결 상태를 확인하지 못했습니다. 분석 버튼으로 다시 시도할 수 있습니다.';}}
+  renderInterviewControls();
+}
+function currentInterviewValue(key,member){
+  const definition=INTERVIEW_FIELDS.find(row=>row[0]===key);if(!definition)return '';
+  const value=definition[4]?privateFor(member)?.[key]:member?.[definition[2]];
+  return Array.isArray(value)?value.join('\n'):value||'';
+}
+function showInterview(doc){
+  interviewDoc=doc;interviewDirty=false;interviewBaseline=M.find(member=>member.id===doc.member_id)?.updatedAt;
+  el('interview-member').value=doc.member_id;el('interview-work').hidden=false;el('interview-raw').value=doc.raw_text||'';
+  el('interview-document-name').textContent=doc.original_name;el('interview-document-state').textContent=doc.status==='applied'?'선샤인 반영 완료':'관리자 보관 · 아직 공개되지 않음';
+  el('interview-confirm').checked=false;el('interview-real').checked=doc.public_patch?.is_real===true;
+  const extracted=doc.extracted||{},suggestions=Array.isArray(extracted.suggestions)?extracted.suggestions:[],member=M.find(row=>row.id===doc.member_id);
+  el('interview-summary').textContent=extracted.summary||'';
+  const warnings=[...(Array.isArray(extracted.warnings)?extracted.warnings:[])];
+  if(extracted.detected_name&&member&&extracted.detected_name.replace(/\s/g,'')!==member.n.replace(/\s/g,''))warnings.unshift('문서의 성함('+extracted.detected_name+')과 선택한 멤버('+member.n+')가 다릅니다. 대상이 맞는지 확인하세요.');
+  el('interview-warnings').innerHTML=warnings.map(value=>'<li>'+esc(value)+'</li>').join('');
+  el('interview-review-wrap').hidden=!suggestions.length;
+  el('interview-review').innerHTML=INTERVIEW_FIELDS.map(([key,label,local,array,secret])=>{
+    const suggestion=suggestions.find(item=>item.key===key);if(!suggestion)return '';
+    const patch=secret?doc.private_patch||{}:doc.public_patch||{},checked=Object.hasOwn(patch,key);
+    const proposed=checked?patch[key]:suggestion.value;
+    const value=Array.isArray(proposed)?proposed.join('\n'):String(proposed??'');
+    return `<div class="interview-review-row${checked?' selected':''}" data-field="${key}"><div class="interview-field-title"><label><input type="checkbox" class="interview-check"${checked?' checked':''}>${esc(label)}</label><span>${secret?'비공개 · 관리자와 본인':'공개 · 선샤인에 표시'} · ${suggestion.basis==='stated'?'문서에 기재':'AI 제안'}</span></div><div class="interview-compare"><div><small>현재 내용</small><p class="interview-current">${esc(currentInterviewValue(key,member)||'등록된 내용 없음')}</p></div><div><small>검토할 내용${array?' · 한 줄에 하나':''}</small><textarea class="interview-value" aria-label="${esc(label)} 검토할 내용">${esc(value)}</textarea></div></div><p class="interview-reason">${esc(suggestion.reason||'근거를 원문과 대조해 주세요.')}</p>${suggestion.evidence?'<p class="interview-evidence">문서 근거: '+esc(suggestion.evidence)+'</p>':''}</div>`;
+  }).join('');
+  renderInterviewControls();
+}
+function interviewPatches(){
+  const public_patch={},private_patch={};
+  el('interview-review').querySelectorAll('.interview-review-row').forEach(row=>{
+    if(!row.querySelector('.interview-check').checked)return;
+    const key=row.dataset.field,definition=INTERVIEW_FIELDS.find(field=>field[0]===key),text=row.querySelector('.interview-value').value.trim();
+    const value=definition[3]?[...new Set(text.split(/\r?\n/).map(v=>v.trim()).filter(Boolean))]:text;
+    (definition[4]?private_patch:public_patch)[key]=value;
+  });
+  if(el('interview-real').checked&&(Object.hasOwn(public_patch,'customers')||Object.hasOwn(public_patch,'synergies')))public_patch.is_real=true;
+  return {public_patch,private_patch};
+}
+el('interview-member').onchange=()=>{
+  const target=el('interview-member').value;
+  if(interviewDirty&&!confirm('보관하지 않은 검토 내용이 있습니다. 다른 멤버로 이동할까요?')){el('interview-member').value=interviewDoc?.member_id||'';return;}
+  clearInterview();el('interview-member').value=target;listInterviews();checkInterviewAI();renderInterviewControls();
+};
+el('interview-pick').onclick=()=>el('interview-file').click();
+el('interview-file').onchange=()=>{el('interview-filename').textContent=el('interview-file').files[0]?.name||'선택한 파일 없음';message('interview-message','');renderInterviewControls();};
+el('interview-history').onchange=renderInterviewControls;
+el('interview-new').onclick=()=>{if(interviewDirty&&!confirm('보관하지 않은 검토 내용을 닫고 새 문서를 준비할까요?'))return;clearInterview();renderInterviewControls();};
+el('interview-upload').onclick=()=>interviewTask(async current=>{
+  const file=el('interview-file').files[0],memberId=el('interview-member').value;if(!file||!memberId||interviewDoc)return;
+  if(file.size>10*1024*1024)throw new Error('파일이 10MB를 넘습니다. PDF를 압축하거나 문서를 나누어 올려 주세요.');
+  message('interview-message','문서를 읽고 있습니다. 잠시 기다려 주세요.');
+  interviewController=new AbortController();
+  const extracted=await extractInterviewFile(file,{signal:interviewController.signal,maxBytes:10*1024*1024,maxPages:60,maxChars:120000,allowScannedPdf:true});if(!current())return;
+  const ext=file.name.split('.').pop().toLowerCase(),mime={pdf:'application/pdf',docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',txt:'text/plain'}[ext];
+  const path=memberId+'/'+crypto.randomUUID()+'.'+ext;
+  message('interview-message','관리자 전용 보관함에 저장하고 있습니다.');
+  const {error}=await db.storage.from('member-interviews').upload(path,file,{contentType:mime,upsert:false});if(error)throw error;if(!current())return;
+  const created=await request(db.rpc('create_member_interview',{target_member_id:memberId,storage_path:path,original_name:file.name}));if(!current())return;
+  showInterview(created);
+  const saved=await request(db.rpc('save_member_interview_draft',{target_interview_id:created.id,expected_revision:created.revision,draft_patch:{raw_text:extracted.text||''}}));if(!current())return;
+  showInterview(saved);await listInterviews();checkInterviewAI();
+  message('interview-message','문서를 보관했습니다. AI 분석하기를 눌러 연결 제안을 받아보세요.'+(extracted.warnings?.length?' '+extracted.warnings.join(' '):''));
+});
+el('interview-open').onclick=()=>interviewTask(async current=>{
+  const id=el('interview-history').value;if(!id)return;
+  if(interviewDirty&&!confirm('보관하지 않은 검토 내용을 닫고 선택한 문서를 불러올까요?'))return;
+  const doc=await request(db.rpc('get_member_interview',{target_interview_id:id}));if(!current())return;
+  showInterview(doc);checkInterviewAI();message('interview-message','보관 문서를 불러왔습니다.');
+});
+el('interview-download').onclick=()=>interviewTask(async current=>{
+  if(!interviewDoc)return;
+  const {data,error}=await db.storage.from('member-interviews').download(interviewDoc.storage_path);if(error)throw error;if(!current())return;
+  const url=URL.createObjectURL(data),link=document.createElement('a');link.href=url;link.download=interviewDoc.original_name;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+});
+el('interview-analyze').onclick=()=>interviewTask(async current=>{
+  if(!interviewDoc||interviewDoc.status==='applied')return;
+  if(interviewDoc.extracted?.suggestions?.length&&!confirm('다시 분석하면 현재 검토안을 새 제안으로 교체합니다. 다시 분석할까요?'))return;
+  message('interview-message','AI가 문서를 읽고 연결 제안을 만들고 있습니다. 최대 2분 정도 걸릴 수 있습니다.');
+  const {data,error}=await db.functions.invoke('analyze-interview',{body:{interview_id:interviewDoc.id,expected_revision:interviewDoc.revision}});if(!current())return;
+  if(error){let payload;try{payload=await error.context?.json();}catch{}throw new Error(payload?.error?.message||(typeof payload?.error==='string'?payload.error:'')||'AI 분석에 연결하지 못했습니다. 잠시 후 문서를 다시 불러와 분석 결과가 저장되었는지 확인하세요.');}
+  if(data?.error)throw new Error(data.error.message||String(data.error));showInterview(data);interviewConfigured=true;
+  message('interview-message','AI 제안이 준비됐습니다. 현재 내용과 비교하고 반영할 항목을 체크해 주세요.');
+});
+el('interview-review').addEventListener('input',event=>{
+  interviewDirty=true;el('interview-confirm').checked=false;
+  const row=event.target.closest('.interview-review-row');row?.classList.toggle('selected',row.querySelector('.interview-check').checked);renderInterviewControls();
+});
+el('interview-real').onchange=()=>{interviewDirty=true;el('interview-confirm').checked=false;renderInterviewControls();};
+el('interview-confirm').onchange=renderInterviewControls;
+el('interview-save').onclick=()=>interviewTask(async current=>{
+  if(!interviewDoc||interviewDoc.status==='applied')return;
+  const patches=interviewPatches(),extracted={...interviewDoc.extracted,suggestions:(interviewDoc.extracted?.suggestions||[]).map(suggestion=>{
+    const row=el('interview-review').querySelector('[data-field="'+suggestion.key+'"]');
+    return row?{...suggestion,value:row.querySelector('.interview-value').value.trim().split(/\r?\n/).filter(Boolean)}:suggestion;
+  })},saved=await request(db.rpc('save_member_interview_draft',{target_interview_id:interviewDoc.id,expected_revision:interviewDoc.revision,draft_patch:{...patches,extracted,status:'reviewed'}}));
+  if(!current())return;interviewDoc=saved;interviewDirty=false;message('interview-message','선택한 검토 내용을 보관했습니다. 아직 선샤인에는 반영되지 않았습니다.');
+});
+el('interview-apply').onclick=()=>interviewTask(async current=>{
+  if(!interviewDoc||interviewDoc.status==='applied'||!el('interview-confirm').checked)return;
+  const patches=interviewPatches();if(!Object.keys(patches.public_patch).length&&!Object.keys(patches.private_patch).length)return;
+  if(!interviewBaseline)throw new Error('멤버의 최신 정보를 확인하지 못했습니다. 다시 연결한 뒤 문서를 불러오세요.');
+  await request(db.rpc('apply_member_interview',{target_interview_id:interviewDoc.id,expected_revision:interviewDoc.revision,expected_member_updated_at:interviewBaseline,...patches}));if(!current())return;
+  interviewDirty=false;interviewDoc.status='applied';el('interview-document-state').textContent='선샤인 반영 완료';
+  await loadMembers();await loadPrivateDetails();if(!current())return;
+  await listInterviews();message('interview-message','선택한 내용을 반영했습니다. 나의 선샤인과 파워팀에서 확인할 수 있습니다.');
+});
+window.addEventListener('beforeunload',event=>{if(interviewDirty||interviewBusy){event.preventDefault();event.returnValue='';}});
 
 function renderAll(){ reindex(); renderList(); renderSun(); renderTeams(); renderChapter(); renderAdmin(); }
 sel=Math.max(0,M.findIndex(m=>m.n==='박미성'));renderAll();
