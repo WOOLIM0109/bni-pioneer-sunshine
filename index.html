@@ -56,7 +56,7 @@ header>.wrap{padding-block:20px 22px}
 .header-body{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-top:22px}
 .header-copy{min-width:0}
 h1{font-size:clamp(30px,4.4vw,44px); font-weight:900; margin:0}
-.sub{color:rgba(255,255,255,.9); margin-block:10px 0; max-width:70ch}
+.sub{color:#FFF; font-size:22px;line-height:1.7;margin-block:14px 0;max-width:70ch}
 .sub b{color:#FFF; font-weight:600}
 .sub,.note,.dialog-intro,.login-help{word-break:keep-all}
 .badge{display:inline-block; font-size:14px; padding:4px 10px; border-radius:6px; background:var(--surface-2); color:var(--ink-2); border:1px solid var(--line); font-weight:500; vertical-align:2px}
@@ -147,8 +147,21 @@ nav{display:flex;gap:0;flex-wrap:wrap;margin-block:22px 28px;position:sticky;top
 .btn.primary{background:var(--red);border-color:var(--red);color:var(--surface)}
 .btn.ghost{background:none; color:var(--ink-2); border-color:var(--line-2)}
 .btn:focus-visible{outline:2px solid var(--red); outline-offset:2px}
-.want{margin-top:18px; border:0.1pt solid var(--red); background:var(--surface-2); padding:14px 16px; border-radius:8px; font-size:16px; color:var(--ink-2)}
-.want b{color:var(--ink)}
+.want{margin-top:22px;border:0.1pt solid var(--red);background:var(--surface-2);padding:24px 26px;border-radius:8px;font-size:18px;line-height:1.8;color:var(--ink);word-break:keep-all;overflow-wrap:anywhere}
+.want .want-heading{display:flex;align-items:baseline;gap:8px 16px;flex-wrap:wrap}
+.want .want-title{font-size:21px;line-height:1.5;font-weight:700;margin:0}
+.want .want-team{font-size:18px;color:var(--ink-2)}
+.want .want-summary{margin:14px 0 0;line-height:1.8}
+.want b{color:var(--ink);font-weight:600}
+.want .want-details{margin:24px 0 0}
+.want .want-detail{display:grid;grid-template-columns:160px minmax(0,1fr);gap:8px 22px}
+.want .want-detail+.want-detail{margin-top:24px}
+.want dt{font-weight:600;color:var(--ink)}
+.want dd{margin:0;min-width:0}
+.want .want-triggers{margin:0;padding-left:22px}
+.want .want-triggers li+li{margin-top:10px}
+.want .want-estimate{font-size:16px;line-height:1.75;color:var(--ink-2);margin:24px 0 0}
+@media(max-width:600px){.want{padding:20px 18px}.want .want-detail{grid-template-columns:minmax(0,1fr);gap:5px}.want .want-detail+.want-detail{margin-top:22px}.want .want-heading{gap:3px 14px}}
 
 .eu{display:grid; grid-template-columns:26px 1fr auto; gap:10px; align-items:center; padding:9px 0; border-bottom:1px solid var(--line)}
 .eu:last-child{border-bottom:0}
@@ -171,8 +184,8 @@ table{width:100%; border-collapse:collapse; font-size:16px}
 th,td{text-align:left; padding:12px 10px; border-bottom:1px solid var(--line)}
 th{font-size:14px; color:var(--ink-2); font-weight:600;background:var(--surface-2)}
 .scrollx{overflow-x:auto}
-.note{font-size:15px; color:var(--ink-2); margin-top:14px; line-height:1.65}
-.legend{display:flex; gap:14px; flex-wrap:wrap; font-size:14px; color:var(--ink-2); margin-top:16px}
+.note{font-size:16px; color:var(--ink-2); margin-top:14px; line-height:1.75}
+.legend{display:flex; gap:12px 20px; flex-wrap:wrap; font-size:16px; color:var(--ink); margin-top:20px;line-height:1.7}
 .legend i{display:inline-block; width:11px; height:11px; border-radius:50%; margin-right:5px; vertical-align:-1px}
 input.cell{width:100%;min-width:0;min-height:48px; border:1px solid transparent; background:none; color:var(--ink); font:inherit; font-size:16px; padding:10px 8px; border-radius:8px}
 input.cell:hover{border-color:var(--line)}
@@ -242,7 +255,7 @@ select{font:inherit;min-height:48px;border:1px solid var(--line-2);border-radius
   .eyebrow{gap:10px;font-size:13px}.brand-wordmark{font-size:28px;padding-right:11px}
   .header-top>.auth-actions{gap:8px}.header-top .btn{padding-inline:12px;font-size:15px}
   .header-body{display:block;margin-top:22px}.header-body>.badge{margin-top:16px;margin-bottom:0}
-  .sub{font-size:16px}header .connection{margin-top:14px}
+  .sub{font-size:19px}header .connection{margin-top:14px}
   .g3{grid-template-columns:minmax(0,1fr)}
   nav{padding:0 8px;margin-block:18px 22px}.step{flex:1 1 45%;padding:10px 5px 8px;font-size:16px;gap:7px;min-height:54px}
   .panel-pad{padding:16px}.lrow{align-items:flex-start}.lrow>span:last-child{flex-shrink:0}
@@ -364,7 +377,7 @@ select{font:inherit;min-height:48px;border:1px solid var(--line-2);border-radius
   </section>
   <section class="panel panel-pad access-panel" id="accounts-panel" hidden aria-labelledby="accounts-title">
     <h3 id="accounts-title">가입자 권한 관리</h3>
-    <p class="note">요청한 이름·회사와 이메일을 확인한 뒤 승인하세요. 멤버는 연결된 본인 정보만, 관리자는 전체 명단과 가입자 권한을 관리합니다.</p>
+    <p class="note">요청한 이름·회사와 이메일을 확인한 뒤 승인하세요. ‘본인 정보 수정’ 권한을 줄 때만 해당 멤버를 연결합니다. 관리자는 연결 없이 전체 명단과 가입자 권한을 관리하고, 읽기 권한은 정보 조회만 가능합니다.</p>
     <div class="scrollx"><table id="accountstable"></table></div><div class="msg" id="accounts-message" role="status"></div>
   </section>
   <div class="msg" id="adminmsg" role="status" aria-live="polite"></div>
@@ -533,10 +546,12 @@ function renderSun(){
   document.fonts?.ready.then(checkFit);
   const gaps=list.filter(f=>!FIELD2M[f]||FIELD2M[f]===m);
   document.getElementById('wantbox').innerHTML=
-    `<div class="want"><b>${esc(m.n)} 대표 · ${esc(m.g)} 파워팀</b> — 상생직군 ${list.length}개 중 ${list.length-gaps.length}개는 챕터 안에서 바로 연결 가능, ${gaps.length}개는 초대로 채워야 합니다.`
-    + (m.w?`<br>원하는 비지터 : ${esc(m.w)}`:'') + (m.v?`<br>좋은 리퍼럴 : ${esc(m.v)}`:'')
-    + (m.tg?`<br><b>이 말이 들리면 연결</b> : ${m.tg.map(t=>'"'+esc(t)+'"').join(' · ')}`:'')
-    + (m.real?'':'<br><span style="color:var(--ink-2)">※ 핵심고객·상생직군은 추정치. 신상명세표·C단계 질문지가 들어오면 교체됩니다.</span>')
+    `<div class="want"><div class="want-heading"><h3 class="want-title">${esc(m.n)} 대표</h3><span class="want-team">${esc(m.g)} 파워팀</span></div><p class="want-summary">상생직군 <b>${list.length}개</b> 중 <b>${list.length-gaps.length}개</b>는 챕터 안에서 바로 연결할 수 있습니다.<br>남은 <b>${gaps.length}개</b> 직군은 초대로 채울 수 있습니다.</p>`
+    + ((m.w||m.v||m.tg?.length)?'<dl class="want-details">'
+      +(m.w?`<div class="want-detail"><dt>원하는 비지터</dt><dd>${esc(m.w)}</dd></div>`:'')
+      +(m.v?`<div class="want-detail"><dt>좋은 리퍼럴</dt><dd>${esc(m.v)}</dd></div>`:'')
+      +(m.tg?.length?`<div class="want-detail"><dt>이 말이 들리면 연결</dt><dd><ul class="want-triggers">${m.tg.map(t=>'<li>'+esc(t)+'</li>').join('')}</ul></dd></div>`:'')+'</dl>':'')
+    + (m.real?'':'<p class="want-estimate">※ 핵심고객·상생직군은 추정치입니다. 신상명세표·C단계 질문지가 들어오면 교체됩니다.</p>')
     + `</div>`;
 }
 /* ---------- 집계 ---------- */
@@ -663,6 +678,8 @@ function setRoster(next){
 }
 function connection(detail='',error=false){
   el('connection-badge').textContent=online?(realtimeOK?'공유 명단 · 실시간 연결':'공유 명단 · 연결됨'):'오프라인 · 읽기 전용';
+  el('connection-badge').hidden=online;
+  el('connection-badge').closest('.connection').hidden=online&&!detail&&!error;
   el('connection-detail').textContent=detail;
   el('connection-detail').className='status-detail'+(error?' error':'');
   el('retryb').hidden=online&&realtimeOK;
@@ -692,7 +709,11 @@ function permissions(){
   el('request-access').disabled=!writable||account?.role!=='viewer'||!el('request-member').value;
   el('request-member').disabled=!writable||account?.role!=='viewer';
   el('accountstable').querySelectorAll('button,select').forEach(control=>control.disabled=!admin);
-  el('accountstable').querySelectorAll('tbody tr').forEach(row=>{row.querySelector('.account-member').disabled=!admin||row.querySelector('.account-role').value!=='member';});
+  el('accountstable').querySelectorAll('tbody tr').forEach(row=>{
+    const role=row.querySelector('.account-role').value,memberSelect=row.querySelector('.account-member');
+    memberSelect.hidden=role!=='member';memberSelect.disabled=!admin||role!=='member';
+    row.querySelector('.account-member-hint').textContent=role==='admin'?'전체 멤버 관리 · 연결 불필요':role==='viewer'?'읽기 전용 · 연결 불필요':'본인 확인 후 이 계정이 수정할 멤버를 선택하세요.';
+  });
   el('login-form').querySelectorAll('button').forEach(button=>button.disabled=authBusy);
 }
 async function loadAccess(background=false){
@@ -727,7 +748,7 @@ function renderAccess(){
   if(accessListError){el('accountstable').innerHTML='';message('accounts-message',accessListError,true);return;}
   el('accountstable').innerHTML='<thead><tr><th>가입자 · 요청</th><th>권한</th><th>연결할 멤버</th><th>적용</th></tr></thead><tbody>'+accounts.map(a=>{
     const pending=a.request_status==='pending', role=pending?'member':a.role, memberId=pending?a.requested_member_id:a.member_id;
-    return `<tr data-user-id="${esc(a.user_id)}"><td data-label="가입자">${esc(a.email)}<div class="account-detail">현재: ${a.role==='admin'?'관리자':a.role==='member'?'본인 정보 수정':'읽기'}${pending?'<br>승인 요청: '+esc(memberLabel(a.requested_member_id)):''}</div></td><td data-label="권한"><select class="account-role" aria-label="${esc(a.email)} 권한">${[['viewer','읽기'],['member','본인 정보 수정'],['admin','관리자']].map(([v,t])=>`<option value="${v}"${role===v?' selected':''}>${t}</option>`).join('')}</select></td><td data-label="연결할 멤버"><select class="account-member" aria-label="${esc(a.email)} 연결할 멤버">${memberOptions(memberId)}</select></td><td data-label="적용"><div class="account-actions"><button class="btn primary account-save">${pending?'승인 · 저장':'권한 저장'}</button>${pending?'<button class="btn ghost account-reject">요청 반려</button>':''}</div></td></tr>`;
+    return `<tr data-user-id="${esc(a.user_id)}"><td data-label="가입자">${esc(a.email)}<div class="account-detail">현재: ${a.role==='admin'?'관리자':a.role==='member'?'본인 정보 수정':'읽기'}${pending?'<br>승인 요청: '+esc(memberLabel(a.requested_member_id)):''}</div></td><td data-label="권한"><select class="account-role" aria-label="${esc(a.email)} 권한">${[['viewer','읽기'],['member','본인 정보 수정'],['admin','관리자']].map(([v,t])=>`<option value="${v}"${role===v?' selected':''}>${t}</option>`).join('')}</select></td><td data-label="연결할 멤버"><select class="account-member" aria-label="${esc(a.email)} 연결할 멤버" aria-describedby="account-member-hint-${esc(a.user_id)}">${memberOptions(memberId)}</select><div class="account-detail account-member-hint" id="account-member-hint-${esc(a.user_id)}"></div></td><td data-label="적용"><div class="account-actions"><button class="btn primary account-save">${pending?'승인 · 저장':'권한 저장'}</button>${pending?'<button class="btn ghost account-reject">요청 반려</button>':''}</div></td></tr>`;
   }).join('')+'</tbody>';
   el('accountstable').querySelectorAll('.account-save,.account-reject').forEach(button=>button.onclick=()=>saveAccount(button));
   el('accountstable').querySelectorAll('.account-role').forEach(select=>select.onchange=permissions);

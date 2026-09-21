@@ -210,6 +210,8 @@ try {
     assert.equal(await page.evaluate(() => M.length), 31);
     seed = mapSeed(await page.evaluate(() => M));
     assert.match(await page.locator('body').innerText(), /오프라인.*읽기 전용/);
+    assert(await page.locator('#connection-badge').isVisible(), 'Offline status must remain visible when project settings are missing.');
+    assert(await page.locator('#retryb').isVisible());
     await page.click('#t4');
     assert(await page.locator('#admintable input').evaluateAll(inputs => inputs.every(input => input.readOnly)));
     for (const selector of ['#newrow', '#bulkb', '#importb']) assert(await page.locator(selector).isDisabled(), selector);
@@ -222,6 +224,8 @@ try {
     const records = [...seed, { ...seed[0], id: '00000000-0000-4000-8000-999999999999', name: '공유된 멤버', sort_order: 31 }];
     const { page, context } = await pageFor({ online: true, records });
     assert.equal(await page.evaluate(() => M.length), 32);
+    await page.locator('#connection-badge').waitFor({ state: 'hidden' });
+    assert(await page.locator('#connection-detail').isHidden(), 'Routine successful connection status should not occupy the header.');
     await page.click('#t4');
     assert.match(await page.locator('#v4').innerText(), /수정하려면 로그인하세요/);
     assert(await page.locator('#admintable input').evaluateAll(inputs => inputs.every(input => input.readOnly)));
@@ -232,6 +236,9 @@ try {
     const { page, context } = await pageFor({ online: true, auth: true, failReads: true });
     assert.equal(await page.evaluate(() => M.length), 31);
     assert.match(await page.locator('#connection-badge').innerText(), /오프라인.*읽기 전용/);
+    assert(await page.locator('#connection-badge').isVisible(), 'Connection failures must retain a visible offline warning.');
+    assert(await page.locator('#connection-detail').isVisible());
+    assert(await page.locator('#retryb').isVisible());
     await page.click('#t4');
     for (const selector of ['#newrow', '#bulkb', '#importb']) assert(await page.locator(selector).isDisabled(), selector);
     await context.close();
@@ -451,7 +458,27 @@ try {
     await page.click('#t4');
     const target = page.locator('#accountstable tr[data-user-id="pending-user"]');
     await target.waitFor();
+    for (const [userId, hint] of [['test-user', '전체 멤버 관리 · 연결 불필요'], ['second-user', '읽기 전용 · 연결 불필요']]) {
+      const row = page.locator(`#accountstable tr[data-user-id="${userId}"]`);
+      assert(await row.locator('.account-member').isHidden(), `${userId}: non-member roles must not show a member selector.`);
+      assert(await row.locator('.account-member').isDisabled());
+      assert.equal(await row.locator('.account-member-hint').innerText(), hint);
+    }
+    await target.locator('.account-role').focus();
     await target.locator('.account-role').selectOption('member');
+    assert(await target.locator('.account-member').isVisible());
+    assert(await target.locator('.account-member').isEnabled());
+    assert.equal(await target.locator('.account-member-hint').innerText(), '본인 확인 후 이 계정이 수정할 멤버를 선택하세요.');
+    await target.locator('.account-member').selectOption(seed[2].id);
+    await target.locator('.account-role').selectOption('admin');
+    assert(await target.locator('.account-member').isHidden());
+    assert(await target.locator('.account-member').isDisabled());
+    assert.equal(await target.locator('.account-member-hint').innerText(), '전체 멤버 관리 · 연결 불필요');
+    await target.locator('.account-role').selectOption('member');
+    assert(await target.locator('.account-member').isVisible());
+    assert(await target.locator('.account-member').isEnabled());
+    assert.equal(await target.locator('.account-member').inputValue(), seed[2].id, 'Changing a draft role away from member and back must preserve the selected member.');
+    assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.action === 'rpc' || (item.table && item.action !== 'select')).length), 0, 'Role/member selections alone must not save account permissions.');
     await target.locator('.account-member').selectOption(seed[1].id);
     await page.evaluate(() => { window.__db.holdWrites = true; });
     await target.locator('.account-save').click();
