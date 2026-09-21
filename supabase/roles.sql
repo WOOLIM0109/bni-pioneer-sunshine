@@ -1,27 +1,8 @@
--- Complete fresh-install or rerunnable schema. Includes roles.sql permissions.
--- Existing installations may run roles.sql alone. No automatic administrator.
+-- Existing installations: run this complete file in the Supabase SQL Editor.
+-- New installations: schema.sql includes the same permission setup.
+-- No first administrator is chosen automatically. Bootstrap a confirmed account
+-- separately, after the owner identifies its email address.
 begin;
-
-create table if not exists public.members (
-  id            uuid primary key default gen_random_uuid(),
-  name          text not null,
-  company       text not null default '',
-  field         text not null default '',
-  team          text not null default '미정',
-  customers     text[] not null default '{}',
-  synergies     text[] not null default '{}',
-  wants         text not null default '',
-  good_referral text not null default '',
-  triggers      text[] not null default '{}',
-  is_new        boolean not null default false,
-  is_real       boolean not null default false,
-  sort_order    int not null default 0,
-  updated_at    timestamptz not null default now(),
-  updated_by    text not null default ''
-);
-
--- 성함에는 UNIQUE를 걸지 않습니다. 동명이인은 별도 UUID로 관리합니다.
-create index if not exists members_sort_idx on public.members (sort_order, name);
 
 create schema if not exists private;
 revoke all on schema private from public, anon, authenticated;
@@ -295,24 +276,5 @@ create trigger members_touch before insert or update on public.members
 drop function if exists public.touch_members();
 
 -- Account emails/permissions are deliberately not in the realtime publication.
-
--- Publish only members; account emails and permissions stay private.
-do $$
-begin
-  if not exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
-    create publication supabase_realtime;
-  end if;
-  if not exists (
-    select 1 from pg_publication_tables
-    where pubname = 'supabase_realtime'
-      and schemaname = 'public'
-      and tablename = 'members'
-  ) then
-    alter publication supabase_realtime add table public.members;
-  end if;
-end;
-$$;
-
-
 notify pgrst, 'reload schema';
 commit;
