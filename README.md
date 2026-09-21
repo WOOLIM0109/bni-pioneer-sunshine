@@ -39,7 +39,7 @@ Supabase `public.members`가 명단의 단일 원본입니다. 데이터는 `sor
 
 1. 기존 역할 설정 후 [`supabase/interviews.sql`](supabase/interviews.sql)을 적용합니다. 기존 공개 리퍼럴·트리거는 비공개 테이블로 옮기고 공개 복사본을 비웁니다. 재실행은 가능하지만 공개·비공개 값이 충돌하면 중단합니다.
 2. [`supabase/functions/analyze-interview/index.ts`](supabase/functions/analyze-interview/index.ts)를 `analyze-interview` Edge Function으로 배포하고 JWT 검증을 켭니다. 함수는 Auth의 실제 사용자와 DB의 관리자 역할을 다시 확인합니다. 데이터베이스 관리자 키는 사용하지 않습니다.
-3. Supabase **Edge Functions → Secrets**에 `OPENAI_API_KEY`를 등록합니다. API 키는 채팅, HTML, 저장소에 넣지 않습니다. 기본 `SUPABASE_URL`·`SUPABASE_ANON_KEY`는 Edge Function 서버 환경에서 읽습니다. 개발용 Origin이 필요하면 `ALLOWED_ORIGINS`에 허용할 출처를 쉼표로 명시합니다. 기본값은 `https://woolim0109.github.io`입니다.
+3. Supabase **Edge Functions → Secrets**에 `OPENAI_API_KEY`를 등록합니다. API 키는 채팅, HTML, 저장소에 넣지 않습니다. 기본 `SUPABASE_URL`·`SUPABASE_ANON_KEY`는 Edge Function 서버 환경에서 읽습니다. 개발용 Origin이 필요하면 `ALLOWED_ORIGINS`에 허용할 출처를 쉼표로 명시합니다. 기본값은 `https://woolim0109.github.io,https://sunshine.bni-pioneer.com`이며, `ALLOWED_ORIGINS`를 지정하면 기본 목록을 대체하므로 운영에 필요한 출처를 모두 포함하세요.
 4. OpenAI API 프로젝트의 결제·사용 한도를 확인하고 페이지를 새로고침합니다. ChatGPT 구독과 API 사용료는 별도입니다. 현재 분석 모델은 `gpt-5.4-mini-2026-03-17`이며 최대 출력 6,000토큰, 문서별 중복 분석 방지와 100초 요청 제한을 적용합니다. API 응답 보관 옵션은 `store:false`입니다. 공급자의 별도 데이터 처리 정책은 [OpenAI API 데이터 안내](https://developers.openai.com/api/docs/guides/your-data)를 확인하세요.
 
 프런트엔드는 계속 `index.html` 한 파일입니다. 문서 판독기는 필요할 때만 jsDelivr의 고정 버전 PDF.js `6.3.289`와 Mammoth `1.12.3`을 불러옵니다. 파일 원문을 브라우저 저장소에 보관하지 않으며, 계정 전환·권한 상실 때 비공개 메모리와 화면을 지웁니다.
@@ -93,7 +93,11 @@ try {
 
 저장소 `WOOLIM0109/bni-pioneer-sunshine`의 `main`에 변경을 반영하고 **Settings → Pages → Deploy from a branch → main / (root)**를 확인합니다.
 
-서비스 주소: <https://woolim0109.github.io/bni-pioneer-sunshine/>
+현재 운영 주소: <https://woolim0109.github.io/bni-pioneer-sunshine/>
+
+연결 예정 주소는 `https://sunshine.bni-pioneer.com/`입니다. 현재 DNS 담당자의 접근 가능 여부를 기다리고 있어 기존 주소로 운영하며, 저장소의 `CNAME` 파일과 GitHub Pages Custom domain은 아직 설정하지 않았습니다. 준비가 완료되면 **GitHub Pages Custom domain 등록 → 카페24 DNS CNAME 변경 → DNS·HTTPS 확인 → Supabase Auth Site URL 전환**을 연속으로 진행합니다. Pages에는 `sunshine.bni-pioneer.com`을 먼저 등록하고, DNS는 **CNAME / 호스트 `sunshine` / 대상 `woolim0109.github.io`**로 설정합니다.
+
+현재 확인된 `sunshine`의 CNAME 응답은 `bni-pioneer.com`이며 와일드카드에서 나온 응답일 수도 있습니다. DNS 관리 화면에서 기존 `sunshine` 기록이 있으면 수정하고, 없으면 명시적으로 추가합니다. 다른 루트 도메인(apex)·메일 관련 기록은 그대로 보존합니다. DNS·HTTPS가 정상임을 확인한 뒤 Supabase의 Site URL·Redirect URLs, AI 분석 CORS, 기존 주소에서의 이동과 로그인·비밀번호 재설정 메일의 반환 주소를 확인합니다.
 
 1. 로그아웃 브라우저에서 31명이 보이는지, 멤버 관리 입력이 읽기 전용이며 내보내기가 가능한지 확인합니다.
 2. 새 계정은 가입 확인 메일로 이메일을 인증한 뒤 이메일·비밀번호로 로그인합니다. 비밀번호 재설정 메일의 링크로 새 비밀번호 저장이 가능한지도 확인합니다.

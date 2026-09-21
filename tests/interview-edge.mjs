@@ -25,7 +25,7 @@ function setup(options={}){
     if(parsed.pathname==='/rest/v1/rpc/cancel_member_interview_analysis')return response({released:true});
     throw Error('Unexpected external call '+url);
   };
-  const env={SUPABASE_URL:'https://example.supabase.co',SUPABASE_ANON_KEY:'public-test-key',OPENAI_API_KEY:options.noKey?'':'private-test-key'};
+  const env={SUPABASE_URL:'https://example.supabase.co',SUPABASE_ANON_KEY:'public-test-key',OPENAI_API_KEY:options.noKey?'':'private-test-key',...(options.allowedOrigins===undefined?{}:{ALLOWED_ORIGINS:options.allowedOrigins})};
   const diagnostics=[];
   const handler=createHandler({fetch,env:key=>env[key],diagnostic:entry=>diagnostics.push(entry)});
   const call=(method='POST',data={interview_id:interviewId,expected_revision:1},origin='https://woolim0109.github.io')=>handler(new Request('https://example.supabase.co/functions/v1/analyze-interview',{method,headers:{Origin:origin,Authorization:'Bearer user-jwt','Content-Type':'application/json'},...(method==='POST'?{body:JSON.stringify(data)}:{})}));
@@ -36,6 +36,22 @@ async function test(name,fn){await fn();count++;console.log('PASS '+name);}
 await test('GET configuration still requires admin',async()=>{const s=setup({role:'member'});assert.equal((await s.call('GET')).status,403);assert.equal(s.log.some(x=>x.path==='/v1/responses'),false);});
 await test('GET missing key reports false without model call',async()=>{const s=setup({noKey:true});assert.deepEqual(await(await s.call('GET')).json(),{configured:false});assert.equal(s.log.length,2);});
 await test('Disallowed origin rejects before reading auth or original',async()=>{const s=setup();assert.equal((await s.call('GET',undefined,'https://untrusted.example')).status,403);assert.equal(s.log.length,0);});
+await test('Custom domain and existing Pages origin allow preflight without authentication or paid calls',async()=>{
+  for(const origin of ['https://sunshine.bni-pioneer.com','https://woolim0109.github.io']){const s=setup(),r=await s.call('OPTIONS',undefined,origin);assert.equal(r.status,204);assert.equal(r.headers.get('Access-Control-Allow-Origin'),origin);assert.equal(r.headers.get('Vary'),'Origin');assert.match(r.headers.get('Access-Control-Allow-Methods'),/POST/);assert.equal(s.log.length,0);}
+});
+await test('Custom-domain configuration GET authenticates an admin without invoking AI',async()=>{
+  const origin='https://sunshine.bni-pioneer.com',s=setup(),r=await s.call('GET',undefined,origin);assert.equal(r.status,200);assert.equal(r.headers.get('Access-Control-Allow-Origin'),origin);assert.deepEqual(await r.json(),{configured:true});assert.deepEqual(s.log.map(x=>x.path),['/auth/v1/user','/rest/v1/member_accounts']);
+  const denied=setup({role:'member'});assert.equal((await denied.call('GET',undefined,origin)).status,403);assert.equal(denied.log.some(x=>x.path==='/v1/responses'),false);
+});
+await test('Custom-domain lookalikes and insecure origins fail before any external call',async()=>{
+  for(const origin of ['https://sunshine.bni-pioneer.com.attacker.example','https://sunshine-bni-pioneer.com','https://attacker.sunshine.bni-pioneer.com','http://sunshine.bni-pioneer.com'])for(const method of ['OPTIONS','GET']){const s=setup(),r=await s.call(method,undefined,origin);assert.equal(r.status,403);assert.equal(r.headers.get('Access-Control-Allow-Origin'),null);assert.equal(s.log.length,0);}
+});
+await test('Explicit ALLOWED_ORIGINS replaces rather than extends the default origins',async()=>{
+  const options={allowedOrigins:' https://review.example.test , https://sunshine.bni-pioneer.com '};
+  for(const origin of ['https://review.example.test','https://sunshine.bni-pioneer.com']){const s=setup(options),r=await s.call('OPTIONS',undefined,origin);assert.equal(r.status,204);assert.equal(r.headers.get('Access-Control-Allow-Origin'),origin);assert.equal(s.log.length,0);}
+  const excluded=setup(options);assert.equal((await excluded.call('GET',undefined,'https://woolim0109.github.io')).status,403);assert.equal(excluded.log.length,0);
+  const customExcluded=setup({allowedOrigins:'https://review.example.test'});assert.equal((await customExcluded.call('GET',undefined,'https://sunshine.bni-pioneer.com')).status,403);assert.equal(customExcluded.log.length,0);
+});
 await test('Expired user token cannot acquire a lease',async()=>{const s=setup({unauthorized:true});assert.equal((await s.call()).status,401);assert.equal(s.log.length,1);});
 await test('Expected revision checked before paid call',async()=>{const s=setup();assert.equal((await s.call('POST',{interview_id:interviewId,expected_revision:2})).status,409);assert.equal(s.log.some(x=>x.path==='/v1/responses'),false);});
 await test('Concurrent analysis stops at database lease',async()=>{const s=setup({busy:true});assert.equal((await s.call()).status,409);assert.equal(s.log.some(x=>x.path==='/v1/responses'),false);});

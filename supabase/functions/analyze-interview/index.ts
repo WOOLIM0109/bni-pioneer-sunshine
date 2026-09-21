@@ -153,7 +153,7 @@ export function validateAnalysis(value:any,memberName:string,diagnostic:(entry:A
   return {summary,detected_name:detectedName,warnings:visibleWarnings,suggestions};
 }
 export function createHandler(runtime:Runtime){return async function handle(request:Request):Promise<Response>{
-  const origin=request.headers.get('origin')||'',allowed=(runtime.env('ALLOWED_ORIGINS')||'https://woolim0109.github.io').split(',').map(s=>s.trim()).filter(Boolean);
+  const origin=request.headers.get('origin')||'',allowed=(runtime.env('ALLOWED_ORIGINS')||'https://woolim0109.github.io,https://sunshine.bni-pioneer.com').split(',').map(s=>s.trim()).filter(Boolean);
   const headers:Record<string,string>={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Vary':'Origin','Access-Control-Allow-Methods':'GET, POST, OPTIONS','Access-Control-Allow-Headers':'authorization, apikey, content-type, x-client-info'};
   if(origin&&allowed.includes(origin))headers['Access-Control-Allow-Origin']=origin;
   const json=(body:any,status=200)=>new Response(JSON.stringify(body),{status,headers});
