@@ -302,10 +302,11 @@ begin
     raise exception using errcode='55000',message='질문지를 분석하고 있습니다. 분석 완료 후 초안을 수정하세요.';
   end if;
   for k,v in select key,value from jsonb_each(draft_patch) loop
-    if not k=any(array['raw_text','extracted','public_patch','private_patch','status']) then raise exception using errcode='22023',message='허용되지 않은 초안 항목입니다: '||k; end if;
+    if not k=any(array['raw_text','extracted','public_patch','private_patch','status','replace_review']) then raise exception using errcode='22023',message='허용되지 않은 초안 항목입니다: '||k; end if;
     if k='raw_text' and (jsonb_typeof(v)<>'string' or char_length(v#>>'{}')>120000) then raise exception using errcode='22023',message='원문 텍스트는 120,000자 이하로 입력하세요.'; end if;
     if k='extracted' and (jsonb_typeof(v)<>'object' or pg_column_size(v)>1048576) then raise exception using errcode='22023',message='추출 결과는 1MB 이하 JSON 객체여야 합니다.'; end if;
     if k='status' and (jsonb_typeof(v)<>'string' or v#>>'{}' not in ('draft','reviewed')) then raise exception using errcode='22023',message='초안 또는 검토 상태만 저장할 수 있습니다.'; end if;
+    if k='replace_review' and jsonb_typeof(v)<>'boolean' then raise exception using errcode='22023',message='검토 선택 저장 방식은 참 또는 거짓이어야 합니다.'; end if;
     if k='public_patch' then perform private.validate_member_patch(v,'public'); end if;
     if k='private_patch' then perform private.validate_member_patch(v,'private'); end if;
   end loop;
@@ -315,6 +316,11 @@ begin
   -- or treat incoming analysis patch values as the administrator's approval.
   if lease_id is not null and event_name='analyzed' then
     next_public:='{}'; next_private:='{}';
+  elsif draft_patch->'replace_review'='true'::jsonb then
+    -- Review forms submit complete selections, including explicit empty objects.
+    -- Omitted groups and source/extraction fields remain unchanged.
+    next_public:=case when draft_patch?'public_patch' then draft_patch->'public_patch' else row_value.public_patch end;
+    next_private:=case when draft_patch?'private_patch' then draft_patch->'private_patch' else row_value.private_patch end;
   else
     -- Ordinary partial review saves retain all absent draft fields.
     next_public:=row_value.public_patch||coalesce(draft_patch->'public_patch','{}');

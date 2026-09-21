@@ -141,6 +141,7 @@ insert into interview_test_state select 'lease',public.begin_member_interview_an
 select pg_temp.check_true((select value?'lease_id' and value?'expires_at' and value->'interview'->>'revision'='1' from interview_test_state where key='lease'),'admin acquires analysis lease');
 select pg_temp.check_denied($q$select public.begin_member_interview_analysis((value->>'id')::uuid,1) from interview_test_state where key='analysis'$q$,'parallel analysis rejected','55000');
 select pg_temp.check_denied($q$select public.save_member_interview_draft((value->>'id')::uuid,1,'{"raw_text":"racing edit"}') from interview_test_state where key='analysis'$q$,'editing cannot race active analysis','55000');
+select pg_temp.check_denied($q$select public.save_member_interview_draft((value->>'id')::uuid,1,'{"replace_review":true,"public_patch":{},"private_patch":{}}') from interview_test_state where key='analysis'$q$,'review replacement cannot race active analysis','55000');
 select pg_temp.check_denied($q$select public.finish_member_interview_analysis((value->>'id')::uuid,'55555555-5555-4555-8555-555555555501',1,'{"extracted":{"no":true}}') from interview_test_state where key='analysis'$q$,'wrong analysis lease cannot save','40001');
 select pg_temp.check_true((select public.cancel_member_interview_analysis((value->>'id')::uuid,'55555555-5555-4555-8555-555555555501')->>'released'='false' from interview_test_state where key='analysis'),'wrong lease cannot cancel another analysis');
 update interview_test_state s set value=public.finish_member_interview_analysis((s.value->>'id')::uuid,(l.value->>'lease_id')::uuid,1,'{"extracted":{"synthetic":true}}')
@@ -192,9 +193,59 @@ select pg_temp.check_true((select company='반영 회사' from public.members wh
   and public.get_member_details('44444444-4444-4444-8444-444444444401')->0->>'good_referral'='반영 비공개 리퍼럴',
   'reanalysis selection reset never applies incoming public or private values');
 
+-- A review form explicitly replaces its complete checked-field sets. Legacy
+-- partial saves above retain their merge contract. Keep this scenario isolated
+-- so subsequent role checks still use the unchanged analysis draft.
+savepoint review_selection_checks;
+select pg_temp.check_denied($q$select public.save_member_interview_draft((value->>'id')::uuid,5,'{"replace_review":"true","public_patch":{}}') from interview_test_state where key='analysis'$q$,'review replacement flag rejects string values','22023');
+select pg_temp.check_denied($q$select public.save_member_interview_draft((value->>'id')::uuid,5,'{"replace_review":null,"public_patch":{}}') from interview_test_state where key='analysis'$q$,'review replacement flag rejects null','22023');
+select pg_temp.check_denied($q$select public.save_member_interview_draft((value->>'id')::uuid,5,'{"replace_review":true,"public_patch":{"good_referral":"must remain private"}}') from interview_test_state where key='analysis'$q$,'review replacement still enforces public privacy allowlist','22023');
+update interview_test_state set value=public.save_member_interview_draft((value->>'id')::uuid,5,
+  '{"replace_review":true,"public_patch":{"customers":["selected customer type"],"synergies":["selected synergy"],"is_real":true},"private_patch":{"good_referral":"selected private referral","triggers":["selected private trigger"]},"status":"reviewed"}') where key='analysis';
+select pg_temp.check_denied($q$select public.save_member_interview_draft((value->>'id')::uuid,5,'{"replace_review":true,"public_patch":{},"private_patch":{}}') from interview_test_state where key='analysis'$q$,'stale review replacement cannot clear newer selections','40001');
+update interview_test_state set value=public.save_member_interview_draft((value->>'id')::uuid,6,
+  '{"replace_review":true,"public_patch":{"synergies":["selected synergy"]},"private_patch":{"triggers":["selected private trigger"]},"status":"reviewed"}') where key='analysis';
+select pg_temp.check_true((select public.get_member_interview((value->>'id')::uuid)->'public_patch'='{"synergies":["selected synergy"]}'::jsonb
+  and public.get_member_interview((value->>'id')::uuid)->'private_patch'='{"triggers":["selected private trigger"]}'::jsonb
+  from interview_test_state where key='analysis'),'reloading review retains deselection of public private and is_real fields');
+select pg_temp.check_true((select exists(select 1 from jsonb_array_elements(public.get_member_interview((value->>'id')::uuid)->'history') h
+  where h->>'revision'='6' and h->'snapshot'->'public_patch'->>'is_real'='true'
+    and h->'snapshot'->'private_patch'->>'good_referral'='selected private referral')
+  from interview_test_state where key='analysis'),'replaced selections remain available only in private review history');
+update interview_test_state set value=public.save_member_interview_draft((value->>'id')::uuid,7,
+  '{"replace_review":true,"public_patch":{},"private_patch":{},"status":"reviewed"}') where key='analysis';
+select pg_temp.check_true((select public.get_member_interview((value->>'id')::uuid)->'public_patch'='{}'::jsonb
+  and public.get_member_interview((value->>'id')::uuid)->'private_patch'='{}'::jsonb
+  and value->>'raw_text'='preserved synthetic source' and value->'extracted'='{"reanalysis":true}'::jsonb
+  from interview_test_state where key='analysis'),'empty review groups persist all unchecked without erasing original or extraction');
+select pg_temp.check_true((select public.save_member_interview_draft((value->>'id')::uuid,8,
+  '{"replace_review":true,"public_patch":{},"private_patch":{},"status":"reviewed"}')->>'revision'='8'
+  from interview_test_state where key='analysis'),'identical full review selection save does not add history');
+update interview_test_state set value=public.save_member_interview_draft((value->>'id')::uuid,8,
+  '{"replace_review":true,"public_patch":{"customers":["new selected type"],"is_real":true},"private_patch":{"good_referral":"selected but not applied"},"status":"reviewed"}') where key='analysis';
+update interview_test_state set value=public.save_member_interview_draft((value->>'id')::uuid,9,
+  '{"replace_review":true,"public_patch":{"wants":"only selected B"},"status":"reviewed"}') where key='analysis';
+select pg_temp.check_true((select value->'public_patch'='{"wants":"only selected B"}'::jsonb
+  and value->'private_patch'='{"good_referral":"selected but not applied"}'::jsonb
+  from interview_test_state where key='analysis'),'full review replacement preserves an omitted selection group');
+update interview_test_state set value=public.save_member_interview_draft((value->>'id')::uuid,10,
+  '{"raw_text":"recovered synthetic source","status":"reviewed"}') where key='analysis';
+select pg_temp.check_true((select value->>'raw_text'='recovered synthetic source' and value->'extracted'='{"reanalysis":true}'::jsonb
+  and value->'public_patch'='{"wants":"only selected B"}'::jsonb and value->'private_patch'='{"good_referral":"selected but not applied"}'::jsonb
+  from interview_test_state where key='analysis'),'raw-text retry preserves all review groups and extraction');
+insert into interview_test_state select 'review_applied',public.apply_member_interview((s.value->>'id')::uuid,11,m.updated_at,'{"wants":"only selected B"}','{}')
+  from interview_test_state s,public.members m where s.key='analysis' and m.id='44444444-4444-4444-8444-444444444401';
+select pg_temp.check_true((select wants='only selected B' and customers=array['공개 고객 유형 개선'] and synergies=array['기존 상생직군']
+  and company='반영 회사' and is_real from public.members where id='44444444-4444-4444-8444-444444444401')
+  and public.get_member_details('44444444-4444-4444-8444-444444444401')->0->>'good_referral'='반영 비공개 리퍼럴',
+  'applying only current B never reuses saved A or an omitted private selection');
+rollback to savepoint review_selection_checks;
+release savepoint review_selection_checks;
+
 select set_config('request.jwt.claims','{"sub":"33333333-3333-4333-8333-333333333302","role":"authenticated"}',true);
 select pg_temp.check_denied($q$select public.get_member_interview((value->>'id')::uuid) from interview_test_state where key='interview'$q$,'linked member still cannot read original/history after apply');
 select pg_temp.check_denied($q$select public.begin_member_interview_analysis((value->>'id')::uuid,2) from interview_test_state where key='analysis'$q$,'member cannot trigger external analysis lease');
+select pg_temp.check_denied($q$select public.save_member_interview_draft((value->>'id')::uuid,5,'{"replace_review":true,"public_patch":{},"private_patch":{}}') from interview_test_state where key='analysis'$q$,'linked member cannot replace administrator review selections');
 select pg_temp.check_true(public.get_member_details()->0->>'good_referral'='반영 비공개 리퍼럴','linked member can read applied private fields');
 select set_config('request.jwt.claims','{"sub":"33333333-3333-4333-8333-333333333301","role":"authenticated"}',true);
 select public.admin_set_member_access('33333333-3333-4333-8333-333333333302','viewer');

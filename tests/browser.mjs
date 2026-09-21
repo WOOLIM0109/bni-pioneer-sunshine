@@ -22,7 +22,7 @@ function makeMock(initial, options) {
   const clone = value => JSON.parse(JSON.stringify(value));
   const account = (id, role, member = null) => ({ user_id: id, email: `${id}@example.test`, role, member_id: member, requested_member_id: null, request_status: 'none', updated_at: '2026-09-21T00:00:00.000Z' });
   const state = window.__db = {
-    members: clone(initial), log: [], pending: [], holdWrites: false, revision: 0,
+    members: clone(initial), links: clone(options.links || []), failLinkReads: !!options.failLinkReads, log: [], pending: [], holdWrites: false, revision: 0,
     pendingReads: [], holdReads: false, completedReads: 0,
     pendingAccessReads: [], holdAccessReads: false, completedAccessReads: 0,
     pendingStorageWrites: [], holdStorageWrites: false, failStorageWrites: false, failStorageReads: false,
@@ -63,6 +63,7 @@ function makeMock(initial, options) {
     async execute() {
       state.log.push({ action: this.action, table: this.table, columns: this.columns, value: this.value });
       const accessRead = this.table === 'member_accounts' && this.action === 'select';
+      const linkRead = this.table === 'member_synergy_links' && this.action === 'select';
       const accessUser = state.session?.user.id;
       const accessAdmin = currentAccount()?.role === 'admin';
       const accountSnapshot = accessRead ? clone(state.accounts.filter(row => accessAdmin || row.user_id === accessUser)) : null;
@@ -70,10 +71,13 @@ function makeMock(initial, options) {
       if (this.action !== 'select' && state.holdWrites) await new Promise(resolve => state.pending.push(resolve));
       if (!accessRead && this.action === 'select' && state.holdReads) await new Promise(resolve => state.pendingReads.push(resolve));
       if (accessRead ? state.failAccess : this.action === 'select' ? state.failReads : state.failWrites) return { data: null, error: { message: accessRead ? '테스트 권한 조회 실패' : '테스트 연결 실패', code: 'TEST_FAILURE' } };
+      if (linkRead && state.failLinkReads) return { data: null, error: { message: '테스트 연결 지정 조회 실패', code: 'TEST_LINK_FAILURE' } };
       const matches = row => this.filters.every(filter => filter(row));
       let data;
       if (accessRead) {
         data = accountSnapshot.filter(matches);
+      } else if (linkRead) {
+        data = state.links.filter(matches);
       } else if (this.table !== 'members') {
         return permissionError();
       } else if (['good_referral', 'triggers', 'customer_companies'].some(key => this.columns.split(',').includes(key) || Object.hasOwn(this.value || {}, key))) {
@@ -131,6 +135,21 @@ function makeMock(initial, options) {
       if (state.holdWrites && (!state.holdRpcName || state.holdRpcName === this.name)) await new Promise(resolve => state.pending.push(resolve));
       if (state.failRpc && (!state.failRpcName || state.failRpcName === this.name)) return { data: null, error: { message: '테스트 권한 저장 실패', code: 'TEST_FAILURE' } };
       const own = currentAccount();
+      if (this.name === 'set_member_synergy_link') {
+        if (own?.role !== 'admin') return permissionError();
+        const input = this.value, member = state.members.find(row => row.id === input.source_member_id);
+        const invalid = () => ({ data: null, error: { message: '멤버와 상생직군을 최신 목록에서 다시 확인하세요.', code: '22023' } });
+        if (!member || input.target_member_id === member.id || !member.synergies.includes(input.synergy)) return invalid();
+        if (member.updated_at !== input.expected_member_updated_at) return conflict();
+        const link = state.links.find(row => row.source_member_id === member.id && row.synergy === input.synergy);
+        if ((link?.updated_at ?? null) !== (input.expected_link_updated_at ?? null)) return conflict();
+        if (input.target_member_id !== null && !state.members.some(row => row.id === input.target_member_id)) return invalid();
+        state.links = state.links.filter(row => row !== link);
+        if (input.target_member_id === null) return { data: null, error: null };
+        const next = { source_member_id: member.id, synergy: input.synergy, target_member_id: input.target_member_id, updated_at: timestamp() };
+        state.links.push(next);
+        return { data: clone(next), error: null };
+      }
       if (this.name === 'update_member_details') {
         if (own?.role !== 'admin' && !(own?.role === 'member' && own.member_id === this.value.target_member_id)) return permissionError();
         const detail = detailFor(this.value.target_member_id), member = state.members.find(row => row.id === this.value.target_member_id);
@@ -153,7 +172,12 @@ function makeMock(initial, options) {
         const row = state.interviews.find(row => row.id === input.target_interview_id);
         if (!row || row.revision !== input.expected_revision) return conflict();
         if (this.name === 'save_member_interview_draft') {
-          Object.assign(row, clone(input.draft_patch), { revision: row.revision + 1, updated_at: timestamp(), updated_by: own.user_id });
+          const patch = clone(input.draft_patch);
+          if (Object.hasOwn(patch, 'replace_review') && typeof patch.replace_review !== 'boolean') return { data: null, error: { code: '22023', message: '잘못된 검토 저장 방식입니다.' } };
+          const next = { raw_text: row.raw_text, extracted: row.extracted, public_patch: row.public_patch, private_patch: row.private_patch, status: patch.status ?? 'draft' };
+          for (const key of ['raw_text', 'extracted']) if (Object.hasOwn(patch, key)) next[key] = patch[key];
+          for (const key of ['public_patch', 'private_patch']) if (Object.hasOwn(patch, key)) next[key] = patch.replace_review === true ? patch[key] : { ...row[key], ...patch[key] };
+          if (Object.keys(next).some(key => JSON.stringify(row[key]) !== JSON.stringify(next[key]))) Object.assign(row, next, { revision: row.revision + 1, updated_at: timestamp(), updated_by: own.user_id });
           return { data: clone(row), error: null };
         }
         const member = state.members.find(member => member.id === row.member_id);
@@ -279,7 +303,7 @@ const { chromium } = await getPlaywright();
 const browser = await chromium.launch({ headless: true });
 const failures = [];
 let seed;
-async function pageFor({ online = false, auth = false, records = seed, failReads = false, role = 'admin', failAccess = false, hash = '' } = {}) {
+async function pageFor({ online = false, auth = false, records = seed, links = [], failLinkReads = false, failReads = false, role = 'admin', failAccess = false, hash = '' } = {}) {
   const context = await browser.newContext({ viewport: { width: 400, height: 900 }, colorScheme: 'light', serviceWorkers: 'block' });
   const page = await context.newPage();
   page.on('pageerror', error => failures.push(error.message));
@@ -291,7 +315,7 @@ async function pageFor({ online = false, auth = false, records = seed, failReads
     const url = route.request().url();
     if (url === 'http://localhost:43127/') return route.fulfill({ status: 200, contentType: 'text/html', body: document });
     if (url.includes('/@supabase/supabase-js@')) return online
-      ? route.fulfill({ status: 200, contentType: 'application/javascript', body: `(${makeMock.toString()})(${JSON.stringify(records)}, ${JSON.stringify({ auth, failReads, role, failAccess })});` })
+      ? route.fulfill({ status: 200, contentType: 'application/javascript', body: `(${makeMock.toString()})(${JSON.stringify(records)}, ${JSON.stringify({ auth, failReads, role, failAccess, links, failLinkReads })});` })
       : route.abort();
     return route.abort();
   });
@@ -347,6 +371,30 @@ async function assertPublicExportPrivate(page) {
   assert(!/PRIVATE_|INTERVIEW_PRIVATE_|member-interviews\//.test(exported), 'Private content and object paths must not reach public JSON exports.');
   const leak = await page.evaluate(() => ({ roster: /PRIVATE_|INTERVIEW_PRIVATE_/.test(JSON.stringify(M)), storage: [...Object.entries(localStorage), ...Object.entries(sessionStorage)].some(pair => /PRIVATE_|INTERVIEW_PRIVATE_|member-interviews\//.test(JSON.stringify(pair))) }));
   assert.deepEqual(leak, { roster: false, storage: false }, 'Private documents/details must stay out of the public roster and browser persistence.');
+}
+function connectionFixtures() {
+  return seed.slice(0, 4).map((row, index) => ({ ...structuredClone(row),
+    name: ['연결 요청자', '연결 대상', '같은 분야 하나', '같은 분야 둘'][index],
+    company: ['요청 회사', '대상 회사', '둘째 회사', '셋째 회사'][index],
+    field: ['경영 상담', '앱·웹개발', '동일 분야', '동일　분야'][index],
+    team: '기업', customers: ['공통 고객'], synergies: index ? [] : ['홈페이지 제작', '동일 분야']
+  }));
+}
+async function openConnectionReview(page, memberId) {
+  await page.click('#t4');
+  if (!await page.locator('#link-review-details').evaluate(details => details.open)) await page.click('#link-review-details > summary');
+  await page.selectOption('#link-member', memberId);
+}
+async function saveInterviewReview(page) {
+  const revision = await page.evaluate(() => interviewDoc.revision);
+  await page.click('#interview-save');
+  await page.waitForFunction(revision => !interviewBusy && interviewDoc.revision > revision, revision);
+}
+async function reloadInterviewReview(page, id) {
+  await page.selectOption('#interview-history', id);
+  const reads = await page.evaluate(() => window.__db.log.filter(item => item.name === 'get_member_interview').length);
+  await page.click('#interview-open');
+  await page.waitForFunction(reads => !interviewBusy && window.__db.log.filter(item => item.name === 'get_member_interview').length > reads, reads);
 }
 try {
   await check('Offline fallback renders all 31 seed members and permits only export', async () => {
@@ -946,6 +994,204 @@ try {
     assert(!await unchecked.locator('.interview-check').isChecked(), 'Saving an edited unchecked proposal must not select it for publication.');
     await context.close();
   });
+  await check('Saving unchecked review fields and the verification checkbox survives reloading without publication', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true });
+    const id = await uploadInterview(page);
+    await analyzeInterview(page);
+    const customers = page.locator('#interview-review [data-field="customers"] .interview-check');
+    const synergies = page.locator('#interview-review [data-field="synergies"] .interview-check');
+    const referral = page.locator('#interview-review [data-field="good_referral"] .interview-check');
+    await customers.check(); await referral.check(); await page.check('#interview-real');
+    await saveInterviewReview(page);
+    await reloadInterviewReview(page, id);
+    assert(await customers.isChecked()); assert(await referral.isChecked()); assert(await page.isChecked('#interview-real'));
+    await customers.uncheck(); await referral.uncheck(); await page.uncheck('#interview-real'); await synergies.check();
+    await saveInterviewReview(page);
+    const request = await page.evaluate(() => window.__db.log.filter(item => item.name === 'save_member_interview_draft').at(-1).value.draft_patch);
+    assert.equal(request.replace_review, true);
+    assert.deepEqual(Object.keys(request.public_patch), ['synergies']); assert.deepEqual(request.private_patch, {});
+    await reloadInterviewReview(page, id);
+    assert(!await customers.isChecked()); assert(!await referral.isChecked()); assert(!await page.isChecked('#interview-real')); assert(await synergies.isChecked());
+    await synergies.uncheck(); await saveInterviewReview(page); await reloadInterviewReview(page, id);
+    assert(await page.locator('#interview-review .interview-check').evaluateAll(inputs => inputs.every(input => !input.checked)));
+    const saved = await page.evaluate(() => window.__db.interviews[0]);
+    assert.deepEqual(saved.public_patch, {}); assert.deepEqual(saved.private_patch, {}); assert.equal(saved.raw_text, INTERVIEW_SOURCE);
+    assert.deepEqual(await page.evaluate(() => window.__db.members), seed);
+    assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.name === 'apply_member_interview').length), 0);
+    await context.close();
+  });
+  await check('Normalized identical fields show every matching member while similar candidates require explicit confirmation', async () => {
+    const records = connectionFixtures(), { page, context } = await pageFor({ online: true, auth: true, records });
+    await page.waitForFunction(() => linksReady);
+    const matches = await page.evaluate(() => connectedMembers(M[0], M[0].s[1]).map(member => member.n));
+    assert.deepEqual(matches, ['같은 분야 하나', '같은 분야 둘']);
+    assert.match(await page.locator('#stage').innerText(), /같은 분야 하나/); assert.match(await page.locator('#stage').innerText(), /같은 분야 둘/);
+    assert.equal(await page.evaluate(() => connectedMembers(M[0], M[0].s[0]).length), 0);
+    await openConnectionReview(page, records[0].id);
+    const row = page.locator('.link-row[data-synergy-index="0"]');
+    assert.equal(await row.locator('.link-target').inputValue(), ''); assert(await row.locator('.link-save').isDisabled());
+    assert.equal(await row.locator('.link-clear').count(), 0);
+    assert.match(await row.innerText(), /연결 대상/);
+    assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.name === 'set_member_synergy_link').length), 0);
+    assert.deepEqual(await page.evaluate(() => M[0].s), records[0].synergies);
+    await context.close();
+  });
+  await check('Confirmed links update diagrams and gap counts only after success; clearing restores the gap and original wording', async () => {
+    const records = connectionFixtures(), { page, context } = await pageFor({ online: true, auth: true, records });
+    await openConnectionReview(page, records[0].id);
+    const row = page.locator('.link-row[data-synergy-index="0"]');
+    await row.locator('.link-target').selectOption(records[1].id);
+    await page.evaluate(() => { window.__db.holdWrites = true; window.__db.holdRpcName = 'set_member_synergy_link'; });
+    await row.locator('.link-save').click();
+    await page.waitForFunction(() => window.__db.pending.length > 0);
+    assert.equal(await page.evaluate(() => connectedMembers(M[0], M[0].s[0]).length), 0);
+    assert.equal(await page.evaluate(() => teams()['기업'].gaps['홈페이지 제작']), 1);
+    assert.equal(await page.evaluate(() => window.__db.links.length), 0);
+    await page.evaluate(() => window.__db.release());
+    await page.waitForFunction(() => !busy && connectedMembers(M[0], M[0].s[0]).length === 1);
+    assert.deepEqual(await page.evaluate(() => connectedMembers(M[0], M[0].s[0]).map(member => member.id)), [records[1].id]);
+    assert.equal(await page.evaluate(() => teams()['기업'].gaps['홈페이지 제작'] ?? 0), 0);
+    assert(!await page.evaluate(() => eureka().some(item => item.f === '홈페이지 제작')));
+    const saved = await page.evaluate(() => window.__db.log.find(item => item.name === 'set_member_synergy_link').value);
+    assert.deepEqual(saved, { source_member_id: records[0].id, synergy: '홈페이지 제작', target_member_id: records[1].id, expected_member_updated_at: records[0].updated_at, expected_link_updated_at: null });
+    assert.deepEqual(await page.evaluate(() => M[0].s), records[0].synergies);
+    const stamp = await page.evaluate(() => window.__db.links[0].updated_at);
+    await row.locator('.link-clear').click();
+    await page.waitForFunction(() => !busy && synergyLinks.length === 0);
+    assert.equal(await page.evaluate(() => connectedMembers(M[0], M[0].s[0]).length), 0);
+    assert.equal(await page.evaluate(() => teams()['기업'].gaps['홈페이지 제작']), 1);
+    assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.name === 'set_member_synergy_link').at(-1).value.expected_link_updated_at), stamp);
+    assert.deepEqual(await page.evaluate(() => window.__db.members[0].synergies), records[0].synergies);
+    await context.close();
+  });
+  await check('Failed link writes and stale member/link versions preserve the stored confirmation', async () => {
+    for (const failure of ['server', 'member', 'link']) {
+      const records = connectionFixtures(), original = { source_member_id: records[0].id, synergy: records[0].synergies[0], target_member_id: records[1].id, updated_at: '2026-09-21T01:00:00.000Z' };
+      const { page, context } = await pageFor({ online: true, auth: true, records, links: [original] });
+      await openConnectionReview(page, records[0].id);
+      const row = page.locator('.link-row[data-synergy-index="0"]');
+      await row.locator('.link-target').selectOption(records[2].id);
+      const reads = await page.evaluate(() => window.__db.completedReads);
+      await page.evaluate(failure => {
+        if (failure === 'server') { window.__db.failRpc = true; window.__db.failRpcName = 'set_member_synergy_link'; }
+        else if (failure === 'member') window.__db.members[0].updated_at = '2026-10-01T00:00:00.000Z';
+        else window.__db.links[0].updated_at = '2026-10-01T00:00:00.000Z';
+        window.__db.realtime();
+      }, failure);
+      await page.locator('#link-review-note').click();
+      await page.waitForFunction(reads => window.__db.completedReads >= reads + 2 && !pendingRefresh, reads);
+      assert.equal(await row.locator('.link-target').inputValue(), records[2].id, 'A background refresh after blur must retain the unsaved target selection.');
+      assert(await row.locator('.link-save').isEnabled());
+      await row.locator('.link-save').click();
+      await page.waitForFunction(() => !busy && document.getElementById('link-review-message').classList.contains('error'));
+      const sent = await page.evaluate(() => window.__db.log.filter(item => item.name === 'set_member_synergy_link').at(-1).value);
+      assert.equal(sent.expected_member_updated_at, records[0].updated_at, 'A preserved draft must retain the member version originally reviewed.');
+      assert.equal(sent.expected_link_updated_at, original.updated_at, 'A preserved draft must retain the link version originally reviewed.');
+      assert.equal(await row.locator('.link-target').inputValue(), failure === 'server' ? records[2].id : records[1].id, 'Ordinary failure retains a draft; stale-version conflicts require a fresh choice.');
+      assert.equal(await page.evaluate(() => window.__db.links[0].target_member_id), records[1].id);
+      assert.deepEqual(await page.evaluate(() => connectedMembers(M[0], M[0].s[0]).map(member => member.id)), [records[1].id]);
+      assert.deepEqual(await page.evaluate(() => window.__db.members[0].synergies), records[0].synergies);
+      await context.close();
+    }
+  });
+  await check('Public readers receive confirmed-link realtime updates but cannot operate the administrator editor', async () => {
+    for (const role of ['anonymous', 'viewer', 'member']) {
+      const records = connectionFixtures(), { page, context } = await pageFor({ online: true, auth: role !== 'anonymous', role, records });
+      await page.click('#t4'); assert(await page.locator('#link-review-panel').isHidden());
+      await page.evaluate(() => saveSynergyLink(M[0], M[0].s[0], M[1].id, null));
+      assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.name === 'set_member_synergy_link').length), 0);
+      await page.evaluate(() => { window.__db.links = [{ source_member_id: M[0].id, synergy: M[0].s[0], target_member_id: M[1].id, updated_at: '2026-09-21T02:00:00.000Z' }]; window.__db.realtime(); });
+      await page.waitForFunction(() => connectedMembers(M[0], M[0].s[0])[0]?.id === M[1].id);
+      assert.equal(await page.evaluate(() => teams()['기업'].gaps['홈페이지 제작'] ?? 0), 0);
+      await page.click('#t1'); assert.match(await page.locator('#stage').innerText(), /연결 대상/);
+      await context.close();
+    }
+  });
+  await check('Link lookup failure preserves the online roster and exposes a dedicated warning', async () => {
+    const records = connectionFixtures(), { page, context } = await pageFor({ online: true, auth: true, records, failLinkReads: true });
+    assert.equal(await page.evaluate(() => online), true); assert.equal(await page.evaluate(() => linksReady), false);
+    assert.equal(await page.evaluate(() => M.length), records.length); assert(await page.locator('#connection-badge').isHidden());
+    assert(await page.locator('#link-read-warning').isVisible());
+    assert.match(await page.locator('#link-read-warning').innerText(), /연결|다시/);
+    await page.click('#t4'); assert(await page.locator('#link-member').isDisabled());
+    assert(await page.locator('#link-retry').isVisible());
+    await page.evaluate(() => { window.__db.failLinkReads = false; }); await page.click('#link-retry');
+    await page.waitForFunction(() => linksReady && !connecting);
+    assert(await page.locator('#link-read-warning').isHidden()); assert(await page.locator('#link-member').isEnabled());
+    await context.close();
+  });
+  await check('A successful link save with a failed refresh reports saved-but-unconfirmed until retry retrieves it', async () => {
+    const records = connectionFixtures(), { page, context } = await pageFor({ online: true, auth: true, records });
+    await openConnectionReview(page, records[0].id);
+    const row = page.locator('.link-row[data-synergy-index="0"]');
+    await row.locator('.link-target').selectOption(records[1].id);
+    await page.evaluate(() => { window.__db.failLinkReads = true; });
+    await row.locator('.link-save').click();
+    await page.waitForFunction(() => !busy && window.__db.links.length === 1 && !linksReady);
+    assert.equal(await page.evaluate(() => online), true);
+    assert.equal(await page.evaluate(() => connectedMembers(M[0], M[0].s[0]).length), 0);
+    assert.match(await page.locator('#link-review-message').innerText(), /저장.*완료.*최신.*불러오지/);
+    assert(await page.locator('#link-review-message').evaluate(element => element.classList.contains('error')));
+    await page.evaluate(() => { window.__db.failLinkReads = false; }); await page.click('#link-retry');
+    await page.waitForFunction(() => linksReady && !connecting && connectedMembers(M[0], M[0].s[0])[0]?.id === M[1].id);
+    assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.name === 'set_member_synergy_link').length), 1);
+    await context.close();
+  });
+  await check('Losing administrator access during a pending link write cannot save or restore the editor', async () => {
+    const records = connectionFixtures(), { page, context } = await pageFor({ online: true, auth: true, records });
+    await openConnectionReview(page, records[0].id);
+    const row = page.locator('.link-row[data-synergy-index="0"]');
+    await row.locator('.link-target').selectOption(records[1].id);
+    await page.evaluate(() => { window.__db.holdWrites = true; window.__db.holdRpcName = 'set_member_synergy_link'; });
+    await row.locator('.link-save').click(); await page.waitForFunction(() => window.__db.pending.length > 0);
+    await page.evaluate(() => { window.__db.accounts.find(row => row.user_id === 'test-user').role = 'viewer'; window.__db.setSession(window.__db.session, 'TOKEN_REFRESHED'); });
+    await page.waitForFunction(() => document.getElementById('link-review-panel').hidden);
+    await page.evaluate(() => window.__db.release()); await page.waitForFunction(() => !busy);
+    assert.equal(await page.evaluate(() => window.__db.links.length), 0); assert(await page.locator('#link-review-panel').isHidden());
+    assert.equal(await page.evaluate(() => connectedMembers(M[0], M[0].s[0]).length), 0);
+    await context.close();
+  });
+  await check('Mobile member selection searches name company and field, preserves UUID through reorder, and keeps desktop rows', async () => {
+    const records = connectionFixtures(), { page, context } = await pageFor({ online: true, auth: true, records });
+    await page.click('#t4'); assert.equal(await page.locator('#admintable tbody tr:visible').count(), 1);
+    for (const term of [records[2].name, records[2].company, records[2].field]) {
+      await page.fill('#admin-member-search', term);
+      assert(await page.locator(`#admin-member-select option[value="${records[2].id}"]`).count());
+    }
+    await page.selectOption('#admin-member-select', records[2].id);
+    assert.equal(await page.locator('#admintable tbody tr:visible').getAttribute('data-member-key'), records[2].id);
+    await page.evaluate(id => { const member = window.__db.members.find(row => row.id === id); member.name = '이름이 바뀐 멤버'; member.sort_order = -10; window.__db.realtime(); }, records[2].id);
+    await page.locator('#admin-note').click();
+    await page.waitForFunction(id => M[0].id === id && M[0].n === '이름이 바뀐 멤버', records[2].id);
+    assert.equal(await page.inputValue('#admin-member-select'), records[2].id);
+    assert.equal(await page.locator('#admintable tbody tr:visible').getAttribute('data-member-key'), records[2].id);
+    await page.fill('#admin-member-search', '없는 사람 검색'); assert.equal(await page.locator('#admintable tbody tr:visible').count(), 0);
+    assert.match(await page.locator('#admin-member-status').innerText(), /검색 결과가 없습니다/);
+    await page.fill('#admin-member-search', ''); await page.setViewportSize({ width: 1440, height: 1000 });
+    assert.equal(await page.locator('#admintable tbody tr:visible').count(), records.length);
+    await context.close();
+  });
+  await check('Mobile add and delete select the successful row while own-member navigation clears searches', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true });
+    await page.click('#t4'); const original = await page.inputValue('#admin-member-select');
+    await page.evaluate(() => { window.__db.holdWrites = true; }); await page.click('#newrow');
+    await page.waitForFunction(() => window.__db.pending.length > 0);
+    assert.equal(await page.inputValue('#admin-member-select'), original);
+    await page.evaluate(() => window.__db.release());
+    await page.waitForFunction(() => !busy && M.length === window.__db.members.length && M.length === 32);
+    const added = await page.evaluate(() => window.__db.members.at(-1).id);
+    await page.waitForFunction(id => document.getElementById('admin-member-select').value === id, added);
+    await page.locator('#admintable tbody tr:visible .del').click();
+    await page.waitForFunction(() => !busy && M.length === 31);
+    assert.notEqual(await page.inputValue('#admin-member-select'), added); assert.equal(await page.locator('#admintable tbody tr:visible').count(), 1);
+    await context.close();
+    const member = await pageFor({ online: true, auth: true, role: 'member' });
+    await member.page.click('#t4'); await member.page.fill('#admin-member-search', '없는 이름'); await member.page.click('#own-memberb');
+    assert.equal(await member.page.inputValue('#admin-member-search'), ''); assert.equal(await member.page.inputValue('#admin-member-select'), seed[0].id);
+    assert.equal(await member.page.locator('#admintable tbody tr:visible').count(), 1);
+    assert(await member.page.locator('#admintable tbody tr:visible input').evaluateAll(inputs => inputs.every(input => !input.readOnly)));
+    await member.context.close();
+  });
   await check('Losing administrator access clears private review state and discards late AI responses', async () => {
     for (const loss of ['role', 'session']) {
       const { page, context } = await pageFor({ online: true, auth: true });
@@ -1043,6 +1289,28 @@ try {
           }
         }
       }
+    }
+    await page.setViewportSize({ width: 400, height: 900 });
+    await page.click('#t4');
+    await page.selectOption('#admin-member-select', seed[0].id);
+    const reviewCandidate = await page.evaluate(() => {
+      for (const member of M) {
+        const index = syn(member).findIndex(field => !connectedMembers(member, field).length && synergyCandidates(member, field).length);
+        if (index >= 0) return { memberId: member.id, index };
+      }
+      return { memberId: M[0].id, index: 0 };
+    });
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
+      await page.locator('.admin-member-picker').evaluate(element => scrollTo(0, scrollY + element.getBoundingClientRect().top - document.querySelector('nav').getBoundingClientRect().height - 20));
+      const pickerName = `browser-400-${theme}-member-picker.png`;
+      await page.screenshot({ path: path.join(directory, pickerName), animations: 'disabled' });
+      console.log(`SCREENSHOT diagnostics-output/${pickerName}`);
+      await openConnectionReview(page, reviewCandidate.memberId);
+      await page.locator(`#link-review-rows .link-row[data-synergy-index="${reviewCandidate.index}"]`).evaluate(element => scrollTo(0, scrollY + element.getBoundingClientRect().top - document.querySelector('nav').getBoundingClientRect().height - 90));
+      const linksName = `browser-400-${theme}-link-review.png`;
+      await page.screenshot({ path: path.join(directory, linksName), animations: 'disabled' });
+      console.log(`SCREENSHOT diagnostics-output/${linksName}`);
     }
     await context.close();
     const reader = await pageFor({ online: true });
