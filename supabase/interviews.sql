@@ -311,9 +311,15 @@ begin
   end loop;
   next_raw:=case when draft_patch?'raw_text' then draft_patch->>'raw_text' else row_value.raw_text end;
   next_extracted:=case when draft_patch?'extracted' then draft_patch->'extracted' else row_value.extracted end;
-  -- Merge only supplied keys so a partial review does not erase other draft fields.
-  next_public:=row_value.public_patch||coalesce(draft_patch->'public_patch','{}');
-  next_private:=row_value.private_patch||coalesce(draft_patch->'private_patch','{}');
+  -- A completed analysis starts a new review. Never carry old selections forward
+  -- or treat incoming analysis patch values as the administrator's approval.
+  if lease_id is not null and event_name='analyzed' then
+    next_public:='{}'; next_private:='{}';
+  else
+    -- Ordinary partial review saves retain all absent draft fields.
+    next_public:=row_value.public_patch||coalesce(draft_patch->'public_patch','{}');
+    next_private:=row_value.private_patch||coalesce(draft_patch->'private_patch','{}');
+  end if;
   next_status:=coalesce(draft_patch->>'status','draft');
   if row(row_value.raw_text,row_value.extracted,row_value.public_patch,row_value.private_patch,row_value.status)
      is not distinct from row(next_raw,next_extracted,next_public,next_private,next_status) then

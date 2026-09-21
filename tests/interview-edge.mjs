@@ -1,9 +1,10 @@
 // No network: every Auth, REST, Storage, and OpenAI call uses the test transport.
 // Run: node --experimental-strip-types tests/interview-edge.mjs
 import assert from 'node:assert/strict';
-import {createHandler,INTERVIEW_MODEL} from '../supabase/functions/analyze-interview/index.ts';
+import {createHandler,INTERVIEW_MODEL,ANALYSIS_SCHEMA,ANALYSIS_LIMITS,validateAnalysis} from '../supabase/functions/analyze-interview/index.ts';
 const userId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',memberId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',interviewId='cccccccc-cccc-4ccc-8ccc-cccccccccccc',leaseId='dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const output={summary:'인터뷰 요약',detected_name:'홍길동',warnings:[],suggestions:[{key:'customers',value:['제조업 대표'],reason:'사업 분야',evidence:'제조업 대표가 주요 고객입니다.',confidence:'high',basis:'stated'}]};
+const suggestion=(key,value,extra={})=>({...output.suggestions[0],key,value,...extra});
 const response=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json'}});
 function setup(options={}){
   const log=[],document={id:interviewId,member_id:memberId,revision:1,raw_text:'제조업 대표가 주요 고객입니다.',mime_type:'text/plain',storage_path:memberId+'/source.txt',file_size:100,...options.document};
@@ -25,9 +26,10 @@ function setup(options={}){
     throw Error('Unexpected external call '+url);
   };
   const env={SUPABASE_URL:'https://example.supabase.co',SUPABASE_ANON_KEY:'public-test-key',OPENAI_API_KEY:options.noKey?'':'private-test-key'};
-  const handler=createHandler({fetch,env:key=>env[key]});
+  const diagnostics=[];
+  const handler=createHandler({fetch,env:key=>env[key],diagnostic:entry=>diagnostics.push(entry)});
   const call=(method='POST',data={interview_id:interviewId,expected_revision:1},origin='https://woolim0109.github.io')=>handler(new Request('https://example.supabase.co/functions/v1/analyze-interview',{method,headers:{Origin:origin,Authorization:'Bearer user-jwt','Content-Type':'application/json'},...(method==='POST'?{body:JSON.stringify(data)}:{})}));
-  return {log,call};
+  return {log,call,diagnostics};
 }
 let count=0;
 async function test(name,fn){await fn();count++;console.log('PASS '+name);}
@@ -51,6 +53,56 @@ await test('Incomplete or invalid model output never overwrites draft',async()=>
 await test('Stale save keeps original and releases lease',async()=>{const s=setup({staleFinish:true});assert.equal((await s.call()).status,409);assert(s.log.some(x=>x.path.endsWith('/cancel_member_interview_analysis')));});
 await test('Upstream secrets and errors are not returned',async()=>{const s=setup({networkFailure:true}),r=await s.call();assert.equal(r.status,502);assert(!(await r.text()).includes('private'));assert(s.log.some(x=>x.path.endsWith('/cancel_member_interview_analysis')));});
 await test('SQLSTATE mapped independently of Korean error text',async()=>{for(const [code,status] of [['40001',409],['55000',409],['22023',400]]){const s=setup({beginError:{code,message:'한국어로 작성된 오류입니다.'}});assert.equal((await s.call()).status,status);assert.equal(s.log.some(x=>x.path==='/v1/responses'),false);}});
-await test('1001-character AI value rejected before SQL storage',async()=>{const s=setup({output:{...output,suggestions:[{...output.suggestions[0],value:['가'.repeat(1001)]}]}});assert.equal((await s.call()).status,502);assert.equal(s.log.some(x=>x.path.endsWith('/finish_member_interview_analysis')),false);});
+await test('Overlong AI value omitted without losing other safe draft suggestions',async()=>{const s=setup({output:{...output,suggestions:[suggestion('customers',['가'.repeat(1001),'제조업 대표']),suggestion('team',['기업'])]}});const r=await s.call();assert.equal(r.status,200);const {extracted}=await r.json();assert.deepEqual(extracted.suggestions.map(x=>x.value),[['제조업 대표'],['기업']]);assert(extracted.warnings.some(x=>x.includes('1000자')));});
 await test('AI HTTP 500 and 429 release lease and never save',async()=>{for(const status of [500,429]){const s=setup({aiStatus:status,aiResponse:{error:{message:'sensitive upstream diagnostics'}}}),r=await s.call();assert.equal(r.status,status===429?429:502);assert(!(await r.text()).includes('sensitive'));assert.equal(s.log.some(x=>x.path.endsWith('/finish_member_interview_analysis')),false);assert(s.log.some(x=>x.path.endsWith('/cancel_member_interview_analysis')));}});
+await test('Requested strict schema shares every text/list limit and key-specific cardinality',async()=>{
+  const s=setup();await s.call();const schema=s.log.find(x=>x.path==='/v1/responses').body.text.format.schema;
+  assert.deepEqual(schema,ANALYSIS_SCHEMA);assert.equal(schema.properties.summary.maxLength,ANALYSIS_LIMITS.summary);assert.equal(schema.properties.detected_name.maxLength,ANALYSIS_LIMITS.name);
+  assert.equal(schema.properties.warnings.maxItems,ANALYSIS_LIMITS.warnings);assert.equal(schema.properties.warnings.items.maxLength,ANALYSIS_LIMITS.warning);assert.equal(schema.properties.suggestions.maxItems,8);
+  const branches=schema.properties.suggestions.items.anyOf;assert.equal(branches.length,8);assert.equal(new Set(branches.map(x=>x.properties.key.enum[0])).size,8);
+  for(const branch of branches){const p=branch.properties,key=p.key.enum[0];assert.equal(branch.additionalProperties,false);assert.deepEqual(branch.required,Object.keys(p));assert.equal(p.value.maxItems,['field','team','wants','good_referral'].includes(key)?1:30);assert.equal(p.value.items.maxLength,ANALYSIS_LIMITS.value);assert.equal(p.reason.maxLength,ANALYSIS_LIMITS.reason);assert.equal(p.evidence.maxLength,ANALYSIS_LIMITS.evidence);}
+});
+await test('Multiple visitor/referral statements join losslessly into reviewed scalar drafts',async()=>{
+  const s=setup({output:{...output,suggestions:[...output.suggestions,suggestion('wants',['제조업 대표','지역 유통사 대표']),suggestion('good_referral',['공장 이전을 검토하는 기업','신규 판로를 찾는 기업'])]}}),r=await s.call();assert.equal(r.status,200);const {extracted}=await r.json();
+  assert.deepEqual(extracted.suggestions.find(x=>x.key==='wants').value,['제조업 대표\n지역 유통사 대표']);assert.deepEqual(extracted.suggestions.find(x=>x.key==='good_referral').value,['공장 이전을 검토하는 기업\n신규 판로를 찾는 기업']);assert.equal(extracted.warnings.length,2);assert.equal(s.log.filter(x=>x.path==='/v1/responses').length,1);
+});
+await test('Conflicting field/team values are omitted rather than selecting the first',async()=>{
+  const s=setup({output:{...output,suggestions:[...output.suggestions,suggestion('field',['제조','유통']),suggestion('team',['기업','생활'])]}});const {extracted}=await(await s.call()).json();assert.deepEqual(extracted.suggestions.map(x=>x.key),['customers']);assert.equal(extracted.warnings.filter(x=>x.includes('서로 다른 값')).length,2);
+  assert.deepEqual(validateAnalysis({...output,suggestions:[suggestion('team',['기업','기업'])]},'홍길동').suggestions[0].value,['기업']);
+});
+await test('Duplicate keys omit that entire key and preserve unrelated suggestions',async()=>{
+  const s=setup({output:{...output,suggestions:[suggestion('wants',['제조 대표']),suggestion('wants',['유통 대표']),...output.suggestions]}});const {extracted}=await(await s.call()).json();assert.deepEqual(extracted.suggestions.map(x=>x.key),['customers']);assert(extracted.warnings.some(x=>x.includes('중복')));
+});
+await test('Merged scalar over limit is omitted whole, never silently truncated',async()=>{
+  for(const [length,kept] of [[499,true],[500,false]]){const s=setup({output:{...output,suggestions:[...output.suggestions,suggestion('good_referral',['가'.repeat(length),'나'.repeat(length)])]}});const {extracted}=await(await s.call()).json();assert.equal(extracted.suggestions.some(x=>x.key==='good_referral'),kept);assert(extracted.suggestions.some(x=>x.key==='customers'));}
+});
+await test('List overflow and long explanation retain only reviewable bounded items',async()=>{
+  const s=setup({output:{...output,suggestions:[suggestion('customers',Array.from({length:31},(_,i)=>'고객 유형 '+i)),suggestion('team',['기업'],{evidence:'나'.repeat(1501)}),suggestion('wants',['제조 대표'],{reason:'가'.repeat(1001)})]}});const {extracted}=await(await s.call()).json();assert.equal(extracted.suggestions.length,1);assert.equal(extracted.suggestions[0].value.length,30);assert(extracted.warnings.some(x=>x.includes('앞의 30개')));assert.equal(extracted.warnings.filter(x=>x.includes('근거가 너무 길어')).length,2);
+});
+await test('Over-limit summaries and warnings do not discard safe suggestions',async()=>{
+  const s=setup({output:{...output,summary:'가'.repeat(5001),detected_name:'나'.repeat(201),warnings:['다'.repeat(1501),...Array.from({length:31},(_,i)=>'주의사항 '+i)]}});const {extracted}=await(await s.call()).json();assert.equal(extracted.summary,'');assert.equal(extracted.detected_name,'');assert.deepEqual(extracted.suggestions,output.suggestions);assert(extracted.warnings.length<=30);assert(extracted.warnings.some(x=>x.includes('요약만 제외')));assert(extracted.warnings.every(x=>Array.from(x).length<=1500));
+});
+await test('Privacy guards inspect duplicate company entries and over-limit raw tails',async()=>{
+  const cases=[
+    [suggestion('customer_companies',['첫회사']),suggestion('customer_companies',['비공개상사']),suggestion('wants',['비공개상사 대표'])],
+    [suggestion('customer_companies',[...Array.from({length:30},(_,i)=>'테스트 회사 '+i),'비공개상사']),suggestion('wants',['비공개상사 대표'])],
+    [suggestion('customer_companies',['비공개상사'],{evidence:'가'.repeat(1501)}),suggestion('wants',['비공개상사 대표'])],
+    [suggestion('customers',[...Array.from({length:30},(_,i)=>'고객 유형 '+i),'010-1234-5678']),suggestion('team',['기업'])],
+    [suggestion('wants',['제조 대표','문의: secret@example.test']),suggestion('team',['기업'])]
+  ];
+  for(const suggestions of cases){const s=setup({output:{...output,suggestions}}),r=await s.call();assert.equal(r.status,200);const {extracted}=await r.json();assert(!extracted.suggestions.some(x=>x.key==='wants'));assert(!extracted.suggestions.some(x=>x.value.some(v=>v.includes('010-')||v.includes('@'))));assert(s.diagnostics.some(x=>['private_company','private_contact'].includes(x.code)));}
+});
+await test('Structural errors remain strict even beyond duplicate/array limits',async()=>{
+  const malformed=[{...output,suggestions:[...Array.from({length:8},()=>suggestion('team',['기업'])),suggestion('team',[123])]}, {...output,warnings:[false]}, {...output,suggestions:[suggestion('wants',['정상'],{confidence:'certain'})]}, {...output,suggestions:[suggestion('unexpected-private-key',['문장'])]}, {...output,suggestions:[suggestion('wants',['정상'],{extra:'private-text'})]}];
+  for(const result of malformed){const s=setup({output:result}),r=await s.call();assert.equal(r.status,502);assert.equal(s.log.some(x=>x.path.endsWith('/finish_member_interview_analysis')),false);assert(s.log.some(x=>x.path.endsWith('/cancel_member_interview_analysis')));assert.equal(s.log.filter(x=>x.path==='/v1/responses').length,1);}
+});
+await test('Diagnostics expose only fixed codes/paths/types/lengths, not content or API credentials',async()=>{
+  const s=setup({output:{...output,suggestions:[suggestion('wants',['PRIVATE-CONTENT-SENTINEL','두 번째 문장']),suggestion('team',['기업','생활'])]}}),r=await s.call();assert.equal(r.status,200);const body=await r.json();assert(!('diagnostics' in body));assert(s.diagnostics.length>=2);
+  for(const diagnostic of s.diagnostics){assert(Object.keys(diagnostic).every(k=>['code','path','type','length'].includes(k)));assert.match(diagnostic.path,/^\$(?:\.(?:summary|detected_name|warnings|suggestions|key|value|reason|evidence|confidence|basis)|\[\d+\])*$/);}
+  assert(!JSON.stringify(s.diagnostics).includes('PRIVATE-CONTENT-SENTINEL'));assert(!JSON.stringify(s.diagnostics).includes('private-test-key'));
+  const invalid=setup({output:{...output,suggestions:[suggestion('PRIVATE-PROPERTY-SENTINEL',['내용'])]}});await invalid.call();assert(!JSON.stringify(invalid.diagnostics).includes('PRIVATE-PROPERTY-SENTINEL'));
+});
+await test('Unicode character limits match JSON Schema and PostgreSQL at the boundary',async()=>{
+  const result=validateAnalysis({...output,suggestions:[suggestion('customers',['🌞'.repeat(1000),'🌞'.repeat(1001)])]},'홍길동');assert.deepEqual(result.suggestions[0].value,['🌞'.repeat(1000)]);assert.equal(result.warnings.length,1);
+});
 console.log(count+' isolated Edge tests passed; no network used.');

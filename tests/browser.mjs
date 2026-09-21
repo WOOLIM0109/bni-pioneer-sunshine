@@ -227,7 +227,7 @@ function makeMock(initial, options) {
       const row = state.interviews.find(item => item.id === options.body?.interview_id);
       if (!row || row.revision !== options.body?.expected_revision) return conflict();
       if (state.holdAnalysis) await new Promise(resolve => state.pendingAnalysis.push(resolve));
-      if (state.failAnalysis) return { data: null, error: { message: '테스트 AI 분석 실패. 다시 시도해 주세요.', code: 'TEST_ANALYSIS_FAILURE' } };
+      if (state.failAnalysis) return { data: null, error: { message: 'Edge Function returned a non-2xx status code', context: { json: async () => ({ error: { code: 'invalid_analysis', message: '분석 결과를 검토안으로 읽지 못했습니다. 원문은 보관되어 있습니다. 오류 코드: analysis_shape' } }) } } };
       const suggestions = state.analysisSuggestions || [
         { key: 'customers', value: ['지역 소상공인', '학원 운영자'], reason: '공통 고객 유형을 정리했습니다.', evidence: 'AI_PRIVATE_EVIDENCE 고객 유형 원문', confidence: 'high', basis: 'stated' },
         { key: 'synergies', value: ['앱·웹개발', '세무사'], reason: '공통 고객을 만나는 직군입니다.', evidence: 'AI_PRIVATE_EVIDENCE 연결 근거 원문', confidence: 'medium', basis: 'inferred' },
@@ -236,7 +236,7 @@ function makeMock(initial, options) {
         { key: 'triggers', value: ['INTERVIEW_PRIVATE_TRIGGER 정부지원 사업이 궁금해요', 'INTERVIEW_PRIVATE_TRIGGER 서류 준비가 어려워요'], reason: '인터뷰에 나온 요청 문장입니다.', evidence: 'AI_PRIVATE_EVIDENCE 트리거 원문', confidence: 'high', basis: 'stated' },
         { key: 'customer_companies', value: ['INTERVIEW_PRIVATE_COMPANY 샘플기업'], reason: '고객사명은 비공개 항목입니다.', evidence: 'AI_PRIVATE_EVIDENCE 고객사 원문', confidence: 'high', basis: 'stated' }
       ];
-      Object.assign(row, { extracted: { summary: '인터뷰 검증 요약', detected_name: state.members.find(member => member.id === row.member_id)?.name || '', warnings: [], suggestions: clone(suggestions) }, revision: row.revision + 1, updated_at: timestamp() });
+      Object.assign(row, { extracted: { summary: '인터뷰 검증 요약', detected_name: state.members.find(member => member.id === row.member_id)?.name || '', warnings: [], suggestions: clone(suggestions) }, public_patch: {}, private_patch: {}, revision: row.revision + 1, updated_at: timestamp() });
       return { data: clone(row), error: null };
     } },
     auth: {
@@ -879,6 +879,21 @@ try {
     assert.equal(await page.evaluate(memberId => window.__db.details.find(row => row.member_id === memberId).good_referral, seed[0].id), 'INTERVIEW_PRIVATE_REFERRAL 검증 고객');
     assert.equal(await page.evaluate(id => window.__db.interviews.find(row => row.id === id).status, id), 'applied');
     await assertPublicExportPrivate(page);
+    await context.close();
+  });
+  await check('Analysis errors preserve the original and show one actionable message without automatic retries', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true });
+    await uploadInterview(page);
+    const before = await page.evaluate(() => JSON.parse(JSON.stringify(window.__db.interviews[0])));
+    await page.evaluate(() => { window.__db.failAnalysis = true; });
+    await page.click('#interview-analyze');
+    await page.waitForFunction(() => document.getElementById('interview-message').classList.contains('error'));
+    assert.equal(await page.locator('#interview-message').innerText(), '분석 결과를 검토안으로 읽지 못했습니다. 원문은 보관되어 있습니다. 오류 코드: analysis_shape');
+    assert.deepEqual(await page.evaluate(() => window.__db.interviews[0]), before);
+    assert.deepEqual(await page.evaluate(() => window.__db.members[0].customers), seed[0].customers);
+    assert.equal(await page.locator('#interview-review .interview-check').count(), 0);
+    assert(await page.locator('#interview-analyze').isEnabled());
+    assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.action === 'function' && !item.readOnly).length), 1);
     await context.close();
   });
   await check('Failed or stale interview applies leave both public and private saved data unchanged', async () => {

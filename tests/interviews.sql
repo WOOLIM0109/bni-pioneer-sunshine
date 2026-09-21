@@ -159,6 +159,39 @@ set local role authenticated;
 select pg_temp.check_denied($q$select public.finish_member_interview_analysis((a.value->>'id')::uuid,(l.value->>'lease_id')::uuid,2,'{"extracted":{"expired":true}}') from interview_test_state a,interview_test_state l where a.key='analysis' and l.key='lease'$q$,'expired AI result cannot overwrite a draft','40001');
 select pg_temp.check_true((select public.cancel_member_interview_analysis((a.value->>'id')::uuid,(l.value->>'lease_id')::uuid)->>'released'='true' from interview_test_state a,interview_test_state l where a.key='analysis' and l.key='lease'),'owner of expired analysis token can release it');
 
+-- Reanalysis clears every review selection, including supplied patch values.
+-- A rejected/stale finish must not clear anything, and prior review stays in history.
+update interview_test_state set value=public.save_member_interview_draft((value->>'id')::uuid,2,
+  '{"raw_text":"preserved synthetic source","public_patch":{"company":"old selected company"},"private_patch":{"good_referral":"old selected private referral"},"status":"reviewed"}') where key='analysis';
+update interview_test_state set value=public.save_member_interview_draft((value->>'id')::uuid,3,
+  '{"public_patch":{"wants":"additional draft selection"},"status":"reviewed"}') where key='analysis';
+select pg_temp.check_true((select value->'public_patch'->>'company'='old selected company'
+  and value->'public_patch'->>'wants'='additional draft selection' and value->'private_patch'->>'good_referral'='old selected private referral'
+  from interview_test_state where key='analysis'),'ordinary partial save still retains existing public and private selections');
+reset role;
+update private.member_interviews set analysis_started_at=clock_timestamp()-interval '1 minute'
+  where id=(select (value->>'id')::uuid from interview_test_state where key='analysis');
+set local role authenticated;
+update interview_test_state set value=public.begin_member_interview_analysis((select (value->>'id')::uuid from interview_test_state where key='analysis'),4) where key='lease';
+select pg_temp.check_denied($q$select public.finish_member_interview_analysis((a.value->>'id')::uuid,(l.value->>'lease_id')::uuid,3,'{"extracted":{"reanalysis":true}}')
+  from interview_test_state a,interview_test_state l where a.key='analysis' and l.key='lease'$q$,'stale reanalysis cannot reset review selections','40001');
+select pg_temp.check_true((select public.get_member_interview((value->>'id')::uuid)->'public_patch'->>'company'='old selected company'
+  and public.get_member_interview((value->>'id')::uuid)->'private_patch'->>'good_referral'='old selected private referral'
+  from interview_test_state where key='analysis'),'failed reanalysis retains both existing selections');
+update interview_test_state a set value=public.finish_member_interview_analysis((a.value->>'id')::uuid,(l.value->>'lease_id')::uuid,4,
+  '{"extracted":{"reanalysis":true},"public_patch":{"company":"unapproved incoming company"},"private_patch":{"good_referral":"unapproved incoming referral"}}')
+  from interview_test_state l where a.key='analysis' and l.key='lease';
+select pg_temp.check_true((select value->>'revision'='5' and value->>'status'='draft' and value->'extracted'->>'reanalysis'='true'
+  and value->'public_patch'='{}'::jsonb and value->'private_patch'='{}'::jsonb and value->>'raw_text'='preserved synthetic source'
+  from interview_test_state where key='analysis'),'valid analysis clears old and incoming approvals while retaining source');
+select pg_temp.check_true((select exists(select 1 from jsonb_array_elements(public.get_member_interview((value->>'id')::uuid)->'history') h
+  where h->>'revision'='4' and h->'snapshot'->'public_patch'->>'company'='old selected company'
+    and h->'snapshot'->'private_patch'->>'good_referral'='old selected private referral')
+  from interview_test_state where key='analysis'),'old review selections remain in administrator-only history');
+select pg_temp.check_true((select company='반영 회사' from public.members where id='44444444-4444-4444-8444-444444444401')
+  and public.get_member_details('44444444-4444-4444-8444-444444444401')->0->>'good_referral'='반영 비공개 리퍼럴',
+  'reanalysis selection reset never applies incoming public or private values');
+
 select set_config('request.jwt.claims','{"sub":"33333333-3333-4333-8333-333333333302","role":"authenticated"}',true);
 select pg_temp.check_denied($q$select public.get_member_interview((value->>'id')::uuid) from interview_test_state where key='interview'$q$,'linked member still cannot read original/history after apply');
 select pg_temp.check_denied($q$select public.begin_member_interview_analysis((value->>'id')::uuid,2) from interview_test_state where key='analysis'$q$,'member cannot trigger external analysis lease');
