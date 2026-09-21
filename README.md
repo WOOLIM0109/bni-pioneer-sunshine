@@ -1,11 +1,22 @@
 # 파이오니아 선샤인
 
-BNI 부산 파이오니아 챕터의 선샤인 · 파워팀 · 결원 업종 지도입니다. 화면은 `index.html` 한 파일로 동작하고 GitHub Pages의 `main` / root에서 배포합니다. 빌드나 패키지 설치가 필요 없습니다.
+BNI 부산 파이오니아 챕터의 선샤인 · 파워팀 · 결원 업종 지도입니다. 화면의 원본은 `index.html` 한 파일이며, GitHub Actions에서 페이지별 정적 HTML을 생성해 GitHub Pages에 배포합니다. 별도 패키지 설치는 필요 없습니다.
 
 - 나의 선샤인: 핵심고객과 상생직군, 챕터의 연결·결원 업종
 - 파워팀: 팀별 공유 핵심고객과 결원
 - 챕터 전체 지도: 팀별 충원율과 초대 우선순위
 - 멤버 관리: 승인된 본인 정보 수정, 관리자의 명단·권한·인터뷰 문서 관리, 누구나 공개 명단 내보내기
+
+각 화면은 아래 주소로 바로 열거나 공유할 수 있습니다. 기존 루트 주소도 나의 선샤인 화면으로 계속 열립니다.
+
+| 화면 | 슬러그 |
+|---|---|
+| 나의 선샤인 | `/sunshine/` |
+| 파워팀 | `/power-teams/` |
+| 챕터 전체 지도 | `/chapter-map/` |
+| 멤버 관리 | `/members/` |
+
+운영 주소에서는 `/bni-pioneer-sunshine/` 뒤에 슬러그가 붙습니다. 페이지마다 제목·설명·canonical·Open Graph가 정적 HTML에 포함되며 공유 이미지는 `assets/pioneer-sunshine-share.png`를 함께 사용합니다. 메뉴를 이동해도 입력 중인 내용은 유지되고 브라우저 뒤로·앞으로 가기로 화면을 이동할 수 있습니다. 가입 확인·비밀번호 재설정 메일은 기존에 허용한 앱 루트 주소로 돌아옵니다.
 
 ## 데이터와 권한
 
@@ -100,7 +111,9 @@ try {
 
 ## 3. 배포와 확인
 
-저장소 `WOOLIM0109/bni-pioneer-sunshine`의 `main`에 변경을 반영하고 **Settings → Pages → Deploy from a branch → main / (root)**를 확인합니다.
+저장소 `WOOLIM0109/bni-pioneer-sunshine`의 `main`에 변경을 반영하고 **Settings → Pages → Source → GitHub Actions**를 사용합니다. [Pages workflow](.github/workflows/pages.yml)가 빌드 검증 후 `_site/`만 배포합니다.
+
+로컬에서는 Node.js 24 이상으로 `node scripts/build-pages.mjs`를 실행합니다. `index.html`의 `PAGE_ROUTES_START` / `PAGE_ROUTES_END` 사이 정의로 각 경로의 `index.html`을 생성하므로 결과물을 직접 수정하거나 커밋하지 않습니다. `node tests/pages-build.mjs`는 경로별 초기 화면·메타정보·메뉴 링크를 검증합니다. 커스텀 도메인 연결 시 workflow가 GitHub Pages의 기본 URL을 빌드에 전달합니다.
 
 현재 운영 주소: <https://woolim0109.github.io/bni-pioneer-sunshine/>
 

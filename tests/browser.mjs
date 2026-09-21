@@ -8,6 +8,7 @@ import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { routesFromHtml, renderPage } from '../scripts/build-pages.mjs';
 
 const require = createRequire(import.meta.url);
 async function getPlaywright() {
@@ -22,6 +23,7 @@ function makeMock(initial, options) {
   const clone = value => JSON.parse(JSON.stringify(value));
   const account = (id, role, member = null) => ({ user_id: id, email: `${id}@example.test`, role, member_id: member, requested_member_id: null, request_status: 'none', updated_at: '2026-09-21T00:00:00.000Z' });
   const state = window.__db = {
+    initialUrl: location.href,
     members: clone(initial), links: clone(options.links || []), failLinkReads: !!options.failLinkReads, log: [], pending: [], holdWrites: false, revision: 0,
     pendingReads: [], holdReads: false, completedReads: 0,
     pendingAccessReads: [], holdAccessReads: false, completedAccessReads: 0,
@@ -295,6 +297,8 @@ function makeMock(initial, options) {
 }
 
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+const routes = routesFromHtml(html);
+assert.deepEqual(routes.map(route => route.slug), ['sunshine', 'power-teams', 'chapter-map', 'members']);
 assert(!html.includes('service_role'), 'The HTML must not mention privileged credentials.');
 assert(!html.includes('pioneer-sunshine-roster-v1') && !html.includes('pioneer-sunshine-v2'), 'Roster localStorage must be removed.');
 assert(html.includes('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js'), 'Supabase CDN must be version-pinned.');
@@ -303,23 +307,32 @@ const { chromium } = await getPlaywright();
 const browser = await chromium.launch({ headless: true });
 const failures = [];
 let seed;
-async function pageFor({ online = false, auth = false, records = seed, links = [], failLinkReads = false, failReads = false, role = 'admin', failAccess = false, hash = '' } = {}) {
+async function pageFor({ online = false, auth = false, records = seed, links = [], failLinkReads = false, failReads = false, role = 'admin', failAccess = false, basePath = '/', routePath = '', query = '', hash = '' } = {}) {
   const context = await browser.newContext({ viewport: { width: 400, height: 900 }, colorScheme: 'light', serviceWorkers: 'block' });
+  context.on('page', page => {
+    page.on('pageerror', error => failures.push(error.message));
+    page.on('dialog', dialog => dialog.accept());
+  });
   const page = await context.newPage();
-  page.on('pageerror', error => failures.push(error.message));
-  page.on('dialog', dialog => dialog.accept());
+  const baseUrl = `http://localhost:43127${basePath}`, documentRequests = [];
   // Strip production configuration in every mode, including the offline tests.
   const document = html.replace(/(const\s+SUPABASE_URL\s*=\s*)['"][^'"]*['"]/, online ? '$1"https://test-project.supabase.co"' : '$1""')
     .replace(/(const\s+SUPABASE_ANON_KEY\s*=\s*)['"][^'"]*['"]/, online ? '$1"eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiYW5vbiJ9.test"' : '$1""');
-  await page.route('**/*', async route => {
+  await context.route('**/*', async route => {
     const url = route.request().url();
-    if (url === 'http://localhost:43127/') return route.fulfill({ status: 200, contentType: 'text/html', body: document });
+    const address = new URL(url);
+    if (address.origin === 'http://localhost:43127' && route.request().resourceType() === 'document') {
+      documentRequests.push(address.pathname);
+      const routePage = routes.find(item => address.pathname === `${basePath}${item.slug}/` || address.pathname === `${basePath}${item.slug}/index.html`);
+      const isHome = address.pathname === basePath || address.pathname === `${basePath}index.html`;
+      return route.fulfill({ status: routePage || isHome ? 200 : 404, contentType: 'text/html', body: routePage || isHome ? renderPage(document, routePage || null, { baseUrl }) : '<h1>Not found</h1>' });
+    }
     if (url.includes('/@supabase/supabase-js@')) return online
       ? route.fulfill({ status: 200, contentType: 'application/javascript', body: `(${makeMock.toString()})(${JSON.stringify(records)}, ${JSON.stringify({ auth, failReads, role, failAccess, links, failLinkReads })});` })
       : route.abort();
     return route.abort();
   });
-  await page.goto(`http://localhost:43127/${hash}`);
+  const response = await page.goto(new URL(`${routePath}${query}${hash}`, baseUrl).href);
   await page.waitForFunction(() => typeof M !== 'undefined' && document.getElementById('cnt').textContent === String(M.length));
   if (online && !failReads) await page.waitForFunction(() => (M[0]?.id || M.length === 0) && window.__db.log.some(x => x.action === 'select') && !document.getElementById('connection-badge').textContent.includes('오프라인'));
   if (failReads) await page.waitForFunction(() => window.__db.log.some(x => x.action === 'select') && document.body.innerText.includes('테스트 연결 실패'));
@@ -329,7 +342,33 @@ async function pageFor({ online = false, auth = false, records = seed, links = [
     if (!failAccess && !failReads && role === 'admin') await page.waitForFunction(() => !document.getElementById('newrow').disabled);
     if (!failAccess && !failReads && role === 'member') await page.waitForFunction(() => !document.querySelector('#admintable input').readOnly);
   }
-  return { page, context };
+  // The initial realtime subscription schedules a refresh; settle it before a
+  // test injects failures or edits, so it cannot race those deliberate actions.
+  if (online) await page.waitForFunction(() => !connecting && !pendingRefresh && readVersion >= 2);
+  return { page, context, response, documentRequests, baseUrl };
+}
+
+async function assertRoute(page, route, baseUrl) {
+  const view = route?.view || 'v1', title = route ? `${route.title} | 파이오니아 선샤인` : '파이오니아 선샤인';
+  const canonical = new URL(route ? `${route.slug}/` : '', baseUrl).href;
+  await page.waitForFunction(view => !document.getElementById(view).hidden, view);
+  assert.equal(await page.title(), title);
+  assert.equal(await page.locator('link[rel="canonical"]').getAttribute('href'), canonical);
+  assert.equal(await page.locator('meta[property="og:url"]').getAttribute('content'), canonical);
+  assert.equal(await page.locator('meta[property="og:title"]').getAttribute('content'), title);
+  assert.equal(await page.locator('meta[name="twitter:title"]').getAttribute('content'), title);
+  if (route) {
+    assert.equal(await page.locator('meta[name="description"]').getAttribute('content'), route.description);
+    assert.equal(await page.locator('meta[property="og:description"]').getAttribute('content'), route.description);
+  }
+  for (const item of routes) {
+    assert.equal(await page.locator(`#${item.view}`).isVisible(), item.view === view);
+    const link = page.locator(`#t${item.view.slice(1)}`);
+    assert.equal(await link.evaluate(element => element.tagName), 'A');
+    assert.equal(await link.evaluate(element => element.href), new URL(`${item.slug}/`, baseUrl).href);
+    assert.equal(await link.getAttribute('aria-selected'), String(item.view === view));
+    assert.equal(await link.getAttribute('aria-current'), item.view === view ? 'page' : null);
+  }
 }
 
 function mapSeed(rows) {
@@ -412,6 +451,115 @@ try {
     await page.click('#exportb');
     assert.equal(JSON.parse(await page.inputValue('#io')).length, 31);
     await context.close();
+  });
+  await check('Every page slug opens and reloads directly with matching metadata at root and project paths', async () => {
+    for (const basePath of ['/', '/bni-pioneer-sunshine/']) {
+      for (const route of [null, ...routes]) {
+        const { page, context, response, baseUrl } = await pageFor({ online: true, basePath, routePath: route ? `${route.slug}/` : '' });
+        assert.equal(response.status(), 200);
+        await assertRoute(page, route, baseUrl);
+        const reloaded = await page.reload();
+        assert.equal(reloaded.status(), 200);
+        await assertRoute(page, route, baseUrl);
+        await page.waitForFunction(() => online && M.length === window.__db.members.length);
+        assert.equal(await page.evaluate(() => M.length), seed.length);
+        await context.close();
+      }
+    }
+  });
+  await check('Page navigation and back/forward preserve drafts, loaded data, and the root history entry', async () => {
+    for (const basePath of ['/', '/bni-pioneer-sunshine/']) {
+      const { page, context, documentRequests, baseUrl } = await pageFor({ online: true, auth: true, basePath });
+      await page.fill('#q', seed[0].name);
+      await page.evaluate(() => { window.__routeDb = window.__db; window.__routeMembers = JSON.stringify(M); window.__routeSession = session; });
+      await page.click('#t4');
+      await page.fill('#io', 'UNSAVED_ROUTE_DRAFT');
+      const visitOrder = [routes[3], routes[1], routes[2], routes[0]];
+      for (const route of visitOrder) {
+        await page.click(`#t${route.view.slice(1)}`);
+        assert.equal(page.url(), new URL(`${route.slug}/`, baseUrl).href);
+        await assertRoute(page, route, baseUrl);
+      }
+      for (const route of [routes[2], routes[1], routes[3], null]) {
+        await page.goBack();
+        await assertRoute(page, route, baseUrl);
+        assert.equal(page.url(), new URL(route ? `${route.slug}/` : '', baseUrl).href);
+      }
+      assert.equal(await page.inputValue('#q'), seed[0].name);
+      await page.goForward();
+      await assertRoute(page, routes[3], baseUrl);
+      assert.equal(await page.inputValue('#io'), 'UNSAVED_ROUTE_DRAFT');
+      assert.deepEqual(await page.evaluate(() => ({ database: window.__routeDb === window.__db, members: window.__routeMembers === JSON.stringify(M), session: window.__routeSession === session })), { database: true, members: true, session: true });
+      assert.deepEqual(documentRequests, [basePath], 'Switching pages must not reload the document or authentication client.');
+      await context.close();
+    }
+  });
+  await check('Native page links support keyboard activation and modified clicks that open a new tab', async () => {
+    const { page, context, documentRequests, baseUrl } = await pageFor({ online: true, basePath: '/bni-pioneer-sunshine/' });
+    for (const modifier of ['ctrlKey', 'metaKey', 'shiftKey', 'altKey']) {
+      const intercepted = await page.locator('#t2').evaluate((link, modifier) => {
+        let prevented;
+        link.addEventListener('click', event => { prevented = event.defaultPrevented; event.preventDefault(); }, { once: true });
+        link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0, [modifier]: true }));
+        return prevented;
+      }, modifier);
+      assert.equal(intercepted, false, `${modifier} must retain native link behavior.`);
+      assert.equal(page.url(), baseUrl);
+    }
+    const opened = context.waitForEvent('page');
+    await page.click('#t2', { modifiers: ['Control'] });
+    const newPage = await opened;
+    await newPage.waitForLoadState('domcontentloaded');
+    await assertRoute(newPage, routes[1], baseUrl);
+    assert.equal(page.url(), baseUrl);
+    assert.equal(newPage.url(), new URL('power-teams/', baseUrl).href);
+    await newPage.close();
+    for (const [tab, key, route] of [['#t3', 'Enter', routes[2]], ['#t4', 'Space', routes[3]]]) {
+      await page.focus(tab);
+      await page.keyboard.press(key);
+      await assertRoute(page, route, baseUrl);
+      assert.equal(page.url(), new URL(`${route.slug}/`, baseUrl).href);
+      assert.equal(await page.locator(tab).evaluate(link => document.activeElement === link), true);
+    }
+    assert.deepEqual(documentRequests, ['/bni-pioneer-sunshine/', '/bni-pioneer-sunshine/power-teams/']);
+    await context.close();
+  });
+  await check('Signup and password-reset emails return to the app root from nested pages', async () => {
+    for (const basePath of ['/', '/bni-pioneer-sunshine/']) {
+      const { page, context, baseUrl } = await pageFor({ online: true, basePath, routePath: 'members/', query: '?from=shared', hash: '#section' });
+      await page.click('#loginb');
+      await page.click('#auth-signup-mode');
+      await page.fill('#login-email', 'route-signup@example.test');
+      await page.fill('#login-password', 'Route-Signup!97-password');
+      await page.fill('#login-password-confirm', 'Route-Signup!97-password');
+      await page.click('#login-submit');
+      await page.waitForFunction(() => window.__db.log.some(item => item.action === 'signup'));
+      assert.equal(await page.evaluate(() => window.__db.log.find(item => item.action === 'signup').value.options.emailRedirectTo), baseUrl);
+      await page.click('#auth-reset-mode');
+      await page.fill('#login-email', 'route-reset@example.test');
+      await page.click('#login-submit');
+      await page.waitForFunction(() => window.__db.log.some(item => item.action === 'password-reset'));
+      assert.equal(await page.evaluate(() => window.__db.log.find(item => item.action === 'password-reset').value.options.redirectTo), baseUrl);
+      await context.close();
+    }
+  });
+  await check('Nested route loading preserves callback parameters until authentication processes recovery or errors', async () => {
+    const recoveryHash = '#access_token=route-fixture&type=recovery';
+    const recovered = await pageFor({ online: true, auth: true, role: 'viewer', basePath: '/bni-pioneer-sunshine/', routePath: 'members/', query: '?from=email', hash: recoveryHash });
+    assert.equal(await recovered.page.evaluate(() => new URL(window.__db.initialUrl).hash), recoveryHash);
+    assert.equal(new URL(recovered.page.url()).search, '?from=email');
+    await recovered.page.waitForFunction(() => document.getElementById('login-dialog').open && document.getElementById('login-dialog').dataset.mode === 'password');
+    await assertRoute(recovered.page, routes[3], recovered.baseUrl);
+    await recovered.context.close();
+    const errorHash = '#error=access_denied&error_code=otp_expired&error_description=Email+link+has+expired';
+    const expired = await pageFor({ online: true, basePath: '/bni-pioneer-sunshine/', routePath: 'members/', query: '?from=email', hash: errorHash });
+    assert.equal(await expired.page.evaluate(() => new URL(window.__db.initialUrl).hash), errorHash);
+    await expired.page.waitForFunction(() => document.getElementById('login-dialog').open && document.getElementById('login-dialog').dataset.mode === 'reset');
+    assert.match(await expired.page.locator('#login-message').innerText(), /만료/);
+    assert.equal(new URL(expired.page.url()).pathname, '/bni-pioneer-sunshine/members/');
+    assert.equal(new URL(expired.page.url()).search, '?from=email');
+    await assertRoute(expired.page, routes[3], expired.baseUrl);
+    await expired.context.close();
   });
   await check('Anonymous online readers see persisted members and cannot mutate', async () => {
     const records = [...seed, { ...seed[0], id: '00000000-0000-4000-8000-999999999999', name: '공유된 멤버', sort_order: 31 }];

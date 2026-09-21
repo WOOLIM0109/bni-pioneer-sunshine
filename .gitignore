@@ -6,3 +6,4 @@
 node_modules/
 .codex-tmp/
 diagnostics-output/
+_site/

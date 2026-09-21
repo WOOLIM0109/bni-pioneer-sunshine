@@ -94,7 +94,7 @@ header .status-detail.error{color:#FFF;text-decoration:underline;text-underline-
 
 nav{display:flex;gap:0;flex-wrap:wrap;margin-block:22px 28px;position:sticky;top:env(safe-area-inset-top,0px);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding-inline:12px;z-index:5;box-shadow:var(--shadow)}
 .step{display:flex;align-items:center;justify-content:center;gap:9px;border:0;border-bottom:3px solid transparent;background:none;color:var(--ink-2);
-  flex:1;min-height:58px;padding:13px 16px 10px;border-radius:0;cursor:pointer;font:inherit;font-weight:600;transition:.15s}
+  flex:1;min-height:58px;padding:13px 16px 10px;border-radius:0;cursor:pointer;font:inherit;font-weight:600;text-decoration:none;transition:.15s}
 .step:hover{background:var(--surface-2);color:var(--ink)}
 .step .idx{flex-shrink:0;color:var(--ink-3);font-size:14px;font-weight:500;font-family:var(--font-ui)}
 .step[aria-selected="true"]{background:none;color:var(--red);border-bottom-color:var(--red);box-shadow:none}
@@ -375,10 +375,10 @@ select{font:inherit;min-height:48px;border:1px solid var(--line-2);border-radius
     </ol>
   </section>
 <nav role="tablist" aria-label="단계">
-  <button class="step" role="tab" id="t1" aria-selected="true" data-v="v1"><span class="idx">1</span>나의 선샤인</button>
-  <button class="step" role="tab" id="t2" aria-selected="false" data-v="v2"><span class="idx">2</span>파워팀</button>
-  <button class="step" role="tab" id="t3" aria-selected="false" data-v="v3"><span class="idx">3</span>챕터 전체 지도</button>
-  <button class="step" role="tab" id="t4" aria-selected="false" data-v="v4"><span class="idx">＋</span>멤버 관리</button>
+  <a class="step" role="tab" id="t1" aria-selected="true" aria-current="page" aria-controls="v1" data-v="v1" href="sunshine/"><span class="idx">1</span>나의 선샤인</a>
+  <a class="step" role="tab" id="t2" aria-selected="false" aria-controls="v2" data-v="v2" href="power-teams/"><span class="idx">2</span>파워팀</a>
+  <a class="step" role="tab" id="t3" aria-selected="false" aria-controls="v3" data-v="v3" href="chapter-map/"><span class="idx">3</span>챕터 전체 지도</a>
+  <a class="step" role="tab" id="t4" aria-selected="false" aria-controls="v4" data-v="v4" href="members/"><span class="idx">＋</span>멤버 관리</a>
 </nav>
 <div class="link-read-warning" id="link-read-warning" hidden><span id="link-read-detail" role="status"></span><button class="btn ghost" id="link-retry">연결 정보 다시 불러오기</button></div>
 
@@ -606,10 +606,56 @@ function synergyCandidates(member,field){
 function groups(){ const g=GROUPS_BASE.filter(x=>M.some(m=>m.g===x)); M.forEach(m=>{ if(m.g&&!g.includes(m.g)) g.push(m.g); }); return g; }
 const esc=t=>String(t==null?'':t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-document.querySelectorAll('.step').forEach(b=>b.addEventListener('click',()=>{
-  document.querySelectorAll('.step').forEach(x=>x.setAttribute('aria-selected',String(x===b)));
-  ['v1','v2','v3','v4'].forEach(v=>document.getElementById(v).hidden=(v!==b.dataset.v));
-}));
+/* ---------- 페이지 주소 · 공유 정보 ---------- */
+// PAGE_ROUTES_START
+const PAGE_ROUTES = [
+  {"view":"v1","slug":"sunshine","title":"나의 선샤인","description":"멤버별 핵심고객과 상생직군을 살펴보고 함께할 비즈니스 연결을 찾아보세요."},
+  {"view":"v2","slug":"power-teams","title":"파워팀","description":"같은 고객을 만나는 멤버들과 파워팀을 이루고 함께할 기회를 찾아보세요."},
+  {"view":"v3","slug":"chapter-map","title":"챕터 전체 지도","description":"부산 파이오니아 챕터의 연결 현황과 초대하면 좋은 업종을 한눈에 살펴보세요."},
+  {"view":"v4","slug":"members","title":"멤버 관리","description":"파이오니아 챕터 멤버 정보를 확인하고 승인된 본인 정보와 명단을 관리하세요."}
+];
+// PAGE_ROUTES_END
+const routePath=()=>location.pathname.replace(/\/index\.html$/,'/').replace(/\/?$/,'/');
+const firstRoute=PAGE_ROUTES.find(route=>routePath().endsWith('/'+route.slug+'/'));
+const APP_BASE_PATH=firstRoute?routePath().slice(0,-firstRoute.slug.length-1):routePath();
+const homeDescription='함께할 멤버를 찾고, 서로의 비즈니스를 연결하세요. 나의 핵심고객 · 상생직군 · 파워팀을 한눈에 볼 수 있습니다.';
+function currentRoute(){return PAGE_ROUTES.find(route=>routePath()===APP_BASE_PATH+route.slug+'/')||null;}
+function renderRoute(){
+  const route=currentRoute(),view=route?.view||'v1';
+  document.querySelectorAll('.step').forEach(link=>{
+    const selected=link.dataset.v===view;
+    link.setAttribute('aria-selected',String(selected));
+    if(selected)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');
+  });
+  PAGE_ROUTES.forEach(page=>document.getElementById(page.view).hidden=page.view!==view);
+  const title=route?route.title+' | 파이오니아 선샤인':'파이오니아 선샤인';
+  const description=route?.description||homeDescription;
+  const url=new URL(APP_BASE_PATH+(route?route.slug+'/':''),location.href).href;
+  document.title=title;
+  document.querySelector('link[rel="canonical"]').href=url;
+  for(const [selector,value] of [
+    ['meta[name="description"]',description],['meta[property="og:title"]',title],
+    ['meta[property="og:description"]',description],['meta[property="og:url"]',url],
+    ['meta[name="twitter:title"]',title],['meta[name="twitter:description"]',description]
+  ])document.querySelector(selector).content=value;
+}
+document.querySelectorAll('.step').forEach(link=>{
+  const route=PAGE_ROUTES.find(page=>page.view===link.dataset.v);
+  link.href=APP_BASE_PATH+route.slug+'/';
+  link.addEventListener('keydown',event=>{
+    if(event.key===' '&&!event.ctrlKey&&!event.metaKey&&!event.shiftKey&&!event.altKey){event.preventDefault();link.click();}
+  });
+  link.addEventListener('click',event=>{
+    if(event.button!==0||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
+    event.preventDefault();
+    const nextPath=new URL(link.href).pathname;
+    // Leave callback query/hash intact until the authentication SDK consumes it.
+    if(location.pathname!==nextPath)history.pushState(null,'',nextPath+location.search+location.hash);
+    renderRoute();
+  });
+});
+window.addEventListener('popstate',renderRoute);
+renderRoute();
 
 /* ---------- 1. 나의 선샤인 ---------- */
 const mlist=document.getElementById('mlist'), q=document.getElementById('q');
@@ -779,7 +825,7 @@ const canWrite=()=>Boolean(db&&online&&signedIn()&&accessReady&&!busy&&!authBusy
 const canEdit=member=>canWrite()&&allowedMember(member);
 const canManage=()=>canWrite()&&isAdmin();
 const editingAdmin=()=>el('v4').contains(document.activeElement)&&/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
-const authRedirect=()=>location.origin+location.pathname;
+const authRedirect=()=>location.origin+APP_BASE_PATH;
 const fromRow=r=>({id:r.id,n:r.name,co:r.company,f:r.field,g:r.team,c:r.customers||[],s:r.synergies||[],w:r.wants,nw:r.is_new,real:r.is_real,sortOrder:r.sort_order,updatedAt:r.updated_at});
 const toRow=m=>Object.fromEntries(Object.entries(COLUMN_MAP).filter(([k])=>Object.hasOwn(m,k)).map(([k,v])=>[v,m[k]]));
 function message(id,text,error=false){el(id).textContent=text;el(id).className='msg '+(error?'error':'success');}
