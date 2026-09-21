@@ -6,11 +6,11 @@
 <meta name="description" content="BNI 부산 파이오니아 챕터 선샤인·파워팀·결원 업종 지도">
 <style>:root{color-scheme:light dark;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html,body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
 <title>파이오니아 선샤인</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@700;900&family=IBM+Plex+Sans+KR:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" crossorigin>
 <style>
 :root{
+  --font-ui:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic","Segoe UI",sans-serif;
   --paper:#F5F6F8; --surface:#FFFFFF; --surface-2:#F7F8FA;
   --ink:#22242A; --ink-2:#555D68; --ink-3:#6D7580;
   --line:#E3E6EB; --line-2:#CFD4DC;
@@ -42,12 +42,12 @@
 *{box-sizing:border-box}
 body{
   margin:0; background:var(--paper); color:var(--ink);
-  font-family:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
-  font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased;
+  font-family:var(--font-ui);font-weight:400;font-synthesis:none;
+  font-size:17px; line-height:1.65;
 }
 .wrap{max-width:1240px; margin:0 auto; padding-inline:24px; padding-block:0 64px}
-h1,h2,h3{font-family:"Gothic A1","Apple SD Gothic Neo",sans-serif; margin:0; text-wrap:balance; letter-spacing:-.02em}
-.num{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums}
+h1,h2,h3{font-family:var(--font-ui); margin:0; text-wrap:balance; letter-spacing:-.02em}
+.num{font-family:var(--font-ui); font-variant-numeric:tabular-nums}
 
 header{background:var(--brand);color:#FFF}
 header>.wrap{padding-block:20px 22px}
@@ -55,7 +55,7 @@ header>.wrap{padding-block:20px 22px}
 .brand-wordmark{font-family:Arial,sans-serif;font-size:32px;font-weight:900;letter-spacing:-.06em;line-height:1;border-right:1px solid rgba(255,255,255,.4);padding-right:15px}
 .header-body{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-top:22px}
 .header-copy{min-width:0}
-h1{font-size:clamp(30px,4.4vw,44px); font-weight:900; margin:0}
+h1{font-size:clamp(30px,4.4vw,44px); font-weight:700; margin:0}
 .sub{color:#FFF; font-size:22px;line-height:1.7;margin-block:14px 0;max-width:70ch}
 .sub b{color:#FFF; font-weight:600}
 .sub,.note,.dialog-intro,.login-help{word-break:keep-all}
@@ -75,7 +75,7 @@ nav{display:flex;gap:0;flex-wrap:wrap;margin-block:22px 28px;position:sticky;top
 .step{display:flex;align-items:center;justify-content:center;gap:9px;border:0;border-bottom:3px solid transparent;background:none;color:var(--ink-2);
   flex:1;min-height:58px;padding:13px 16px 10px;border-radius:0;cursor:pointer;font:inherit;font-weight:600;transition:.15s}
 .step:hover{background:var(--surface-2);color:var(--ink)}
-.step .idx{flex-shrink:0;color:var(--ink-3);font-size:14px;font-weight:500;font-family:"IBM Plex Mono",monospace}
+.step .idx{flex-shrink:0;color:var(--ink-3);font-size:14px;font-weight:500;font-family:var(--font-ui)}
 .step[aria-selected="true"]{background:none;color:var(--red);border-bottom-color:var(--red);box-shadow:none}
 .step[aria-selected="true"] .idx{color:var(--red)}
 .step:focus-visible{outline:2px solid var(--red); outline-offset:2px}
@@ -116,10 +116,10 @@ nav{display:flex;gap:0;flex-wrap:wrap;margin-block:22px 28px;position:sticky;top
 .core{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:clamp(320px,45%,370px);height:clamp(320px,45%,370px);border-radius:50%;background:var(--surface);border:2px solid var(--red);display:flex;align-items:center;justify-content:center;text-align:center;padding:28px;box-shadow:0 0 0 8px var(--surface),0 0 0 9px color-mix(in srgb,var(--red) 16%,transparent),0 12px 36px color-mix(in srgb,var(--ink) 6%,transparent);z-index:1}
 .core-content{width:100%;min-width:0}
 .core .lab{font-size:14px;letter-spacing:.04em;color:var(--red);font-weight:600;margin-bottom:9px}
-.core .cust{font-family:"Gothic A1",sans-serif;font-weight:700;font-size:18px;line-height:1.55;word-break:keep-all;overflow-wrap:anywhere}
+.core .cust{font-family:var(--font-ui);font-weight:700;font-size:18px;line-height:1.55;word-break:keep-all;overflow-wrap:anywhere}
 .core .cust span{display:block}
 .core .field{margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:16px;color:var(--ink-2);line-height:1.45;word-break:keep-all;overflow-wrap:anywhere}
-.core .field strong{display:block;color:var(--ink);font-family:"Gothic A1",sans-serif;font-size:22px;line-height:1.45;margin-bottom:3px}
+.core .field strong{display:block;color:var(--ink);font-family:var(--font-ui);font-size:22px;line-height:1.45;margin-bottom:3px}
 .core .company{display:block;font-size:14px;margin-top:3px}
 .stagelist{display:none;flex-direction:column;gap:10px}
 .stage.is-list{display:none}.stagelist.is-list{display:flex}
@@ -127,7 +127,7 @@ nav{display:flex;gap:0;flex-wrap:wrap;margin-block:22px 28px;position:sticky;top
 @media(max-width:760px){.stage{display:none}.stagelist{display:flex}.stagelist .diagram-fallback-note{display:none}}
 .lcore{background:var(--red-soft);border:0.1pt solid var(--red);border-radius:10px;padding:20px;margin-bottom:6px}
 .lcore-label{font-size:14px;letter-spacing:.04em;color:var(--red);font-weight:600;margin-bottom:8px}
-.lcore-customers{font-family:"Gothic A1",sans-serif;font-weight:700;font-size:19px;line-height:1.65;margin:0;list-style:none;padding:0;word-break:keep-all;overflow-wrap:anywhere}
+.lcore-customers{font-family:var(--font-ui);font-weight:700;font-size:19px;line-height:1.65;margin:0;list-style:none;padding:0;word-break:keep-all;overflow-wrap:anywhere}
 .lcore-customers li+li{margin-top:3px}
 .lcore-member{font-size:16px;color:var(--ink-2);margin-top:15px;padding-top:12px;border-top:1px solid color-mix(in srgb,var(--red) 20%,transparent);line-height:1.6}
 .lcore-member strong{color:var(--ink);font-size:21px}.lcore-member .company{display:block;font-size:15px}
@@ -154,23 +154,23 @@ nav{display:flex;gap:0;flex-wrap:wrap;margin-block:22px 28px;position:sticky;top
 .want .want-summary{margin:14px 0 0;line-height:1.8}
 .want b{color:var(--ink);font-weight:600}
 .want .want-details{margin:24px 0 0}
-.want .want-detail{display:grid;grid-template-columns:160px minmax(0,1fr);gap:8px 22px}
+.want .want-detail{display:grid;grid-template-columns:184px minmax(0,1fr);gap:12px 22px;align-items:start}
 .want .want-detail+.want-detail{margin-top:24px}
-.want dt{font-weight:600;color:var(--ink)}
+.want dt{margin:0;padding:10px 12px;border:0.1pt solid var(--red);border-radius:8px;background:var(--red-soft);font-size:18px;font-weight:600;line-height:1.55;color:var(--ink);word-break:keep-all}
 .want dd{margin:0;min-width:0}
 .want .want-triggers{margin:0;padding-left:22px}
 .want .want-triggers li+li{margin-top:10px}
 .want .want-estimate{font-size:16px;line-height:1.75;color:var(--ink-2);margin:24px 0 0}
-@media(max-width:600px){.want{padding:20px 18px}.want .want-detail{grid-template-columns:minmax(0,1fr);gap:5px}.want .want-detail+.want-detail{margin-top:22px}.want .want-heading{gap:3px 14px}}
+@media(max-width:600px){.want{padding:20px 18px}.want .want-detail{grid-template-columns:minmax(0,1fr);gap:12px}.want dt{width:fit-content;max-width:100%}.want .want-detail+.want-detail{margin-top:22px}.want .want-heading{gap:3px 14px}}
 
 .eu{display:grid; grid-template-columns:26px 1fr auto; gap:10px; align-items:center; padding:9px 0; border-bottom:1px solid var(--line)}
 .eu:last-child{border-bottom:0}
-.eu .rk{font-family:"IBM Plex Mono",monospace; font-weight:600; color:var(--ink-2); font-size:14px}
+.eu .rk{font-family:var(--font-ui); font-weight:600; color:var(--ink-2); font-size:14px}
 .eu .bar{height:7px; border-radius:99px; background:var(--gap); opacity:.8; margin-top:5px}
 .eu .nm{font-weight:600; font-size:17px}
 .eu .who{font-size:14px; color:var(--ink-2); margin-top:3px; line-height:1.5}
-.eu .cnt{font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:20px; color:var(--red); text-align:right}
-.eu .cnt small{display:block; font-family:"IBM Plex Sans KR",sans-serif; font-size:13px; color:var(--ink-2); font-weight:400}
+.eu .cnt{font-family:var(--font-ui); font-weight:600; font-size:20px; color:var(--red); text-align:right}
+.eu .cnt small{display:block; font-family:var(--font-ui); font-size:13px; color:var(--ink-2); font-weight:400}
 
 .tsun{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:22px; box-shadow:var(--shadow)}
 .tsun h3{font-size:22px; font-weight:700}
@@ -185,8 +185,10 @@ th,td{text-align:left; padding:12px 10px; border-bottom:1px solid var(--line)}
 th{font-size:14px; color:var(--ink-2); font-weight:600;background:var(--surface-2)}
 .scrollx{overflow-x:auto}
 .note{font-size:16px; color:var(--ink-2); margin-top:14px; line-height:1.75}
-.legend{display:flex; gap:12px 20px; flex-wrap:wrap; font-size:16px; color:var(--ink); margin-top:20px;line-height:1.7}
-.legend i{display:inline-block; width:11px; height:11px; border-radius:50%; margin-right:5px; vertical-align:-1px}
+.legend{display:flex;justify-content:flex-end;align-items:center;gap:8px 20px;flex-wrap:wrap;font-size:16px;color:var(--ink);margin:0 0 16px;padding-bottom:14px;border-bottom:1px solid var(--line);line-height:1.7}
+.legend span{display:inline-flex;align-items:center;gap:7px;max-width:100%;word-break:keep-all}
+.legend i{display:inline-block;flex-shrink:0;width:11px;height:11px;border-radius:50%}
+@media(max-width:600px){.legend{justify-content:flex-start;gap:8px 16px;margin-bottom:18px}}
 input.cell{width:100%;min-width:0;min-height:48px; border:1px solid transparent; background:none; color:var(--ink); font:inherit; font-size:16px; padding:10px 8px; border-radius:8px}
 input.cell:hover{border-color:var(--line)}
 input.cell:focus{outline:none; border-color:var(--red); background:var(--surface-2)}
@@ -327,14 +329,14 @@ select{font:inherit;min-height:48px;border:1px solid var(--line-2);border-radius
     </div>
     <div>
       <div class="panel panel-pad">
-        <div class="stage" id="stage"><svg class="rays" id="rays" viewBox="0 0 1000 690" preserveAspectRatio="none" aria-hidden="true"></svg></div>
-        <div class="stagelist" id="stagelist"></div>
-        <div id="wantbox"></div>
         <div class="legend">
           <span><i style="background:var(--surface);border:1.5px solid var(--red)"></i>핵심고객 · 선샤인 중심</span>
           <span><i style="background:var(--red)"></i>챕터에 있는 상생직군</span>
           <span><i style="background:var(--gap-soft);border:1px dashed var(--gap)"></i>비어 있는 자리 · 초대 타깃</span>
         </div>
+        <div class="stage" id="stage"><svg class="rays" id="rays" viewBox="0 0 1000 690" preserveAspectRatio="none" aria-hidden="true"></svg></div>
+        <div class="stagelist" id="stagelist"></div>
+        <div id="wantbox"></div>
         <p class="note">관리자가 본인 확인을 승인하면 멤버 관리 탭에서 내 정보를 수정할 수 있습니다.</p>
       </div>
     </div>
