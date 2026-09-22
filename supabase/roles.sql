@@ -164,7 +164,7 @@ begin
   if not found then
     raise exception using errcode = 'P0001', message = '가입한 계정을 찾을 수 없습니다. 회원가입 후 다시 확인하세요.';
   end if;
-  if not exists (
+  if access_role <> 'viewer' and not exists (
     select 1 from auth.users u where u.id = target_user_id
       and u.email_confirmed_at is not null and coalesce(u.email, '') <> ''
       and not coalesce(u.is_anonymous, false)
@@ -193,8 +193,40 @@ exception when unique_violation then
 end;
 $$;
 
+-- Only admins can inspect confirmation status; auth.users remains private.
+create or replace function private.list_member_accounts()
+returns table (
+  user_id uuid, email text, role text, member_id uuid, requested_member_id uuid,
+  request_status text, created_at timestamptz, updated_at timestamptz,
+  email_confirmed boolean
+)
+language plpgsql stable security definer set search_path = ''
+as $$
+begin
+  if not private.is_member_admin() then
+    raise exception using errcode = '42501', message = '관리자만 계정과 인증 상태를 확인할 수 있습니다.';
+  end if;
+  return query
+    select a.user_id, a.email, a.role, a.member_id, a.requested_member_id,
+      a.request_status, a.created_at, a.updated_at,
+      (u.email_confirmed_at is not null and coalesce(u.email, '') <> ''
+       and not coalesce(u.is_anonymous, false)) as email_confirmed
+    from public.member_accounts a
+    join auth.users u on u.id = a.user_id
+    order by a.email, a.user_id;
+end;
+$$;
+
 -- Public endpoints are invoker wrappers; privilege-bearing implementations stay
--- outside the exposed schema. Both implementations perform their own auth checks.
+-- outside the exposed schema. All implementations perform their own auth checks.
+create or replace function public.list_member_accounts()
+returns table (
+  user_id uuid, email text, role text, member_id uuid, requested_member_id uuid,
+  request_status text, created_at timestamptz, updated_at timestamptz,
+  email_confirmed boolean
+)
+language sql stable security invoker set search_path = ''
+as $$ select * from private.list_member_accounts(); $$;
 create or replace function public.request_member_access(target_member_id uuid)
 returns jsonb language sql security invoker set search_path = ''
 as $$ select private.request_member_access(target_member_id); $$;
@@ -203,10 +235,14 @@ create or replace function public.admin_set_member_access(
 )
 returns jsonb language sql security invoker set search_path = ''
 as $$ select private.admin_set_member_access(target_user_id, access_role, target_member_id); $$;
+revoke all on function private.list_member_accounts() from public, anon, authenticated;
+revoke all on function public.list_member_accounts() from public, anon, authenticated;
 revoke all on function private.request_member_access(uuid) from public, anon, authenticated;
 revoke all on function private.admin_set_member_access(uuid, text, uuid) from public, anon, authenticated;
 revoke all on function public.request_member_access(uuid) from public, anon, authenticated;
 revoke all on function public.admin_set_member_access(uuid, text, uuid) from public, anon, authenticated;
+grant execute on function private.list_member_accounts() to authenticated;
+grant execute on function public.list_member_accounts() to authenticated;
 grant execute on function private.request_member_access(uuid) to authenticated;
 grant execute on function private.admin_set_member_access(uuid, text, uuid) to authenticated;
 grant execute on function public.request_member_access(uuid) to authenticated;

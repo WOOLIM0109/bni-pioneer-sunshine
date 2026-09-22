@@ -459,7 +459,7 @@ select{font:inherit;min-height:48px;border:1px solid var(--line-2);border-radius
   <section class="panel panel-pad access-panel" id="accounts-panel" hidden aria-labelledby="accounts-title">
     <h3 id="accounts-title">가입자 권한 관리</h3>
     <p class="note">요청한 이름·회사와 이메일을 확인한 뒤 승인하세요. ‘본인 정보 수정’ 권한을 줄 때만 해당 멤버를 연결합니다. 관리자는 연결 없이 전체 명단과 가입자 권한을 관리하고, 읽기 권한은 정보 조회만 가능합니다.</p>
-    <div class="scrollx"><table id="accountstable"></table></div><div class="msg" id="accounts-message" role="status"></div>
+    <div class="msg" id="accounts-list-message" role="status"></div><div class="scrollx"><table id="accountstable"></table></div><div class="msg" id="accounts-message" role="status"></div>
   </section>
   <section class="panel panel-pad interview-panel" id="interview-panel" hidden aria-labelledby="interview-title">
     <div class="interview-heading"><div><span class="interview-kicker">관리자 전용</span><h3 id="interview-title">인터뷰로 선샤인 다듬기</h3></div><span class="interview-private">원문 비공개</span></div>
@@ -811,6 +811,8 @@ let db=null, session=null, online=false, busy=false, connecting=false, authBusy=
 let readVersion=0, channel=null, realtimeOK=false, refreshTimer=null, pendingRefresh=false;
 const ACCOUNT_COLUMNS='user_id,email,role,member_id,requested_member_id,request_status,updated_at';
 let account=null, accounts=[], accessReady=false, accessVersion=0, accessError='', accessListError='', pendingAccessRender=false;
+let accountDraftOwner='',writeAccessPending=false;
+const accountDrafts=new Map(),accountMessages=new Map();
 let authMode='login', recoveryUserId=null;
 const recoveryStorageKey='pioneer-sunshine-password-recovery';
 const authFragment=new URLSearchParams(location.hash.slice(1));
@@ -893,6 +895,8 @@ function permissions(){
   el('accountstable').querySelectorAll('button,select').forEach(control=>control.disabled=!admin);
   el('accountstable').querySelectorAll('tbody tr').forEach(row=>{
     const role=row.querySelector('.account-role').value,memberSelect=row.querySelector('.account-member');
+    const target=accounts.find(a=>a.user_id===row.dataset.userId);
+    row.querySelector('.account-save').disabled=!admin||(role!=='viewer'&&target?.email_confirmed===false);
     memberSelect.hidden=role!=='member';memberSelect.disabled=!admin||role!=='member';
     row.querySelector('.account-member-hint').textContent=role==='admin'?'전체 멤버 관리 · 연결 불필요':role==='viewer'?'읽기 전용 · 연결 불필요':'본인 확인 후 이 계정이 수정할 멤버를 선택하세요.';
   });
@@ -907,9 +911,9 @@ async function loadAccess(background=false){
     const result=await request(db.from('member_accounts').select(ACCOUNT_COLUMNS).eq('user_id',userId).maybeSingle());
     if(version!==accessVersion||session?.user?.id!==userId)return false;
     if(!result||!['viewer','member','admin'].includes(result.role))throw new Error('계정 권한이 등록되지 않았습니다.');
-    account=result;accessReady=true;accessError='';accounts=[];accessListError='';permissions();
+    account=result;accessReady=true;accessError='';if(result.role!=='admin')accounts=[];accessListError='';permissions();
     if(result.role==='admin'){
-      try{const list=await request(db.from('member_accounts').select(ACCOUNT_COLUMNS).order('email'));if(version!==accessVersion||session?.user?.id!==userId)return false;accounts=list||[];}
+      try{const list=await request(db.rpc('list_member_accounts',{}));if(version!==accessVersion||session?.user?.id!==userId)return false;accounts=(list||[]).sort((a,b)=>String(a.email).localeCompare(String(b.email)));}
       catch(error){if(version!==accessVersion)return false;accessListError='가입자 목록을 불러오지 못했습니다. '+explain(error);}
     }
     if(background&&(el('accountstable').contains(document.activeElement)||el('member-access-panel').contains(document.activeElement)))pendingAccessRender=true;
@@ -923,27 +927,44 @@ async function loadAccess(background=false){
 }
 function memberLabel(id){const member=M.find(m=>m.id===id);return member?[member.n,member.co,member.f].filter(Boolean).join(' · '):'멤버 없음';}
 function memberOptions(selected='',includeEmpty=true){return (includeEmpty?'<option value="">멤버를 선택하세요</option>':'')+M.filter(m=>m.id).map(m=>`<option value="${esc(m.id)}"${m.id===selected?' selected':''}>${esc(memberLabel(m.id))}</option>`).join('');}
+function syncAccountDrafts(){
+  const owner=signedIn()?session.user.id:'';
+  if(accountDraftOwner!==owner||(accessReady&&account?.user_id===owner&&account.role!=='admin')){accountDraftOwner=owner;accountDrafts.clear();accountMessages.clear();}
+}
+function accountStatus(userId,text,error=false){
+  accountMessages.set(userId,{text,error});
+  const status=el('account-status-'+userId);
+  if(status){status.setAttribute('role',error?'alert':'status');message(status.id,text,error);}
+}
+function rememberAccountDraft(row){
+  accountDrafts.set(row.dataset.userId,{role:row.querySelector('.account-role').value,memberId:row.querySelector('.account-member').value});
+}
 function renderAccess(){
+  syncAccountDrafts();
   pendingAccessRender=false;
   const selected=el('request-member').value||account?.requested_member_id||'';
   el('request-member').innerHTML=memberOptions(selected);
   el('member-access-note').textContent=account?.request_status==='pending'?'승인 대기 중 · '+memberLabel(account.requested_member_id)+'로 요청했습니다. 잘못 선택했다면 다른 멤버로 다시 요청할 수 있습니다.':'본인 이름과 회사를 선택해 요청하세요. 관리자가 확인하면 본인 정보만 수정할 수 있습니다.';
   if(!isAdmin()){el('accountstable').innerHTML='';return;}
-  if(accessListError){el('accountstable').innerHTML='';message('accounts-message',accessListError,true);return;}
+  message('accounts-list-message',accessListError,Boolean(accessListError));
   el('accountstable').innerHTML='<thead><tr><th>가입자 · 요청</th><th>권한</th><th>연결할 멤버</th><th>적용</th></tr></thead><tbody>'+accounts.map(a=>{
-    const pending=a.request_status==='pending', role=pending?'member':a.role, memberId=pending?a.requested_member_id:a.member_id;
-    return `<tr data-user-id="${esc(a.user_id)}"><td data-label="가입자">${esc(a.email)}<div class="account-detail">현재: ${a.role==='admin'?'관리자':a.role==='member'?'본인 정보 수정':'읽기'}${pending?'<br>승인 요청: '+esc(memberLabel(a.requested_member_id)):''}</div></td><td data-label="권한"><select class="account-role" aria-label="${esc(a.email)} 권한">${[['viewer','읽기'],['member','본인 정보 수정'],['admin','관리자']].map(([v,t])=>`<option value="${v}"${role===v?' selected':''}>${t}</option>`).join('')}</select></td><td data-label="연결할 멤버"><select class="account-member" aria-label="${esc(a.email)} 연결할 멤버" aria-describedby="account-member-hint-${esc(a.user_id)}">${memberOptions(memberId)}</select><div class="account-detail account-member-hint" id="account-member-hint-${esc(a.user_id)}"></div></td><td data-label="적용"><div class="account-actions"><button class="btn primary account-save">${pending?'승인 · 저장':'권한 저장'}</button>${pending?'<button class="btn ghost account-reject">요청 반려</button>':''}</div></td></tr>`;
+    const pending=a.request_status==='pending',draft=accountDrafts.get(a.user_id),role=draft?.role||(pending?'member':a.role),memberId=draft?.memberId??(pending?a.requested_member_id:a.member_id),status=accountMessages.get(a.user_id);
+    const verification=a.email_confirmed===true?'인증 완료':a.email_confirmed===false?'이메일 인증 대기 · 가입 확인 메일의 링크를 누르고 페이지를 새로고침하세요.':'이메일 인증 상태 확인 필요';
+    return `<tr data-user-id="${esc(a.user_id)}"><td data-label="가입자">${esc(a.email)}<div class="account-detail">현재: ${a.role==='admin'?'관리자':a.role==='member'?'본인 정보 수정':'읽기'}${pending?'<br>승인 요청: '+esc(memberLabel(a.requested_member_id)):''}</div><div class="account-detail account-verification">${verification}</div></td><td data-label="권한"><select class="account-role" aria-label="${esc(a.email)} 권한">${[['viewer','읽기'],['member','본인 정보 수정'],['admin','관리자']].map(([v,t])=>`<option value="${v}"${role===v?' selected':''}>${t}</option>`).join('')}</select></td><td data-label="연결할 멤버"><select class="account-member" aria-label="${esc(a.email)} 연결할 멤버" aria-describedby="account-member-hint-${esc(a.user_id)}">${memberOptions(memberId)}</select><div class="account-detail account-member-hint" id="account-member-hint-${esc(a.user_id)}"></div></td><td data-label="적용"><div class="account-actions"><button class="btn primary account-save">${pending?'승인 · 저장':'권한 저장'}</button>${pending?'<button class="btn ghost account-reject">요청 반려</button>':''}</div><div class="msg ${status?.error?'error':'success'}" id="account-status-${esc(a.user_id)}" role="${status?.error?'alert':'status'}" aria-live="polite">${esc(status?.text||'')}</div></td></tr>`;
   }).join('')+'</tbody>';
   el('accountstable').querySelectorAll('.account-save,.account-reject').forEach(button=>button.onclick=()=>saveAccount(button));
-  el('accountstable').querySelectorAll('.account-role').forEach(select=>select.onchange=permissions);
+  el('accountstable').querySelectorAll('select').forEach(select=>select.onchange=()=>{rememberAccountDraft(select.closest('tr'));permissions();});
 }
 async function saveAccount(button){
-  const row=button.closest('tr'),userId=row.dataset.userId,role=button.classList.contains('account-reject')?'viewer':row.querySelector('.account-role').value;
+  const actorId=session?.user?.id,row=button.closest('tr'),userId=row.dataset.userId,role=button.classList.contains('account-reject')?'viewer':row.querySelector('.account-role').value;
   const memberId=role==='member'?row.querySelector('.account-member').value:null;
-  if(role==='member'&&!memberId){message('accounts-message','본인 정보 수정 권한에는 연결할 멤버를 선택해야 합니다.',true);return;}
-  const email=accounts.find(a=>a.user_id===userId)?.email||'';
+  rememberAccountDraft(row);
+  const report=text=>{message('accounts-message',text,true);accountStatus(userId,text,true);};
+  if(role==='member'&&!memberId){report('본인 정보 수정 권한에는 연결할 멤버를 선택해야 합니다.');return;}
+  const target=accounts.find(a=>a.user_id===userId),email=target?.email||'';
+  if(role!=='viewer'&&target?.email_confirmed===false){report('이메일 인증이 아직 끝나지 않았습니다. 가입 확인 메일의 링크를 누르고 페이지를 새로고침한 뒤 권한을 저장해 주세요.');return;}
   if((role==='admin'||userId===session?.user?.id)&&!confirm(email+' 계정의 권한을 '+(role==='admin'?'관리자':role==='member'?'본인 정보 수정':'읽기')+'로 변경할까요?'))return;
-  await write(async()=>{await request(db.rpc('admin_set_member_access',{target_user_id:userId,access_role:role,target_member_id:memberId}));return '가입자 권한을 저장했습니다.';},'accounts-message');
+  await write(async()=>{await request(db.rpc('admin_set_member_access',{target_user_id:userId,access_role:role,target_member_id:memberId}));if(session?.user?.id===actorId)accountDrafts.delete(userId);return '가입자 권한을 저장했습니다.';},'accounts-message',null,userId);
 }
 el('request-member').onchange=permissions;
 el('own-memberb').onclick=()=>openAdminMember(account?.member_id);
@@ -1035,7 +1056,7 @@ function acceptSession(next,event){
     if(recoveryUserId===next.user.id&&!authUrlError)setTimeout(()=>{if(session?.user?.id===recoveryUserId&&!(el('login-dialog').open&&authMode==='password'))openAuth('password');},0);
   }
   permissions();
-  const userId=next?.user?.id;setTimeout(()=>{if(db&&session?.user?.id===userId)loadAccess(true);},0);
+  const userId=next?.user?.id;setTimeout(()=>{if(db&&session?.user?.id===userId){if(writeAccessPending){pendingRefresh=true;return;}loadAccess(true);}},0);
 }
 function authExplain(error){
   const detail=String(error?.message||error||''),code=error?.code||'';
@@ -1138,25 +1159,32 @@ function openAdminMember(memberId){
 }
 el('admin-member-search').oninput=renderAdminMemberPicker;
 el('admin-member-select').onchange=()=>{adminSelectedKey=el('admin-member-select').value;if(adminSelectedKey)el('admin-member-search').value='';renderAdminMemberPicker();};
-async function write(action,messageId='adminmsg',scope=null){
+async function loadWriteAccess(){
+  writeAccessPending=true;
+  try{return await loadAccess();}finally{writeAccessPending=false;}
+}
+async function write(action,messageId='adminmsg',scope=null,statusUserId=null){
   if(busy||authBusy)return false;
-  if(!db||!online||!signedIn()){message(messageId,online?'수정하려면 로그인하세요.':'오프라인에서는 수정할 수 없습니다. 먼저 다시 연결하세요.',true);renderAdmin();return false;}
-  busy=true;++readVersion;permissions();message(messageId,'서버에 저장하고 있습니다.');
+  const actorId=session?.user?.id,report=(text,error=false)=>{message(messageId,text,error);if(statusUserId&&session?.user?.id===actorId&&isAdmin())accountStatus(statusUserId,text,error);};
+  if(!db||!online||!signedIn()){report(online?'수정하려면 로그인하세요.':'오프라인에서는 수정할 수 없습니다. 먼저 다시 연결하세요.',true);renderAdmin();return false;}
+  busy=true;++readVersion;permissions();report('서버에 저장하고 있습니다.');
   let outcome='',error=null;const userId=session.user.id;
   try{
-    const loaded=await loadAccess();
+    const loaded=await loadWriteAccess();
     if(!loaded||session?.user?.id!==userId)throw new Error('권한을 확인하지 못했습니다. 다시 연결한 뒤 시도해 주세요.');
     const allowed=scope==='request'?account.role==='viewer':scope?allowedMember(scope):isAdmin();
     if(!allowed)throw {code:'42501'};
     outcome=await action();
   }catch(e){error=e;}
   const refreshed=await loadMembers();
-  await loadAccess();
+  const accessRefreshed=await loadWriteAccess();
   busy=false;permissions();
-  if(error)message(messageId,explain(error),true);
-  else message(messageId,(typeof outcome==='string'?outcome:'저장했습니다.')+(refreshed?'':' 저장은 완료됐지만 명단을 다시 불러오지 못했습니다. 다시 연결해 확인하세요.'),!refreshed);
+  const accountRefreshFailed=Boolean(statusUserId&&(!accessRefreshed||accessListError));
+  if(error)report(explain(error),true);
+  else if(accountRefreshFailed)report('권한은 저장됐지만 가입자 목록을 다시 불러오지 못했습니다. 다시 연결해 저장된 권한을 확인하세요.',true);
+  else report((typeof outcome==='string'?outcome:'저장했습니다.')+(refreshed?'':' 저장은 완료됐지만 명단을 다시 불러오지 못했습니다. 다시 연결해 확인하세요.'),!refreshed);
   if(pendingRefresh)scheduleRefresh();
-  return !error&&refreshed;
+  return !error&&refreshed&&!accountRefreshFailed;
 }
 function matchVersion(query,member){
   query=query.eq('id',member.id);

@@ -21,7 +21,7 @@ async function getPlaywright() {
 
 function makeMock(initial, options) {
   const clone = value => JSON.parse(JSON.stringify(value));
-  const account = (id, role, member = null) => ({ user_id: id, email: `${id}@example.test`, role, member_id: member, requested_member_id: null, request_status: 'none', updated_at: '2026-09-21T00:00:00.000Z' });
+  const account = (id, role, member = null) => ({ user_id: id, email: `${id}@example.test`, role, member_id: member, requested_member_id: null, request_status: 'none', updated_at: '2026-09-21T00:00:00.000Z', email_confirmed: true });
   const state = window.__db = {
     initialUrl: location.href,
     members: clone(initial), links: clone(options.links || []), failLinkReads: !!options.failLinkReads, log: [], pending: [], holdWrites: false, revision: 0,
@@ -31,7 +31,7 @@ function makeMock(initial, options) {
     pendingPrivateReads: [], holdPrivateReads: false, pendingAnalysis: [], holdAnalysis: false, failAnalysis: false, aiConfigured: true,
     storageObjects: Object.create(null), interviews: [],
     details: initial.map(row => ({ member_id: row.id, good_referral: `PRIVATE_REFERRAL_${row.id}`, triggers: [`PRIVATE_TRIGGER_${row.id}`], customer_companies: [`PRIVATE_COMPANY_${row.id}`], revision: 1 })),
-    failReads: options.failReads, failWrites: false, failAccess: options.failAccess, failRpc: false, failRpcName: null, holdRpcName: null, authError: null, callbacks: [],
+    failReads: options.failReads, failWrites: false, failAccess: options.failAccess, failRpc: false, failRpcName: null, holdRpcName: null, failAccountList: false, failAccountListAfterSave: false, authError: null, callbacks: [],
     accounts: [account('test-user', options.role || 'admin', options.role === 'member' ? initial[0]?.id : null), account('second-user', 'viewer'), { ...account('pending-user', 'viewer'), requested_member_id: initial[1]?.id, request_status: 'pending' }, { ...account('reject-user', 'viewer'), requested_member_id: initial[2]?.id, request_status: 'pending' }],
     session: options.auth ? { user: { id: 'test-user', email: 'member@example.test' } } : null,
     release() { this.holdWrites = false; this.pending.splice(0).forEach(resolve => resolve()); },
@@ -116,12 +116,16 @@ function makeMock(initial, options) {
     constructor(name, value) { this.name = name; this.value = value; }
     abortSignal() { return this; }
     async execute() {
-      const readOnly = ['get_member_details', 'list_member_interviews', 'get_member_interview'].includes(this.name);
+      const readOnly = ['list_member_accounts', 'get_member_details', 'list_member_interviews', 'get_member_interview'].includes(this.name);
       state.log.push({ action: 'rpc', name: this.name, value: clone(this.value), readOnly });
       if (readOnly) {
         const reader = clone(currentAccount() || null);
         let data;
-        if (this.name === 'get_member_details') {
+        if (this.name === 'list_member_accounts') {
+          if (reader?.role !== 'admin') return permissionError();
+          if (state.failAccountList) return { data: null, error: { message: '테스트 가입자 목록 조회 실패', code: 'TEST_FAILURE' } };
+          return { data: clone(state.accounts), error: null };
+        } else if (this.name === 'get_member_details') {
           if (!reader || reader.role === 'viewer') return { data: [], error: null };
           data = clone(state.details.filter(row => (reader.role === 'admin' || row.member_id === reader.member_id) && (!this.value?.target_member_id || row.member_id === this.value.target_member_id)));
         } else {
@@ -199,7 +203,9 @@ function makeMock(initial, options) {
       if (this.name === 'admin_set_member_access') {
         if (own?.role !== 'admin') return permissionError();
         const row = state.accounts.find(row => row.user_id === this.value.target_user_id);
+        if (this.value.access_role !== 'viewer' && row.email_confirmed === false) return { data: null, error: { code: 'P0001', message: '이메일 인증이 끝나지 않은 계정입니다. 먼저 메일에서 인증해 주세요.' } };
         Object.assign(row, { role: this.value.access_role, member_id: this.value.target_member_id ?? null, request_status: this.value.access_role === 'viewer' ? 'rejected' : 'approved', requested_member_id: null });
+        if (state.failAccountListAfterSave) state.failAccountList = true;
         return { data: clone(row), error: null };
       }
       throw new Error(`Unsupported test RPC: ${this.name}`);
@@ -838,6 +844,121 @@ try {
     await reject.locator('.account-reject').click();
     await page.waitForFunction(() => window.__db.accounts.find(row => row.user_id === 'reject-user').request_status === 'rejected');
     assert.equal(await page.evaluate(() => window.__db.accounts.find(row => row.user_id === 'reject-user').member_id), null);
+    await context.close();
+  });
+  await check('Token refresh cannot cancel a permission save, while switching users still fails closed', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true });
+    await page.click('#t4');
+    await page.waitForFunction(() => !pendingRefresh && !busy);
+    await page.evaluate(() => {
+      window.__db.holdAccessReads = true;
+      void saveAccount(document.querySelector('#accountstable tr[data-user-id="pending-user"] .account-save'));
+    });
+    await page.waitForFunction(() => window.__db.pendingAccessReads.length === 1);
+    await page.evaluate(() => window.__db.setSession(window.__db.session, 'TOKEN_REFRESHED'));
+    await page.waitForFunction(() => pendingRefresh);
+    assert.equal(await page.evaluate(() => window.__db.pendingAccessReads.length), 1, 'Token refresh must defer its background lookup until the write finishes.');
+    await page.evaluate(() => window.__db.releaseAccessReads());
+    await page.waitForFunction(() => !busy && window.__db.accounts.find(a => a.user_id === 'pending-user').role === 'member');
+    assert.match(await page.locator('#account-status-pending-user').innerText(), /권한을 저장했습니다/);
+    await page.waitForFunction(() => !pendingRefresh);
+    await page.locator('#accountstable tr[data-user-id="second-user"] .account-role').selectOption('admin');
+    const before = await page.evaluate(() => window.__db.log.filter(item => item.name === 'admin_set_member_access').length);
+    await page.evaluate(() => {
+      window.__db.holdAccessReads = true;
+      void saveAccount(document.querySelector('#accountstable tr[data-user-id="reject-user"] .account-save'));
+    });
+    await page.waitForFunction(() => window.__db.pendingAccessReads.length === 1);
+    await page.evaluate(() => window.__db.setSession({ user: { id: 'second-user', email: 'viewer@example.test' } }));
+    await page.evaluate(() => window.__db.releaseAccessReads());
+    await page.waitForFunction(() => !busy && accessReady && account.user_id === 'second-user');
+    assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.name === 'admin_set_member_access').length), before, 'Changing the actor must cancel an outstanding permission save.');
+    assert.equal(await page.evaluate(() => accountDrafts.size + accountMessages.size), 0, 'Drafts and row messages must not carry over to another actor.');
+    assert(await page.locator('#accounts-panel').isHidden());
+    await context.close();
+  });
+  await check('Permission drafts survive refresh, another row saving, and errors shown beside the affected account', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true });
+    await page.click('#t4');
+    const pending = page.locator('#accountstable tr[data-user-id="pending-user"]');
+    const other = page.locator('#accountstable tr[data-user-id="second-user"]');
+    await other.locator('.account-role').selectOption('admin');
+    await pending.locator('.account-member').selectOption(seed[2].id);
+    await page.evaluate(async () => { document.activeElement?.blur(); await loadAccess(true); });
+    assert.equal(await pending.locator('.account-member').inputValue(), seed[2].id);
+    assert.equal(await other.locator('.account-role').inputValue(), 'admin');
+    await pending.locator('.account-save').click();
+    await page.waitForFunction(() => !busy && window.__db.accounts.find(a => a.user_id === 'pending-user').role === 'member');
+    assert.equal(await other.locator('.account-role').inputValue(), 'admin', 'Saving one row must preserve drafts in other rows.');
+    assert.equal(await page.evaluate(() => accountDrafts.has('pending-user')), false);
+    await page.evaluate(() => { window.__db.failRpc = true; window.__db.failRpcName = 'admin_set_member_access'; });
+    await other.locator('.account-save').click();
+    await page.waitForFunction(() => !busy && document.getElementById('account-status-second-user').textContent.includes('테스트 권한 저장 실패'));
+    await page.evaluate(() => renderAccess());
+    assert.equal(await other.locator('.account-role').inputValue(), 'admin', 'A failed save must retain the attempted permission.');
+    assert.equal(await page.locator('#account-status-second-user').getAttribute('role'), 'alert');
+    assert.match(await page.locator('#account-status-second-user').innerText(), /테스트 권한 저장 실패/);
+    assert.equal(await page.evaluate(() => window.__db.accounts.find(a => a.user_id === 'second-user').role), 'viewer');
+    await page.evaluate(async () => { window.__db.accounts.find(a => a.user_id === 'test-user').role = 'viewer'; await loadAccess(); });
+    assert.equal(await page.evaluate(() => accountDrafts.size + accountMessages.size), 0, 'Confirmed loss of admin access must discard other-account drafts and statuses.');
+    await page.evaluate(async () => { window.__db.accounts.find(a => a.user_id === 'test-user').role = 'admin'; await loadAccess(); });
+    assert.equal(await other.locator('.account-role').inputValue(), 'viewer', 'Re-promotion must not revive old drafts.');
+    await context.close();
+  });
+  await check('Unconfirmed accounts explain blocked grants, allow revocation, and leave unknown verification to the server', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true });
+    await page.click('#t4');
+    await page.evaluate(async () => {
+      for (const id of ['second-user', 'pending-user']) window.__db.accounts.find(a => a.user_id === id).email_confirmed = false;
+      await loadAccess();
+    });
+    const target = page.locator('#accountstable tr[data-user-id="second-user"]');
+    assert.match(await target.locator('.account-verification').innerText(), /이메일 인증 대기.*가입 확인 메일/);
+    assert.equal(await page.locator('#accountstable tr[data-user-id="test-user"] .account-verification').innerText(), '인증 완료');
+    await target.locator('.account-role').selectOption('admin');
+    assert(await target.locator('.account-save').isDisabled());
+    await target.locator('.account-save').evaluate(button => saveAccount(button));
+    assert.match(await page.locator('#account-status-second-user').innerText(), /이메일 인증이 아직 끝나지/);
+    await target.locator('.account-role').selectOption('member');
+    await target.locator('.account-member').selectOption(seed[0].id);
+    assert(await target.locator('.account-save').isDisabled());
+    await target.locator('.account-save').evaluate(button => saveAccount(button));
+    assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.name === 'admin_set_member_access').length), 0);
+    await target.locator('.account-role').selectOption('viewer');
+    assert(await target.locator('.account-save').isEnabled());
+    await target.locator('.account-save').click();
+    await page.waitForFunction(() => !busy && window.__db.accounts.find(a => a.user_id === 'second-user').request_status === 'rejected');
+    await page.locator('#accountstable tr[data-user-id="pending-user"] .account-reject').click();
+    await page.waitForFunction(() => !busy && window.__db.accounts.find(a => a.user_id === 'pending-user').request_status === 'rejected');
+    await page.evaluate(async () => { delete window.__db.accounts.find(a => a.user_id === 'second-user').email_confirmed; await loadAccess(); });
+    await target.locator('.account-role').selectOption('admin');
+    assert(await target.locator('.account-save').isEnabled(), 'Unknown verification must not be treated as explicitly unconfirmed.');
+    await target.locator('.account-save').click();
+    await page.waitForFunction(() => !busy && window.__db.accounts.find(a => a.user_id === 'second-user').role === 'admin');
+    await context.close();
+  });
+  await check('Server-side verification errors remain visible and a failed list reload cannot report ordinary save success', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true });
+    await page.click('#t4');
+    const target = page.locator('#accountstable tr[data-user-id="pending-user"]');
+    await target.locator('.account-member').selectOption(seed[2].id);
+    await page.evaluate(() => { window.__db.accounts.find(a => a.user_id === 'pending-user').email_confirmed = false; });
+    await target.locator('.account-save').click();
+    await page.waitForFunction(() => !busy && document.getElementById('account-status-pending-user').textContent.includes('이메일 인증이 끝나지'));
+    assert.equal(await page.locator('#account-status-pending-user').getAttribute('role'), 'alert');
+    assert.equal(await target.locator('.account-member').inputValue(), seed[2].id);
+    assert.equal(await page.evaluate(() => window.__db.accounts.find(a => a.user_id === 'pending-user').role), 'viewer');
+    await page.evaluate(async () => {
+      window.__db.accounts.find(a => a.user_id === 'pending-user').email_confirmed = true;
+      await loadAccess();
+      window.__db.failAccountListAfterSave = true;
+    });
+    await target.locator('.account-save').click();
+    await page.waitForFunction(() => !busy && document.getElementById('accounts-message').textContent.includes('권한은 저장됐지만 가입자 목록'));
+    assert.equal(await page.evaluate(() => window.__db.accounts.find(a => a.user_id === 'pending-user').role), 'member');
+    assert.match(await page.locator('#account-status-pending-user').innerText(), /권한은 저장됐지만 가입자 목록/);
+    assert.equal(await page.locator('#account-status-pending-user').getAttribute('role'), 'alert');
+    assert.equal(await page.evaluate(() => accountDrafts.has('pending-user')), false, 'A completed RPC consumes its draft even when the later list reload fails.');
     await context.close();
   });
   await check('Authenticated updates commit only after success and failed updates restore saved values', async () => {
