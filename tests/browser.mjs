@@ -21,7 +21,7 @@ async function getPlaywright() {
 
 function makeMock(initial, options) {
   const clone = value => JSON.parse(JSON.stringify(value));
-  const account = (id, role, member = null) => ({ user_id: id, email: `${id}@example.test`, role, member_id: member, requested_member_id: null, request_status: 'none', updated_at: '2026-09-21T00:00:00.000Z', email_confirmed: true });
+  const account = (id, role, member = null) => ({ user_id: id, email: `${id}@example.test`, role, member_id: member, requested_member_id: null, request_status: 'none', updated_at: '2026-09-21T00:00:00.000Z', email_confirmed: true, signup_name: '' });
   const state = window.__db = {
     initialUrl: location.href,
     members: clone(initial), links: clone(options.links || []), failLinkReads: !!options.failLinkReads, log: [], pending: [], holdWrites: false, revision: 0,
@@ -536,6 +536,7 @@ try {
       await page.click('#loginb');
       await page.click('#auth-signup-mode');
       await page.fill('#login-email', 'route-signup@example.test');
+      await page.fill('#signup-name', '가입 경로 검증');
       await page.fill('#login-password', 'Route-Signup!97-password');
       await page.fill('#login-password-confirm', 'Route-Signup!97-password');
       await page.click('#login-submit');
@@ -642,6 +643,7 @@ try {
     await page.click('#loginb');
     await page.click('#auth-signup-mode');
     await page.fill('#login-email', 'signup@example.test');
+    await page.fill('#signup-name', '  김　 민수  ');
     await page.fill('#login-password', password);
     await page.fill('#login-password-confirm', 'Different-Fixture!92');
     await page.click('#login-submit');
@@ -652,11 +654,48 @@ try {
     const request = await page.evaluate(() => window.__db.log.find(x => x.action === 'signup').value);
     assert.equal(request.email, 'signup@example.test');
     assert.equal(request.password, password);
+    assert.deepEqual(request.options.data, { full_name: '김 민수' });
     assert.match(request.options.emailRedirectTo, /^http:\/\/localhost:43127\//);
     assert.match(await page.locator('#login-message').innerText(), /메일.*(확인|인증)|(확인|인증).*메일/);
     assert.equal(await page.evaluate(() => window.__db.session), null);
     assert(await page.locator('#newrow').isDisabled());
     await assertPasswordPrivate(page, password);
+    await context.close();
+  });
+  await check('Signup requires a real name only in signup mode and leaves login and recovery fields unchanged', async () => {
+    const { page, context } = await pageFor({ online: true });
+    await page.click('#loginb');
+    assert(await page.locator('#signup-name').isHidden());
+    assert(await page.locator('#signup-name').isDisabled());
+    await page.click('#auth-signup-mode');
+    assert.equal(await page.locator('#signup-name').getAttribute('autocomplete'), 'name');
+    assert.equal(await page.locator('#signup-name').getAttribute('maxlength'), '80');
+    assert(await page.locator('#signup-name').evaluate(input => input.required));
+    await page.fill('#login-email', 'name-required@example.test');
+    await page.fill('#login-password', 'Name-Fixture!42-password');
+    await page.fill('#login-password-confirm', 'Name-Fixture!42-password');
+    await page.click('#login-submit');
+    assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.action === 'signup').length), 0);
+    assert(await page.locator('#signup-name').evaluate(input => input.validity.valueMissing));
+    await page.fill('#signup-name', '  　 ');
+    await page.click('#login-submit');
+    assert.match(await page.locator('#login-message').innerText(), /이름을 입력하세요/);
+    assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.action === 'signup').length), 0);
+    await page.evaluate(() => { document.getElementById('signup-name').value = '가'.repeat(81); document.getElementById('login-form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
+    assert.match(await page.locator('#login-message').innerText(), /80자 이내/);
+    assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.action === 'signup').length), 0);
+    for (const mode of ['login', 'reset', 'password']) {
+      await page.evaluate(mode => setAuthMode(mode), mode);
+      assert(await page.locator('#signup-name').isHidden(), mode);
+      assert(await page.locator('#signup-name').isDisabled(), mode);
+      assert.equal(await page.locator('#signup-name').evaluate(input => input.required), false, mode);
+    }
+    await page.evaluate(() => setAuthMode('login'));
+    await page.fill('#login-email', 'name-free-login@example.test');
+    await page.fill('#login-password', 'Login-Fixture!42-password');
+    await page.click('#login-submit');
+    await page.waitForFunction(() => window.__db.log.some(item => item.action === 'password-login'));
+    assert.deepEqual(await page.evaluate(() => window.__db.log.find(item => item.action === 'password-login').value), { email: 'name-free-login@example.test', password: 'Login-Fixture!42-password' });
     await context.close();
   });
   await check('Password reset requests a recovery email without sending any password', async () => {
@@ -798,6 +837,99 @@ try {
     assert.equal(await page.locator('#auth-email').innerText(), 'viewer@example.test');
     assert(await page.locator('#newrow').isDisabled());
     assert(await page.locator('#admintable input').evaluateAll(inputs => inputs.every(input => input.readOnly)));
+    await context.close();
+  });
+  await check('Admin account names are escaped and searchable while legacy context and unsaved selections survive filtering', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true });
+    await page.click('#t4');
+    await page.evaluate(async memberId => {
+      const named = window.__db.accounts.find(a => a.user_id === 'second-user');
+      Object.assign(named, { signup_name: '<img src=x onerror="window.nameInjected=true">', role: 'member', member_id: memberId });
+      delete window.__db.accounts.find(a => a.user_id === 'pending-user').signup_name;
+      window.__db.accounts.find(a => a.user_id === 'test-user').signup_name = '관리 대표';
+      await loadAccess();
+    }, seed[0].id);
+    const target = page.locator('#accountstable tr[data-user-id="second-user"]');
+    const pending = page.locator('#accountstable tr[data-user-id="pending-user"]');
+    assert.equal(await target.locator('.account-name').innerText(), '<img src=x onerror="window.nameInjected=true">');
+    assert.equal(await target.locator('img').count(), 0);
+    assert.equal(await page.evaluate(() => Boolean(window.nameInjected)), false);
+    assert.match(await target.locator('td').first().innerText(), new RegExp(`연결된 멤버: ${seed[0].name}`));
+    assert.equal(await pending.locator('.account-name').innerText(), '가입 이름 미등록');
+    assert.match(await pending.locator('td').first().innerText(), new RegExp(`승인 요청: ${seed[1].name}`));
+    assert.deepEqual(await page.locator('#accountstable tbody tr').evaluateAll(rows => rows.slice(0, 2).map(row => row.dataset.userId).sort()), ['pending-user', 'reject-user']);
+    await pending.locator('.account-member').selectOption(seed[3].id);
+    await target.locator('.account-role').selectOption('admin');
+    await page.fill('#account-search', 'second-user@EXAMPLE');
+    assert.equal(await page.locator('#accountstable tbody tr').count(), 1);
+    assert.equal(await target.locator('.account-role').inputValue(), 'admin');
+    await page.fill('#account-search', '관리 대표');
+    assert.equal(await page.locator('#accountstable tbody tr').count(), 1);
+    assert.equal(await page.locator('#accountstable tbody tr').getAttribute('data-user-id'), 'test-user');
+    await page.fill('#account-search', '검색되지않는가입자');
+    assert.equal(await page.locator('#accountstable tbody tr').count(), 0);
+    assert.match(await page.locator('#account-search-status').innerText(), /검색 결과가 없습니다/);
+    await page.fill('#account-search', '');
+    await page.evaluate(async () => { document.activeElement?.blur(); await loadAccess(true); });
+    assert.equal(await pending.locator('.account-member').inputValue(), seed[3].id);
+    assert.equal(await target.locator('.account-role').inputValue(), 'admin');
+    assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.name === 'admin_set_member_access').length), 0, 'Searching and editing drafts must not grant access.');
+    await context.close();
+  });
+  await check('Name suggestions require one unlinked roster match and never override saved choices or approve automatically', async () => {
+    const names = ['김 민수', '동명이인', '동명이인', '연결된 멤버', '기존 멤버', '요청한 멤버', '반려 멤버', '승인 후보'];
+    const records = seed.slice(0, names.length).map((row, index) => ({ ...structuredClone(row), name: names[index] }));
+    const { page, context } = await pageFor({ online: true, auth: true, records });
+    await page.click('#t4');
+    await page.evaluate(async records => {
+      const admin = window.__db.accounts.find(a => a.user_id === 'test-user');
+      const fixture = (id, name, extra = {}) => ({ ...admin, user_id: id, email: `${id}@example.test`, signup_name: name, role: 'viewer', member_id: null, requested_member_id: null, request_status: 'none', ...extra });
+      window.__db.accounts = [admin,
+        fixture('unique-user', '  김　 민수  '),
+        fixture('duplicate-user', '동명이인'),
+        fixture('linked-user', '연결된 멤버'),
+        fixture('holder-user', '', { role: 'member', member_id: records[3].id }),
+        fixture('unknown-user', '명단에 없는 이름'),
+        fixture('pending-user', '김 민수', { request_status: 'pending', requested_member_id: records[5].id }),
+        fixture('saved-user', '김 민수', { role: 'member', member_id: records[4].id }),
+        fixture('rejected-user', '반려 멤버', { request_status: 'rejected' }),
+        fixture('prior-request-user', '김 민수', { requested_member_id: records[5].id }),
+        fixture('legacy-user', ''),
+        fixture('unconfirmed-user', '김 민수', { email_confirmed: false }),
+        fixture('approve-user', '승인 후보')
+      ];
+      await loadAccess();
+    }, records);
+    const row = id => page.locator(`#accountstable tr[data-user-id="${id}"]`);
+    assert.equal(await row('unique-user').locator('.account-role').inputValue(), 'member');
+    assert.equal(await row('unique-user').locator('.account-member').inputValue(), records[0].id);
+    assert.match(await row('unique-user').locator('.account-member-hint').innerText(), /이름 일치 후보 · 확인 후 승인/);
+    assert.equal(await row('unique-user').locator('.account-save').innerText(), '승인 · 저장');
+    for (const id of ['duplicate-user', 'linked-user', 'unknown-user', 'rejected-user', 'prior-request-user', 'legacy-user']) {
+      assert.equal(await row(id).locator('.account-role').inputValue(), 'viewer', id);
+      assert.equal(await row(id).locator('.account-member').inputValue(), '', id);
+    }
+    assert.match(await row('duplicate-user').locator('.account-member-hint').innerText(), /같은 이름.*여러 명/);
+    assert.match(await row('linked-user').locator('.account-member-hint').innerText(), /다른 계정에 연결/);
+    assert.equal(await row('pending-user').locator('.account-member').inputValue(), records[5].id, 'An explicit member request takes precedence over the signup name.');
+    assert.equal(await row('saved-user').locator('.account-member').inputValue(), records[4].id, 'An existing approved link must not be replaced by a name suggestion.');
+    assert(await row('unconfirmed-user').locator('.account-save').isDisabled(), 'A name suggestion must not bypass email confirmation.');
+    assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.name === 'admin_set_member_access').length), 0, 'Suggested names must not make any permission RPC.');
+    await row('unique-user').locator('.account-member').selectOption('');
+    await page.fill('#account-search', 'unknown');
+    await page.fill('#account-search', '');
+    await page.evaluate(() => loadAccess());
+    assert.equal(await row('unique-user').locator('.account-member').inputValue(), '', 'An explicit empty draft must override the proposed member.');
+    await row('unique-user').locator('.account-save').click();
+    assert.match(await page.locator('#account-status-unique-user').innerText(), /연결할 멤버를 선택/);
+    await row('unique-user').locator('.account-role').selectOption('viewer');
+    await row('unique-user').locator('.account-save').click();
+    await page.waitForFunction(() => !busy && window.__db.accounts.find(a => a.user_id === 'unique-user').request_status === 'rejected');
+    await page.evaluate(() => loadAccess());
+    assert.equal(await row('unique-user').locator('.account-role').inputValue(), 'viewer', 'An explicit viewer decision must not revive the name suggestion.');
+    await row('approve-user').locator('.account-save').click();
+    await page.waitForFunction(() => !busy && window.__db.accounts.find(a => a.user_id === 'approve-user').role === 'member');
+    assert.deepEqual(await page.evaluate(() => window.__db.log.find(item => item.name === 'admin_set_member_access' && item.value.target_user_id === 'approve-user').value), { target_user_id: 'approve-user', access_role: 'member', target_member_id: records[7].id });
     await context.close();
   });
   await check('Administrators approve or reject member access only after successful RPC responses', async () => {

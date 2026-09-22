@@ -203,8 +203,7 @@ begin
   update public.member_accounts
     set role = access_role, member_id = target_member_id,
         requested_member_id = case when access_role = 'member' then target_member_id else null end,
-        request_status = case when access_role in ('member', 'admin') then 'approved'
-                              when account.request_status = 'none' then 'none' else 'rejected' end
+        request_status = case when access_role in ('member', 'admin') then 'approved' else 'rejected' end
     where user_id = target_user_id returning * into account;
   return to_jsonb(account);
 exception when unique_violation then
@@ -213,11 +212,14 @@ end;
 $$;
 
 -- Only admins can inspect confirmation status; auth.users remains private.
+-- Recreate both functions together because adding an output column changes the return type.
+drop function if exists public.list_member_accounts();
+drop function if exists private.list_member_accounts();
 create or replace function private.list_member_accounts()
 returns table (
   user_id uuid, email text, role text, member_id uuid, requested_member_id uuid,
   request_status text, created_at timestamptz, updated_at timestamptz,
-  email_confirmed boolean
+  email_confirmed boolean, signup_name text
 )
 language plpgsql stable security definer set search_path = ''
 as $$
@@ -229,7 +231,11 @@ begin
     select a.user_id, a.email, a.role, a.member_id, a.requested_member_id,
       a.request_status, a.created_at, a.updated_at,
       (u.email_confirmed_at is not null and coalesce(u.email, '') <> ''
-       and not coalesce(u.is_anonymous, false)) as email_confirmed
+       and not coalesce(u.is_anonymous, false)) as email_confirmed,
+      -- Signup metadata is only a display hint, never proof of identity or authority.
+      case when jsonb_typeof(u.raw_user_meta_data -> 'full_name') = 'string'
+        then left(btrim(regexp_replace(u.raw_user_meta_data ->> 'full_name', '[[:space:]]+', ' ', 'g')), 80)
+        else '' end as signup_name
     from public.member_accounts a
     join auth.users u on u.id = a.user_id
     order by a.email, a.user_id;
@@ -242,7 +248,7 @@ create or replace function public.list_member_accounts()
 returns table (
   user_id uuid, email text, role text, member_id uuid, requested_member_id uuid,
   request_status text, created_at timestamptz, updated_at timestamptz,
-  email_confirmed boolean
+  email_confirmed boolean, signup_name text
 )
 language sql stable security invoker set search_path = ''
 as $$ select * from private.list_member_accounts(); $$;

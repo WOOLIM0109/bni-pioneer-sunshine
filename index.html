@@ -458,7 +458,8 @@ select{font:inherit;min-height:48px;border:1px solid var(--line-2);border-radius
 
   <section class="panel panel-pad access-panel" id="accounts-panel" hidden aria-labelledby="accounts-title">
     <h3 id="accounts-title">가입자 권한 관리</h3>
-    <p class="note">요청한 이름·회사와 이메일을 확인한 뒤 승인하세요. ‘본인 정보 수정’ 권한을 줄 때만 해당 멤버를 연결합니다. 관리자는 연결 없이 전체 명단과 가입자 권한을 관리하고, 읽기 권한은 정보 조회만 가능합니다.</p>
+    <p class="note">가입 이름은 본인이 입력한 정보입니다. 이름·회사와 이메일을 확인한 뒤 승인하세요. ‘본인 정보 수정’ 권한을 줄 때만 해당 멤버를 연결합니다. 관리자는 연결 없이 전체 명단과 가입자 권한을 관리하고, 읽기 권한은 정보 조회만 가능합니다.</p>
+    <label for="account-search">가입자 찾기</label><input class="search" type="search" id="account-search" placeholder="이름 또는 이메일로 검색" aria-controls="accountstable" aria-describedby="account-search-status"><p class="note" id="account-search-status" role="status" aria-live="polite"></p>
     <div class="msg" id="accounts-list-message" role="status"></div><div class="scrollx"><table id="accountstable"></table></div><div class="msg" id="accounts-message" role="status"></div>
   </section>
   <section class="panel panel-pad interview-panel" id="interview-panel" hidden aria-labelledby="interview-title">
@@ -523,6 +524,7 @@ select{font:inherit;min-height:48px;border:1px solid var(--line-2);border-radius
     <p class="dialog-intro" id="login-intro">이메일과 비밀번호로 로그인하세요.</p>
     <div class="auth-modes" id="auth-modes"><button class="btn ghost" id="auth-login-mode" type="button" aria-pressed="true">로그인</button><button class="btn ghost" id="auth-signup-mode" type="button" aria-pressed="false">처음 회원가입</button></div>
     <div id="email-field"><label for="login-email">본인 이메일 주소</label><input class="search" type="email" id="login-email" autocomplete="email" inputmode="email" autocapitalize="none" spellcheck="false" placeholder="예: sunshine@naver.com" required></div>
+    <div class="password-field" id="signup-name-field" hidden><label for="signup-name">본인 이름</label><input class="search" type="text" id="signup-name" autocomplete="name" maxlength="80" placeholder="예: 홍길동" disabled></div>
     <div class="password-field" id="password-field"><label for="login-password" id="password-label">비밀번호</label><input class="search" type="password" id="login-password" autocomplete="current-password" required></div>
     <div class="password-field" id="password-confirm-field" hidden><label for="login-password-confirm">비밀번호 한 번 더</label><input class="search" type="password" id="login-password-confirm" autocomplete="new-password" disabled></div>
     <div class="login-help" id="login-help">한 번 로그인하면 같은 브라우저에서 로그인이 유지됩니다. 함께 쓰는 기기에서는 사용 후 로그아웃하세요.</div>
@@ -896,9 +898,11 @@ function permissions(){
   el('accountstable').querySelectorAll('tbody tr').forEach(row=>{
     const role=row.querySelector('.account-role').value,memberSelect=row.querySelector('.account-member');
     const target=accounts.find(a=>a.user_id===row.dataset.userId);
+    const suggestion=accountNameSuggestion(target);
     row.querySelector('.account-save').disabled=!admin||(role!=='viewer'&&target?.email_confirmed===false);
+    row.querySelector('.account-save').textContent=target?.request_status==='pending'||suggestion?.memberId&&role==='member'&&memberSelect.value===suggestion.memberId?'승인 · 저장':'권한 저장';
     memberSelect.hidden=role!=='member';memberSelect.disabled=!admin||role!=='member';
-    row.querySelector('.account-member-hint').textContent=role==='admin'?'전체 멤버 관리 · 연결 불필요':role==='viewer'?'읽기 전용 · 연결 불필요':'본인 확인 후 이 계정이 수정할 멤버를 선택하세요.';
+    row.querySelector('.account-member-hint').textContent=role==='admin'?'전체 멤버 관리 · 연결 불필요':suggestion?.memberId&&role==='member'&&memberSelect.value===suggestion.memberId?'이름 일치 후보 · 확인 후 승인. 이메일과 소속을 확인하세요.':suggestion?.reason?suggestion.reason:role==='viewer'?'읽기 전용 · 연결 불필요':'본인 확인 후 이 계정이 수정할 멤버를 선택하세요.';
   });
   el('login-form').querySelectorAll('button').forEach(button=>button.disabled=authBusy);
   connectionReviewPermissions();
@@ -927,9 +931,19 @@ async function loadAccess(background=false){
 }
 function memberLabel(id){const member=M.find(m=>m.id===id);return member?[member.n,member.co,member.f].filter(Boolean).join(' · '):'멤버 없음';}
 function memberOptions(selected='',includeEmpty=true){return (includeEmpty?'<option value="">멤버를 선택하세요</option>':'')+M.filter(m=>m.id).map(m=>`<option value="${esc(m.id)}"${m.id===selected?' selected':''}>${esc(memberLabel(m.id))}</option>`).join('');}
+function normalizeSignupName(value){return typeof value==='string'?value.normalize('NFC').replace(/\s+/gu,' ').trim():'';}
+function accountSignupName(a){const name=normalizeSignupName(a?.signup_name);return name.length<=80?name:'';}
+function accountNameSuggestion(a){
+  const name=accountSignupName(a);
+  if(!name||a.role!=='viewer'||a.request_status!=='none'||a.member_id||a.requested_member_id)return null;
+  const matches=M.filter(m=>m.id&&normalizeSignupName(m.n)===name);
+  if(matches.length!==1)return {reason:matches.length?'같은 이름의 멤버가 여러 명입니다. 이메일과 소속을 확인해 직접 선택하세요.':'이름이 일치하는 멤버가 없습니다. 이메일과 소속을 확인해 직접 선택하세요.'};
+  if(accounts.some(other=>other.user_id!==a.user_id&&other.member_id===matches[0].id))return {reason:'이름이 일치하는 멤버가 다른 계정에 연결돼 있습니다. 연결된 계정을 먼저 확인하세요.'};
+  return {memberId:matches[0].id};
+}
 function syncAccountDrafts(){
   const owner=signedIn()?session.user.id:'';
-  if(accountDraftOwner!==owner||(accessReady&&account?.user_id===owner&&account.role!=='admin')){accountDraftOwner=owner;accountDrafts.clear();accountMessages.clear();}
+  if(accountDraftOwner!==owner||(accessReady&&account?.user_id===owner&&account.role!=='admin')){accountDraftOwner=owner;accountDrafts.clear();accountMessages.clear();el('account-search').value='';}
 }
 function accountStatus(userId,text,error=false){
   accountMessages.set(userId,{text,error});
@@ -947,14 +961,18 @@ function renderAccess(){
   el('member-access-note').textContent=account?.request_status==='pending'?'승인 대기 중 · '+memberLabel(account.requested_member_id)+'로 요청했습니다. 잘못 선택했다면 다른 멤버로 다시 요청할 수 있습니다.':'본인 이름과 회사를 선택해 요청하세요. 관리자가 확인하면 본인 정보만 수정할 수 있습니다.';
   if(!isAdmin()){el('accountstable').innerHTML='';return;}
   message('accounts-list-message',accessListError,Boolean(accessListError));
-  el('accountstable').innerHTML='<thead><tr><th>가입자 · 요청</th><th>권한</th><th>연결할 멤버</th><th>적용</th></tr></thead><tbody>'+accounts.map(a=>{
-    const pending=a.request_status==='pending',draft=accountDrafts.get(a.user_id),role=draft?.role||(pending?'member':a.role),memberId=draft?.memberId??(pending?a.requested_member_id:a.member_id),status=accountMessages.get(a.user_id);
+  const terms=normalizeSignupName(el('account-search').value).toLocaleLowerCase().split(' ').filter(Boolean);
+  const visible=accounts.filter(a=>{const text=[accountSignupName(a),a.email,a.member_id?memberLabel(a.member_id):'',a.requested_member_id?memberLabel(a.requested_member_id):''].join(' ').toLocaleLowerCase();return terms.every(term=>text.includes(term));}).sort((a,b)=>Number(b.request_status==='pending')-Number(a.request_status==='pending')||String(a.email).localeCompare(String(b.email)));
+  el('account-search-status').textContent=visible.length?'가입자 '+visible.length+'명 · 승인 요청 먼저 표시':'검색 결과가 없습니다.';
+  el('accountstable').innerHTML='<thead><tr><th>가입자 · 요청</th><th>권한</th><th>연결할 멤버</th><th>적용</th></tr></thead><tbody>'+visible.map(a=>{
+    const pending=a.request_status==='pending',draft=accountDrafts.get(a.user_id),suggestion=accountNameSuggestion(a),role=draft?.role||(pending||suggestion?.memberId?'member':a.role),memberId=draft?.memberId??(pending?a.requested_member_id:suggestion?.memberId||a.member_id),status=accountMessages.get(a.user_id);
     const verification=a.email_confirmed===true?'인증 완료':a.email_confirmed===false?'이메일 인증 대기 · 가입 확인 메일의 링크를 누르고 페이지를 새로고침하세요.':'이메일 인증 상태 확인 필요';
-    return `<tr data-user-id="${esc(a.user_id)}"><td data-label="가입자">${esc(a.email)}<div class="account-detail">현재: ${a.role==='admin'?'관리자':a.role==='member'?'본인 정보 수정':'읽기'}${pending?'<br>승인 요청: '+esc(memberLabel(a.requested_member_id)):''}</div><div class="account-detail account-verification">${verification}</div></td><td data-label="권한"><select class="account-role" aria-label="${esc(a.email)} 권한">${[['viewer','읽기'],['member','본인 정보 수정'],['admin','관리자']].map(([v,t])=>`<option value="${v}"${role===v?' selected':''}>${t}</option>`).join('')}</select></td><td data-label="연결할 멤버"><select class="account-member" aria-label="${esc(a.email)} 연결할 멤버" aria-describedby="account-member-hint-${esc(a.user_id)}">${memberOptions(memberId)}</select><div class="account-detail account-member-hint" id="account-member-hint-${esc(a.user_id)}"></div></td><td data-label="적용"><div class="account-actions"><button class="btn primary account-save">${pending?'승인 · 저장':'권한 저장'}</button>${pending?'<button class="btn ghost account-reject">요청 반려</button>':''}</div><div class="msg ${status?.error?'error':'success'}" id="account-status-${esc(a.user_id)}" role="${status?.error?'alert':'status'}" aria-live="polite">${esc(status?.text||'')}</div></td></tr>`;
+    return `<tr data-user-id="${esc(a.user_id)}"><td data-label="가입자"><strong class="account-name">${esc(accountSignupName(a)||'가입 이름 미등록')}</strong><div class="account-detail">${esc(a.email)}</div><div class="account-detail">현재: ${a.role==='admin'?'관리자':a.role==='member'?'본인 정보 수정':'읽기'}${a.member_id?'<br>연결된 멤버: '+esc(memberLabel(a.member_id)):''}${a.requested_member_id?'<br>'+(pending?'승인 요청: ':'요청한 멤버: ')+esc(memberLabel(a.requested_member_id)):''}</div><div class="account-detail account-verification">${verification}</div></td><td data-label="권한"><select class="account-role" aria-label="${esc(a.email)} 권한">${[['viewer','읽기'],['member','본인 정보 수정'],['admin','관리자']].map(([v,t])=>`<option value="${v}"${role===v?' selected':''}>${t}</option>`).join('')}</select></td><td data-label="연결할 멤버"><select class="account-member" aria-label="${esc(a.email)} 연결할 멤버" aria-describedby="account-member-hint-${esc(a.user_id)}">${memberOptions(memberId)}</select><div class="account-detail account-member-hint" id="account-member-hint-${esc(a.user_id)}"></div></td><td data-label="적용"><div class="account-actions"><button class="btn primary account-save">${pending||suggestion?.memberId&&!draft?'승인 · 저장':'권한 저장'}</button>${pending?'<button class="btn ghost account-reject">요청 반려</button>':''}</div><div class="msg ${status?.error?'error':'success'}" id="account-status-${esc(a.user_id)}" role="${status?.error?'alert':'status'}" aria-live="polite">${esc(status?.text||'')}</div></td></tr>`;
   }).join('')+'</tbody>';
   el('accountstable').querySelectorAll('.account-save,.account-reject').forEach(button=>button.onclick=()=>saveAccount(button));
   el('accountstable').querySelectorAll('select').forEach(select=>select.onchange=()=>{rememberAccountDraft(select.closest('tr'));permissions();});
 }
+el('account-search').oninput=()=>{renderAccess();permissions();};
 async function saveAccount(button){
   const actorId=session?.user?.id,row=button.closest('tr'),userId=row.dataset.userId,role=button.classList.contains('account-reject')?'viewer':row.querySelector('.account-role').value;
   const memberId=role==='member'?row.querySelector('.account-member').value:null;
@@ -1073,15 +1091,16 @@ function setAuthMode(mode){
   authMode=mode;clearPasswords();message('login-message','');el('login-dialog').dataset.mode=mode;
   const passwordMode=mode==='password',signup=mode==='signup',reset=mode==='reset';
   el('login-title').textContent=passwordMode?'비밀번호 설정':signup?'처음 회원가입':reset?'비밀번호 찾기 · 처음 설정':'로그인';
-  el('login-intro').textContent=passwordMode?'새 비밀번호를 저장하면 다음부터 이메일과 비밀번호로 로그인할 수 있어요.':signup?'본인 이메일로 가입하세요. 처음 한 번만 이메일을 인증합니다.':reset?'가입한 이메일로 비밀번호 설정 링크를 받으세요.':'이메일과 비밀번호로 로그인하세요.';
+  el('login-intro').textContent=passwordMode?'새 비밀번호를 저장하면 다음부터 이메일과 비밀번호로 로그인할 수 있어요.':signup?'이름과 본인 이메일로 가입하세요. 처음 한 번만 이메일을 인증합니다.':reset?'가입한 이메일로 비밀번호 설정 링크를 받으세요.':'이메일과 비밀번호로 로그인하세요.';
   el('auth-modes').hidden=passwordMode;el('auth-extra').hidden=passwordMode||reset;
   el('auth-login-mode').setAttribute('aria-pressed',String(mode==='login'));el('auth-signup-mode').setAttribute('aria-pressed',String(signup));
   el('email-field').hidden=passwordMode;el('login-email').disabled=passwordMode;
+  el('signup-name-field').hidden=!signup;el('signup-name').disabled=!signup;el('signup-name').required=signup;
   el('password-field').hidden=reset;el('login-password').disabled=reset;el('login-password').required=!reset;
   el('login-password').minLength=signup||passwordMode?8:1;el('login-password').autocomplete=signup||passwordMode?'new-password':'current-password';
   el('password-label').textContent=signup||passwordMode?'새 비밀번호 (8자 이상)':'비밀번호';
   el('password-confirm-field').hidden=!(signup||passwordMode);el('login-password-confirm').disabled=!(signup||passwordMode);el('login-password-confirm').required=signup||passwordMode;
-  el('login-help').textContent=passwordMode?'비밀번호는 본인만 알고 있는 것으로 정해 주세요. 다른 곳에서 쓰는 비밀번호와 다르게 정하면 좋습니다.':signup?'가입 메일의 링크를 누른 뒤, 멤버 관리에서 본인 이름을 선택해 수정 권한을 요청하세요. 승인 전에도 모든 정보를 볼 수 있어요.':reset?'예전에 이메일 링크로 로그인한 분도 이 방법으로 비밀번호를 처음 설정할 수 있어요. 메일 속 링크를 누르면 새 비밀번호 입력 화면이 열립니다.':'같은 브라우저에서는 로그인이 유지됩니다. 함께 쓰는 기기에서는 사용 후 로그아웃하세요. 예전에 이메일 링크로만 로그인했다면 아래 ‘비밀번호 찾기 · 처음 설정’을 이용하세요.';
+  el('login-help').textContent=passwordMode?'비밀번호는 본인만 알고 있는 것으로 정해 주세요. 다른 곳에서 쓰는 비밀번호와 다르게 정하면 좋습니다.':signup?'가입 이름과 이메일은 관리자가 승인할 때 확인합니다. 가입 확인 메일의 링크를 누르고 관리자 승인을 기다려 주세요.':reset?'예전에 이메일 링크로 로그인한 분도 이 방법으로 비밀번호를 처음 설정할 수 있어요. 메일 속 링크를 누르면 새 비밀번호 입력 화면이 열립니다.':'같은 브라우저에서는 로그인이 유지됩니다. 함께 쓰는 기기에서는 사용 후 로그아웃하세요. 예전에 이메일 링크로만 로그인했다면 아래 ‘비밀번호 찾기 · 처음 설정’을 이용하세요.';
   el('login-submit').textContent=passwordMode?'새 비밀번호 저장':signup?'가입하고 확인 메일 받기':reset?'비밀번호 설정 메일 받기':'로그인';
   permissions();
 }
@@ -1097,7 +1116,8 @@ el('login-dialog').addEventListener('cancel',event=>{if(authBusy)event.preventDe
 el('login-form').onsubmit=async event=>{
   event.preventDefault();if(authBusy)return;
   if(!db){message('login-message','로그인 연결을 사용할 수 없습니다. 상단의 연결 안내를 확인하고 다시 연결하세요.',true);return;}
-  const mode=authMode,email=el('login-email').value.trim(),password=el('login-password').value;
+  const mode=authMode,email=el('login-email').value.trim(),password=el('login-password').value,fullName=normalizeSignupName(el('signup-name').value);
+  if(mode==='signup'&&(!fullName||fullName.length>80)){message('login-message',!fullName?'가입할 본인 이름을 입력하세요.':'이름은 80자 이내로 입력하세요.',true);el('signup-name').focus();return;}
   if(['signup','password'].includes(mode)&&(password.length<8||password!==el('login-password-confirm').value)){message('login-message',password.length<8?'비밀번호를 8자 이상 입력하세요.':'두 비밀번호가 다릅니다. 같은 비밀번호를 다시 입력하세요.',true);return;}
   authBusy=true;permissions();message('login-message',mode==='reset'||mode==='signup'?'메일 요청을 보내고 있습니다.':'처리하고 있습니다.');
   try{
@@ -1106,7 +1126,7 @@ el('login-form').onsubmit=async event=>{
       if(data?.session)acceptSession(data.session,'SIGNED_IN');await loadAccess();
       if(!recoveryUserId)el('login-dialog').close();message('auth-status','로그인했습니다. 멤버 관리에서 내 권한을 확인하세요.');
     }else if(mode==='signup'){
-      const {error}=await timed(db.auth.signUp({email,password,options:{emailRedirectTo:authRedirect()}}));if(error)throw error;
+      const {error}=await timed(db.auth.signUp({email,password,options:{emailRedirectTo:authRedirect(),data:{full_name:fullName}}}));if(error)throw error;
       message('login-message','메일함과 스팸함에서 가입 확인 메일을 찾아 링크를 눌러 주세요. 이미 가입한 이메일이라면 로그인하거나 ‘비밀번호 찾기 · 처음 설정’을 이용하세요.');
     }else if(mode==='reset'){
       const {error}=await timed(db.auth.resetPasswordForEmail(email,{redirectTo:authRedirect()}));if(error)throw error;

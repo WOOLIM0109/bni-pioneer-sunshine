@@ -30,9 +30,15 @@ end $$;
 insert into auth.users(id, email, email_confirmed_at, is_anonymous, raw_user_meta_data)
 values
   ('11111111-1111-4111-8111-111111111101', 'sunshine-admin-test@example.invalid', now(), false, '{}'),
-  ('11111111-1111-4111-8111-111111111102', 'sunshine-member-test@example.invalid', now(), false, '{"role":"admin"}'),
-  ('11111111-1111-4111-8111-111111111103', 'sunshine-viewer-test@example.invalid', now(), false, '{"role":"admin"}'),
-  ('11111111-1111-4111-8111-111111111104', 'sunshine-unverified-test@example.invalid', null, false, '{}');
+  ('11111111-1111-4111-8111-111111111102', 'sunshine-member-test@example.invalid', now(), false, '{"role":"admin","full_name":"  권한테스트\t  본인\n "}'),
+  ('11111111-1111-4111-8111-111111111103', 'sunshine-viewer-test@example.invalid', now(), false, '{"role":"admin","full_name":"  \t\n "}'),
+  ('11111111-1111-4111-8111-111111111104', 'sunshine-unverified-test@example.invalid', null, false, '{}'),
+  ('11111111-1111-4111-8111-111111111105', 'sunshine-number-name-test@example.invalid', now(), false, '{"full_name":42}'),
+  ('11111111-1111-4111-8111-111111111106', 'sunshine-object-name-test@example.invalid', now(), false, '{"full_name":{"name":"관리자"}}'),
+  ('11111111-1111-4111-8111-111111111107', 'sunshine-array-name-test@example.invalid', now(), false, '{"full_name":["관리자"]}'),
+  ('11111111-1111-4111-8111-111111111108', 'sunshine-null-name-test@example.invalid', now(), false, '{"full_name":null}'),
+  ('11111111-1111-4111-8111-111111111109', 'sunshine-long-name-test@example.invalid', now(), false, jsonb_build_object('full_name', repeat('가', 100))),
+  ('11111111-1111-4111-8111-111111111110', 'sunshine-array-metadata-test@example.invalid', now(), false, '["full_name","관리자"]');
 insert into public.members(id, name, sort_order)
 values
   ('22222222-2222-4222-8222-222222222201', '권한테스트 본인', 10001),
@@ -43,8 +49,9 @@ update public.member_accounts
   set requested_member_id = '22222222-2222-4222-8222-222222222202', request_status = 'pending'
   where user_id = '11111111-1111-4111-8111-111111111104';
 select pg_temp.check_true(
-  (select role = 'viewer' from public.member_accounts where user_id = '11111111-1111-4111-8111-111111111102'),
-  'signup defaults to viewer even with forged admin metadata');
+  (select role = 'viewer' and member_id is null and request_status = 'none' from public.member_accounts
+   where user_id = '11111111-1111-4111-8111-111111111102'),
+  'matching signup name and forged admin metadata never grant access');
 update auth.users set email = 'sunshine-viewer-canonical@example.invalid'
   where id = '11111111-1111-4111-8111-111111111103';
 select pg_temp.check_true(
@@ -58,6 +65,7 @@ select pg_temp.check_true((select count(*) = 2 from public.members
 select pg_temp.check_denied('select updated_by from public.members', 'anonymous cannot read editor emails');
 select pg_temp.check_denied('select email from public.member_accounts', 'anonymous cannot read account emails');
 select pg_temp.check_denied('select * from public.list_member_accounts()', 'anonymous cannot list account confirmation states');
+select pg_temp.check_denied('select signup_name from public.list_member_accounts()', 'anonymous cannot read signup names');
 select pg_temp.check_denied('insert into public.members(name) values (''no'')', 'anonymous cannot insert');
 select pg_temp.check_denied('update public.members set name = ''no''', 'anonymous cannot update');
 select pg_temp.check_denied('delete from public.members', 'anonymous cannot delete');
@@ -68,6 +76,7 @@ set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"11111111-1111-4111-8111-111111111103","role":"authenticated","user_metadata":{"role":"admin"}}', true);
 select pg_temp.check_true((select count(*) = 1 from public.member_accounts), 'viewer sees only own account');
 select pg_temp.check_denied('select * from public.list_member_accounts()', 'viewer cannot list account confirmation states');
+select pg_temp.check_denied('select signup_name from public.list_member_accounts()', 'viewer cannot read signup names');
 select pg_temp.check_denied('select * from private.list_member_accounts()', 'viewer cannot bypass account list wrapper');
 select pg_temp.check_denied('select updated_by from public.members', 'signed-in viewer cannot read editor emails');
 select pg_temp.check_denied('update public.member_accounts set role = ''admin''', 'direct self-elevation is denied');
@@ -98,7 +107,29 @@ select pg_temp.check_true((select email_confirmed from public.list_member_accoun
   where user_id = '11111111-1111-4111-8111-111111111102'), 'account list marks verified account confirmed');
 select pg_temp.check_true((select not email_confirmed from public.list_member_accounts()
   where user_id = '11111111-1111-4111-8111-111111111104'), 'account list marks unverified account unconfirmed');
+select pg_temp.check_true((select signup_name = '권한테스트 본인' from public.list_member_accounts()
+  where user_id = '11111111-1111-4111-8111-111111111102'), 'account list trims and normalizes signup name whitespace');
+select pg_temp.check_true((select signup_name = '' from public.list_member_accounts()
+  where user_id = '11111111-1111-4111-8111-111111111103'), 'blank signup name remains empty');
+select pg_temp.check_true((select signup_name = '' from public.list_member_accounts()
+  where user_id = '11111111-1111-4111-8111-111111111104'), 'legacy account without signup name remains empty');
+select pg_temp.check_true((select count(*) = 5 and bool_and(signup_name = '') from public.list_member_accounts()
+  where user_id in ('11111111-1111-4111-8111-111111111105', '11111111-1111-4111-8111-111111111106',
+                    '11111111-1111-4111-8111-111111111107', '11111111-1111-4111-8111-111111111108',
+                    '11111111-1111-4111-8111-111111111110')),
+  'malformed signup names and metadata return empty strings');
+select pg_temp.check_true((select signup_name = repeat('가', 80) from public.list_member_accounts()
+  where user_id = '11111111-1111-4111-8111-111111111109'), 'signup name display is limited to 80 characters');
 select pg_temp.check_denied('select email_confirmed_at from auth.users', 'account listing does not expose auth.users');
+select pg_temp.check_denied('select raw_user_meta_data from auth.users', 'account listing does not expose raw signup metadata');
+select pg_temp.check_true(
+  public.admin_set_member_access('11111111-1111-4111-8111-111111111105', 'viewer')->>'request_status' = 'rejected',
+  'explicit viewer assignment records admin decision even without a prior request');
+select set_config('request.jwt.claims', '{"sub":"11111111-1111-4111-8111-111111111105","role":"authenticated"}', true);
+select pg_temp.check_true(
+  public.request_member_access('22222222-2222-4222-8222-222222222202')->>'request_status' = 'pending',
+  'viewer can explicitly request member access after admin read-only decision');
+select set_config('request.jwt.claims', '{"sub":"11111111-1111-4111-8111-111111111101","role":"authenticated"}', true);
 select pg_temp.check_true(
   public.admin_set_member_access('11111111-1111-4111-8111-111111111102', 'admin')->>'role' = 'admin',
   'admin promotes verified viewer to administrator');
