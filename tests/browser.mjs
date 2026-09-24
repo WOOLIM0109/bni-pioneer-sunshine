@@ -930,11 +930,13 @@ try {
     await context.close();
   });
   await check('Admin account names are escaped and searchable while legacy context and unsaved selections survive filtering', async () => {
-    const { page, context } = await pageFor({ online: true, auth: true });
+    const records = seed.map((record, index) => ({ ...structuredClone(record), name: index === 0 ? '<img src=x onerror="window.nameInjected=true">' : record.name }));
+    const { page, context } = await pageFor({ online: true, auth: true, records });
     await page.click('#t4');
     await page.evaluate(async memberId => {
       const named = window.__db.accounts.find(a => a.user_id === 'second-user');
-      Object.assign(named, { signup_name: '<img src=x onerror="window.nameInjected=true">', role: 'member', member_id: memberId });
+      Object.assign(named, { role: 'member', member_id: memberId });
+      delete named.signup_name;
       delete window.__db.accounts.find(a => a.user_id === 'pending-user').signup_name;
       window.__db.accounts.find(a => a.user_id === 'test-user').signup_name = '관리 대표';
       await loadAccess();
@@ -944,8 +946,8 @@ try {
     assert.equal(await target.locator('.account-name').innerText(), '<img src=x onerror="window.nameInjected=true">');
     assert.equal(await target.locator('img').count(), 0);
     assert.equal(await page.evaluate(() => Boolean(window.nameInjected)), false);
-    assert.match(await target.locator('td').first().innerText(), new RegExp(`연결된 멤버: ${seed[0].name}`));
-    assert.equal(await pending.locator('.account-name').innerText(), '가입 이름 미등록');
+    assert((await target.locator('td').first().innerText()).includes('연결된 멤버: ' + records[0].name));
+    assert.equal(await pending.locator('.account-name').innerText(), seed[1].name);
     assert.match(await pending.locator('td').first().innerText(), new RegExp(`승인 요청: ${seed[1].name}`));
     assert.deepEqual(await page.locator('#accountstable tbody tr').evaluateAll(rows => rows.slice(0, 2).map(row => row.dataset.userId).sort()), ['pending-user', 'reject-user']);
     await pending.locator('.account-member').selectOption(seed[3].id);
@@ -953,6 +955,12 @@ try {
     await page.fill('#account-search', 'second-user@EXAMPLE');
     assert.equal(await page.locator('#accountstable tbody tr').count(), 1);
     assert.equal(await target.locator('.account-role').inputValue(), 'admin');
+    await page.fill('#account-search', 'nameInjected');
+    assert.equal(await page.locator('#accountstable tbody tr').count(), 1, 'Legacy linked names are searchable.');
+    assert.equal(await page.locator('#accountstable tbody tr').getAttribute('data-user-id'), 'second-user');
+    await page.fill('#account-search', seed[1].name);
+    assert.equal(await page.locator('#accountstable tbody tr').count(), 1, 'Current pending names are searchable.');
+    assert.equal(await page.locator('#accountstable tbody tr').getAttribute('data-user-id'), 'pending-user');
     await page.fill('#account-search', '관리 대표');
     assert.equal(await page.locator('#accountstable tbody tr').count(), 1);
     assert.equal(await page.locator('#accountstable tbody tr').getAttribute('data-user-id'), 'test-user');
@@ -964,6 +972,45 @@ try {
     assert.equal(await pending.locator('.account-member').inputValue(), seed[3].id);
     assert.equal(await target.locator('.account-role').inputValue(), 'admin');
     assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.name === 'admin_set_member_access').length), 0, 'Searching and editing drafts must not grant access.');
+    await context.close();
+  });
+  await check('Account headings use current identity context without reviving rejected requests or changing authorization', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true });
+    await page.click('#t4');
+    await page.evaluate(async records => {
+      const admin = window.__db.accounts.find(a => a.user_id === 'test-user');
+      const fixture = (id, extra = {}) => ({ ...admin, user_id: id, email: id + '@example.test', signup_name: '', role: 'viewer', member_id: null, requested_member_id: null, request_status: 'none', ...extra });
+      window.__db.accounts = [admin,
+        fixture('renamed-linked-user', { signup_name: '가입 당시 이름', role: 'member', member_id: records[0].id }),
+        fixture('named-pending-user', { signup_name: '<b>입력한 이름</b>', requested_member_id: records[1].id, request_status: 'pending' }),
+        fixture('invalid-name-pending-user', { signup_name: '가'.repeat(81), requested_member_id: records[2].id, request_status: 'pending' }),
+        fixture('rejected-legacy-user', { requested_member_id: records[3].id, request_status: 'rejected' }),
+        fixture('stale-legacy-user', { requested_member_id: records[4].id, request_status: 'none' }),
+        fixture('unknown-legacy-user')
+      ];
+      await loadAccess();
+    }, seed);
+    const before = await page.evaluate(() => ({ accounts: window.__db.accounts, session: window.__db.session }));
+    const row = id => page.locator('#accountstable tr[data-user-id="' + id + '"]');
+    assert.equal(await row('renamed-linked-user').locator('.account-name').innerText(), seed[0].name, 'The current linked roster name supersedes an older signup name.');
+    assert.equal(await row('named-pending-user').locator('.account-name').innerText(), '<b>입력한 이름</b>', 'A valid signup name is retained before an unapproved request fallback.');
+    assert.equal(await row('named-pending-user').locator('.account-name b').count(), 0, 'Signup names remain escaped.');
+    assert.equal(await row('invalid-name-pending-user').locator('.account-name').innerText(), seed[2].name, 'Invalid signup data does not hide a current pending identity.');
+    for (const id of ['rejected-legacy-user', 'stale-legacy-user', 'unknown-legacy-user']) {
+      assert.equal(await row(id).locator('.account-name').innerText(), '가입 이름 미등록', id);
+      assert.equal(await row(id).locator('.account-role').inputValue(), 'viewer', 'Unknown identity must not create an approval suggestion: ' + id);
+      assert.equal(await row(id).locator('.account-member').inputValue(), '', 'Unknown identity must not select a member: ' + id);
+      assert.equal(await row(id).locator('.account-save').innerText(), '권한 저장', id);
+    }
+    assert.equal(await row('invalid-name-pending-user').locator('.account-member').inputValue(), seed[2].id, 'The explicit pending request remains the only selected member.');
+    assert.doesNotMatch(await row('invalid-name-pending-user').locator('.account-member-hint').innerText(), /이름 일치 후보/, 'A displayed fallback must not become a signup-name suggestion.');
+    await page.fill('#account-search', seed[2].name);
+    assert.equal(await page.locator('#accountstable tbody tr').count(), 1);
+    assert.equal(await page.locator('#accountstable tbody tr').getAttribute('data-user-id'), 'invalid-name-pending-user');
+    await page.fill('#account-search', '');
+    await page.evaluate(async () => { document.activeElement?.blur(); await loadAccess(true); });
+    assert.deepEqual(await page.evaluate(() => ({ accounts: window.__db.accounts, session: window.__db.session })), before, 'Displaying and searching identity fallbacks must not save names, roles, or sessions.');
+    assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.name === 'admin_set_member_access' || item.action.startsWith('password-') || item.action === 'signup').length), 0);
     await context.close();
   });
   await check('Name suggestions require one unlinked roster match and never override saved choices or approve automatically', async () => {
