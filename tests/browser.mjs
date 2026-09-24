@@ -283,6 +283,7 @@ function makeMock(initial, options) {
         return { data: { session: state.session, user: state.session.user }, error: null };
       },
       signUp: async value => { state.log.push({ action: 'signup', value }); return { data: { user: { id: 'new-user', email: value.email }, session: null }, error: clone(state.authError) }; },
+      resend: async value => { state.log.push({ action: 'confirmation-resend', value }); return { data: {}, error: clone(state.authError) }; },
       resetPasswordForEmail: async (email, options) => { state.log.push({ action: 'password-reset', value: { email, options } }); return { data: {}, error: clone(state.authError) }; },
       updateUser: async value => {
         state.log.push({ action: 'password-update', value });
@@ -530,7 +531,7 @@ try {
     assert.deepEqual(documentRequests, ['/bni-pioneer-sunshine/', '/bni-pioneer-sunshine/power-teams/']);
     await context.close();
   });
-  await check('Signup and password-reset emails return to the app root from nested pages', async () => {
+  await check('Signup, confirmation-resend and password-reset emails return to the app root from nested pages', async () => {
     for (const basePath of ['/', '/bni-pioneer-sunshine/']) {
       const { page, context, baseUrl } = await pageFor({ online: true, basePath, routePath: 'members/', query: '?from=shared', hash: '#section' });
       await page.click('#loginb');
@@ -542,6 +543,11 @@ try {
       await page.click('#login-submit');
       await page.waitForFunction(() => window.__db.log.some(item => item.action === 'signup'));
       assert.equal(await page.evaluate(() => window.__db.log.find(item => item.action === 'signup').value.options.emailRedirectTo), baseUrl);
+      await page.click('#auth-resend-mode');
+      await page.fill('#login-email', 'route-resend@example.test');
+      await page.click('#login-submit');
+      await page.waitForFunction(() => window.__db.log.some(item => item.action === 'confirmation-resend'));
+      assert.equal(await page.evaluate(() => window.__db.log.find(item => item.action === 'confirmation-resend').value.options.emailRedirectTo), baseUrl);
       await page.click('#auth-reset-mode');
       await page.fill('#login-email', 'route-reset@example.test');
       await page.click('#login-submit');
@@ -561,7 +567,7 @@ try {
     const errorHash = '#error=access_denied&error_code=otp_expired&error_description=Email+link+has+expired';
     const expired = await pageFor({ online: true, basePath: '/bni-pioneer-sunshine/', routePath: 'members/', query: '?from=email', hash: errorHash });
     assert.equal(await expired.page.evaluate(() => new URL(window.__db.initialUrl).hash), errorHash);
-    await expired.page.waitForFunction(() => document.getElementById('login-dialog').open && document.getElementById('login-dialog').dataset.mode === 'reset');
+    await expired.page.waitForFunction(() => document.getElementById('login-dialog').open && document.getElementById('login-dialog').dataset.mode === 'login');
     assert.match(await expired.page.locator('#login-message').innerText(), /만료/);
     assert.equal(new URL(expired.page.url()).pathname, '/bni-pioneer-sunshine/members/');
     assert.equal(new URL(expired.page.url()).search, '?from=email');
@@ -660,6 +666,10 @@ try {
     assert.equal(await page.evaluate(() => window.__db.session), null);
     assert(await page.locator('#newrow').isDisabled());
     await assertPasswordPrivate(page, password);
+    await page.click('#auth-resend-mode');
+    assert(await page.locator('#login-submit').isDisabled(), 'Signup also starts the per-address confirmation cooldown.');
+    await page.evaluate(() => document.getElementById('login-form').dispatchEvent(new Event('submit', { cancelable: true })));
+    assert.equal(await page.evaluate(() => window.__db.log.filter(x => x.action === 'confirmation-resend').length), 0);
     await context.close();
   });
   await check('Signup requires a real name only in signup mode and leaves login and recovery fields unchanged', async () => {
@@ -684,7 +694,7 @@ try {
     await page.evaluate(() => { document.getElementById('signup-name').value = '가'.repeat(81); document.getElementById('login-form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
     assert.match(await page.locator('#login-message').innerText(), /80자 이내/);
     assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.action === 'signup').length), 0);
-    for (const mode of ['login', 'reset', 'password']) {
+    for (const mode of ['login', 'reset', 'resend', 'password']) {
       await page.evaluate(mode => setAuthMode(mode), mode);
       assert(await page.locator('#signup-name').isHidden(), mode);
       assert(await page.locator('#signup-name').isDisabled(), mode);
@@ -697,6 +707,86 @@ try {
     await page.waitForFunction(() => window.__db.log.some(item => item.action === 'password-login'));
     assert.deepEqual(await page.evaluate(() => window.__db.log.find(item => item.action === 'password-login').value), { email: 'name-free-login@example.test', password: 'Login-Fixture!42-password' });
     await context.close();
+  });
+  await check('Confirmation resend uses only email, preserves permissions and enforces a per-address cooldown', async () => {
+    const { page, context } = await pageFor({ online: true });
+    const accountsBefore = await page.evaluate(() => window.__db.accounts);
+    await page.click('#loginb');
+    await page.fill('#login-password', 'Must-Not-Be-Sent!83');
+    await page.click('#auth-resend-mode');
+    assert(await page.locator('#password-field').isHidden());
+    assert(await page.locator('#login-password').isDisabled());
+    assert.equal(await page.locator('#login-password').inputValue(), '');
+    await page.fill('#login-email', 'resend@example.test');
+    await page.click('#login-submit');
+    await page.waitForFunction(() => window.__db.log.some(x => x.action === 'confirmation-resend'));
+    assert.deepEqual(await page.evaluate(() => window.__db.log.find(x => x.action === 'confirmation-resend').value), {
+      type: 'signup', email: 'resend@example.test', options: { emailRedirectTo: 'http://localhost:43127/' }
+    });
+    assert.match(await page.locator('#login-message').innerText(), /가입 확인이 필요한 계정이면/);
+    assert.match(await page.locator('#login-message').innerText(), /sunshine@woolimcompany\.kr/);
+    assert(await page.locator('#login-submit').isDisabled());
+    assert.match(await page.locator('#login-submit').innerText(), /\d+초 후/);
+    await page.evaluate(() => document.getElementById('login-form').dispatchEvent(new Event('submit', { cancelable: true })));
+    assert.equal(await page.evaluate(() => window.__db.log.filter(x => x.action === 'confirmation-resend').length), 1);
+    await page.click('#auth-login-mode');
+    assert(await page.locator('#login-submit').isEnabled(), 'The cooldown must not block password login.');
+    await page.click('#auth-resend-mode');
+    assert(await page.locator('#login-submit').isDisabled(), 'Switching modes must preserve the cooldown.');
+    await page.fill('#login-email', 'another@example.test');
+    assert(await page.locator('#login-submit').isEnabled(), 'A different address has its own cooldown.');
+    await page.fill('#login-email', 'RESEND@example.test');
+    assert(await page.locator('#login-submit').isDisabled(), 'Changing email casing must not bypass the cooldown.');
+    await page.evaluate(() => { const now = Date.now; Date.now = () => now() + 61000; });
+    await page.waitForFunction(() => !document.getElementById('login-submit').disabled);
+    assert.equal(await page.locator('#login-submit').innerText(), '가입 확인 메일 다시 받기');
+    assert.equal(await page.evaluate(() => window.__db.session), null);
+    assert.deepEqual(await page.evaluate(() => window.__db.accounts), accountsBefore);
+    assert(await page.locator('#newrow').isDisabled());
+    await context.close();
+  });
+  await check('Unconfirmed login points to resend and resend errors never claim success', async () => {
+    const { page, context } = await pageFor({ online: true });
+    await page.evaluate(() => { window.__db.authError = { code: 'email_not_confirmed', message: 'Email not confirmed' }; });
+    await page.click('#loginb');
+    await page.fill('#login-email', 'unconfirmed@example.test');
+    await page.fill('#login-password', 'Unconfirmed-Fixture!47');
+    await page.click('#login-submit');
+    await page.waitForFunction(() => document.getElementById('login-message').classList.contains('error'));
+    assert.match(await page.locator('#login-message').innerText(), /가입 확인 메일 다시 받기/);
+    await page.click('#auth-resend-mode');
+    await page.evaluate(() => { window.__db.authError = { message: 'Failed to fetch' }; });
+    await page.click('#login-submit');
+    await page.waitForFunction(() => document.getElementById('login-message').classList.contains('error'));
+    assert.match(await page.locator('#login-message').innerText(), /연결하지 못했습니다/);
+    assert(await page.locator('#login-submit').isEnabled(), 'A network failure must not claim a successful send or start a send cooldown.');
+    await page.evaluate(() => { window.__db.authError = { code: 'over_email_send_rate_limit', status: 429, message: 'Email rate limit exceeded' }; });
+    await page.click('#login-submit');
+    await page.waitForFunction(() => document.getElementById('login-message').classList.contains('error'));
+    assert.match(await page.locator('#login-message').innerText(), /1분/);
+    assert(await page.locator('#login-submit').isDisabled(), 'Rate-limit responses also prevent repeated immediate resends.');
+    assert.equal(await page.evaluate(() => window.__db.session), null);
+    assert(await page.locator('#newrow').isDisabled());
+    await context.close();
+  });
+  await check('Expired signup and unknown email links retain the correct recovery choices', async () => {
+    for (const linkType of ['signup', '']) {
+      const { page, context } = await pageFor({ online: true, hash: '#error=access_denied&error_code=otp_expired&error_description=Email+link+has+expired' + (linkType ? '&type=' + linkType : '') });
+      assert.equal(await page.locator('#login-dialog').getAttribute('data-mode'), linkType ? 'resend' : 'login');
+      assert.match(await page.locator('#login-message').innerText(), /만료/);
+      assert(await page.locator('#auth-reset-mode').isVisible(), 'Password recovery remains an explicit alternative.');
+      if (!linkType) {
+        assert.match(await page.locator('#login-message').innerText(), /가입 확인용.*비밀번호 설정용/);
+        await page.click('#auth-resend-mode');
+      }
+      await page.fill('#login-email', 'expired-signup@example.test');
+      await page.click('#login-submit');
+      await page.waitForFunction(() => window.__db.log.some(x => x.action === 'confirmation-resend'));
+      assert.equal(await page.evaluate(() => window.__db.log.filter(x => x.action === 'password-reset').length), 0);
+      assert.equal(await page.evaluate(() => window.__db.session), null);
+      assert(await page.locator('#newrow').isDisabled());
+      await context.close();
+    }
   });
   await check('Password reset requests a recovery email without sending any password', async () => {
     const { page, context } = await pageFor({ online: true });
@@ -755,12 +845,12 @@ try {
     await assertPasswordPrivate(page, password);
     await context.close();
   });
-  await check('Expired email links explain how to request a fresh password recovery link', async () => {
-    const { page, context } = await pageFor({ online: true, hash: '#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired' });
+  await check('Known expired recovery links explain how to request a fresh password recovery link', async () => {
+    const { page, context } = await pageFor({ online: true, hash: '#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired&type=recovery' });
     await page.waitForFunction(() => /만료|유효하지|다시.*요청/.test(document.body.innerText));
     assert(await page.locator('#newrow').isDisabled());
     if (!await page.locator('#login-dialog').isVisible()) await page.click('#loginb');
-    if (await page.locator('#login-dialog').getAttribute('data-mode') !== 'reset') await page.click('#auth-reset-mode');
+    assert.equal(await page.locator('#login-dialog').getAttribute('data-mode'), 'reset');
     await page.fill('#login-email', 'retry@example.test');
     await page.click('#login-submit');
     await page.waitForFunction(() => window.__db.log.some(x => x.action === 'password-reset'));

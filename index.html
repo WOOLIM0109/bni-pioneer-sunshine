@@ -530,7 +530,7 @@ select{font:inherit;min-height:48px;border:1px solid var(--line-2);border-radius
     <div class="login-help" id="login-help">한 번 로그인하면 같은 브라우저에서 로그인이 유지됩니다. 함께 쓰는 기기에서는 사용 후 로그아웃하세요.</div>
     <div class="msg" id="login-message" role="status"></div>
     <div class="dialog-actions"><button class="btn primary" id="login-submit" type="submit">로그인</button><button class="btn ghost" id="close-login" type="button">닫기</button></div>
-    <div class="auth-extra" id="auth-extra"><button class="btn ghost" id="auth-reset-mode" type="button">비밀번호 찾기 · 처음 설정</button></div>
+    <div class="auth-extra" id="auth-extra"><button class="btn ghost" id="auth-resend-mode" type="button">가입 확인 메일 다시 받기</button><button class="btn ghost" id="auth-reset-mode" type="button">비밀번호 찾기 · 처음 설정</button></div>
   </form>
 </dialog>
 <script>
@@ -816,6 +816,9 @@ let account=null, accounts=[], accessReady=false, accessVersion=0, accessError='
 let accountDraftOwner='',writeAccessPending=false;
 const accountDrafts=new Map(),accountMessages=new Map();
 let authMode='login', recoveryUserId=null;
+const confirmationCooldowns=new Map();
+let confirmationTimer=null,authUrlErrorHandled=false;
+const confirmationMailHelp='받은편지함과 스팸함에서 sunshine@woolimcompany.kr을 검색하고 수신 차단 여부도 확인하세요. 계속 보이지 않으면 가입 이메일을 관리자에게 알려 주세요.';
 const recoveryStorageKey='pioneer-sunshine-password-recovery';
 const authFragment=new URLSearchParams(location.hash.slice(1));
 const recoveryFromUrl=authFragment.get('type')==='recovery'&&!authFragment.has('error');
@@ -905,6 +908,7 @@ function permissions(){
     row.querySelector('.account-member-hint').textContent=role==='admin'?'전체 멤버 관리 · 연결 불필요':suggestion?.memberId&&role==='member'&&memberSelect.value===suggestion.memberId?'이름 일치 후보 · 확인 후 승인. 이메일과 소속을 확인하세요.':suggestion?.reason?suggestion.reason:role==='viewer'?'읽기 전용 · 연결 불필요':'본인 확인 후 이 계정이 수정할 멤버를 선택하세요.';
   });
   el('login-form').querySelectorAll('button').forEach(button=>button.disabled=authBusy);
+  renderConfirmationCooldown();
   connectionReviewPermissions();
   renderInterviewControls();
 }
@@ -1048,7 +1052,13 @@ async function connect(){
     const authVersion=authEventVersion;
     const sessionTask=timed(db.auth.getSession()).then(async({data,error})=>{if(error)throw error;if(authVersion===authEventVersion)acceptSession(data.session,'INITIAL_SESSION');await loadAccess();}).catch(error=>{if(authVersion===authEventVersion)acceptSession(null,'SIGNED_OUT');message('auth-status',authExplain(error),true);});
     await Promise.all([loadMembers(),sessionTask]);subscribe();
-    if(authUrlError){clearRecovery();openAuth('reset');message('login-message','메일 링크가 만료되었거나 이미 사용되었습니다. 이메일을 입력해 새 비밀번호 설정 메일을 받아 주세요.',true);history.replaceState(null,'',location.pathname+location.search);}
+    if(authUrlError&&!authUrlErrorHandled){
+      authUrlErrorHandled=true;clearRecovery();
+      const linkType=authFragment.get('type');
+      openAuth(linkType==='recovery'?'reset':linkType==='signup'?'resend':'login');
+      message('login-message','메일 링크가 만료되었거나 이미 사용되었습니다. '+(linkType==='recovery'?'새 비밀번호 설정 메일을 받아 주세요.':linkType==='signup'?'가입한 이메일을 입력해 확인 메일을 다시 받아 주세요.':'가입 확인용이었다면 ‘가입 확인 메일 다시 받기’를, 비밀번호 설정용이었다면 ‘비밀번호 찾기 · 처음 설정’을 선택하세요.'),true);
+      history.replaceState(null,'',location.pathname+location.search);
+    }
   }catch(error){online=false;synergyLinks=[];linksReady=false;linkLoadError='';setRoster(JSON.parse(JSON.stringify(DEFAULT_M)));connection(explain(error),true);}
   finally{connecting=false;el('retryb').disabled=false;permissions();}
 }
@@ -1061,6 +1071,15 @@ setInterval(()=>{if(!document.hidden&&db)scheduleRefresh();},30000);
 /* ---------- 이메일 · 비밀번호 로그인 ---------- */
 let authEventVersion=0;
 function clearPasswords(){el('login-password').value='';el('login-password-confirm').value='';}
+function renderConfirmationCooldown(){
+  clearTimeout(confirmationTimer);confirmationTimer=null;
+  if(authMode!=='resend')return;
+  const remaining=Math.max(0,Math.ceil(((confirmationCooldowns.get(el('login-email').value.trim().toLowerCase())||0)-Date.now())/1000));
+  el('login-submit').disabled=authBusy||remaining>0;
+  el('login-submit').textContent=remaining?remaining+'초 후 다시 받기':'가입 확인 메일 다시 받기';
+  if(remaining)confirmationTimer=setTimeout(renderConfirmationCooldown,1000);
+}
+function startConfirmationCooldown(email){confirmationCooldowns.set(email.toLowerCase(),Date.now()+60000);renderConfirmationCooldown();}
 function clearRecovery(){recoveryUserId=null;recoveryAwaitingSession=false;try{sessionStorage.removeItem(recoveryStorageKey);}catch{}}
 function acceptSession(next,event){
   const previousId=session?.user?.id;session=next;
@@ -1079,7 +1098,7 @@ function acceptSession(next,event){
 function authExplain(error){
   const detail=String(error?.message||error||''),code=error?.code||'';
   if(code==='invalid_credentials'||/invalid login credentials/i.test(detail))return '이메일 또는 비밀번호가 맞지 않습니다. 확인 후 다시 입력하세요. 예전에 이메일 링크로 로그인했다면 ‘비밀번호 찾기 · 처음 설정’을 눌러 주세요.';
-  if(code==='email_not_confirmed'||/email not confirmed/i.test(detail))return '가입 확인 메일의 링크를 먼저 눌러 주세요. 스팸함도 확인한 뒤 다시 로그인하세요.';
+  if(code==='email_not_confirmed'||/email not confirmed/i.test(detail))return '이메일 인증이 아직 끝나지 않았습니다. ‘가입 확인 메일 다시 받기’를 선택하세요. '+confirmationMailHelp;
   if(/session_not_found|session_expired|otp_expired|refresh_token_not_found/.test(code)||/session missing|auth session missing|link.*expired/i.test(detail))return '비밀번호 설정 링크 또는 로그인이 만료되었습니다. ‘비밀번호 찾기 · 처음 설정’에서 새 메일을 받아 주세요.';
   if(code==='same_password')return '현재 비밀번호와 같습니다. 다른 새 비밀번호를 입력하세요.';
   if(code==='weak_password'||/password.*(least|weak|length)/i.test(detail))return '비밀번호가 너무 짧거나 단순합니다. 8자 이상으로, 문자와 숫자를 섞어 다시 입력하세요.';
@@ -1089,19 +1108,20 @@ function authExplain(error){
 }
 function setAuthMode(mode){
   authMode=mode;clearPasswords();message('login-message','');el('login-dialog').dataset.mode=mode;
-  const passwordMode=mode==='password',signup=mode==='signup',reset=mode==='reset';
-  el('login-title').textContent=passwordMode?'비밀번호 설정':signup?'처음 회원가입':reset?'비밀번호 찾기 · 처음 설정':'로그인';
-  el('login-intro').textContent=passwordMode?'새 비밀번호를 저장하면 다음부터 이메일과 비밀번호로 로그인할 수 있어요.':signup?'이름과 본인 이메일로 가입하세요. 처음 한 번만 이메일을 인증합니다.':reset?'가입한 이메일로 비밀번호 설정 링크를 받으세요.':'이메일과 비밀번호로 로그인하세요.';
-  el('auth-modes').hidden=passwordMode;el('auth-extra').hidden=passwordMode||reset;
+  const passwordMode=mode==='password',signup=mode==='signup',reset=mode==='reset',resend=mode==='resend',emailOnly=reset||resend;
+  el('login-title').textContent=passwordMode?'비밀번호 설정':signup?'처음 회원가입':reset?'비밀번호 찾기 · 처음 설정':resend?'가입 확인 메일 다시 받기':'로그인';
+  el('login-intro').textContent=passwordMode?'새 비밀번호를 저장하면 다음부터 이메일과 비밀번호로 로그인할 수 있어요.':signup?'이름과 본인 이메일로 가입하세요. 처음 한 번만 이메일을 인증합니다.':reset?'가입한 이메일로 비밀번호 설정 링크를 받으세요.':resend?'가입할 때 입력한 이메일로 확인 링크를 다시 요청하세요.':'이메일과 비밀번호로 로그인하세요.';
+  el('auth-modes').hidden=passwordMode;el('auth-extra').hidden=passwordMode;
+  el('auth-resend-mode').hidden=resend;el('auth-reset-mode').hidden=reset;
   el('auth-login-mode').setAttribute('aria-pressed',String(mode==='login'));el('auth-signup-mode').setAttribute('aria-pressed',String(signup));
   el('email-field').hidden=passwordMode;el('login-email').disabled=passwordMode;
   el('signup-name-field').hidden=!signup;el('signup-name').disabled=!signup;el('signup-name').required=signup;
-  el('password-field').hidden=reset;el('login-password').disabled=reset;el('login-password').required=!reset;
+  el('password-field').hidden=emailOnly;el('login-password').disabled=emailOnly;el('login-password').required=!emailOnly;
   el('login-password').minLength=signup||passwordMode?8:1;el('login-password').autocomplete=signup||passwordMode?'new-password':'current-password';
   el('password-label').textContent=signup||passwordMode?'새 비밀번호 (8자 이상)':'비밀번호';
   el('password-confirm-field').hidden=!(signup||passwordMode);el('login-password-confirm').disabled=!(signup||passwordMode);el('login-password-confirm').required=signup||passwordMode;
-  el('login-help').textContent=passwordMode?'비밀번호는 본인만 알고 있는 것으로 정해 주세요. 다른 곳에서 쓰는 비밀번호와 다르게 정하면 좋습니다.':signup?'가입 이름과 이메일은 관리자가 승인할 때 확인합니다. 가입 확인 메일의 링크를 누르고 관리자 승인을 기다려 주세요.':reset?'예전에 이메일 링크로 로그인한 분도 이 방법으로 비밀번호를 처음 설정할 수 있어요. 메일 속 링크를 누르면 새 비밀번호 입력 화면이 열립니다.':'같은 브라우저에서는 로그인이 유지됩니다. 함께 쓰는 기기에서는 사용 후 로그아웃하세요. 예전에 이메일 링크로만 로그인했다면 아래 ‘비밀번호 찾기 · 처음 설정’을 이용하세요.';
-  el('login-submit').textContent=passwordMode?'새 비밀번호 저장':signup?'가입하고 확인 메일 받기':reset?'비밀번호 설정 메일 받기':'로그인';
+  el('login-help').textContent=passwordMode?'비밀번호는 본인만 알고 있는 것으로 정해 주세요. 다른 곳에서 쓰는 비밀번호와 다르게 정하면 좋습니다.':signup?'가입 이름과 이메일은 관리자가 승인할 때 확인합니다. 가입 확인 메일의 링크를 누르고 관리자 승인을 기다려 주세요.':reset?'예전에 이메일 링크로 로그인한 분도 이 방법으로 비밀번호를 처음 설정할 수 있어요. 메일 속 링크를 누르면 새 비밀번호 입력 화면이 열립니다.':resend?confirmationMailHelp:'같은 브라우저에서는 로그인이 유지됩니다. 함께 쓰는 기기에서는 사용 후 로그아웃하세요. 예전에 이메일 링크로만 로그인했다면 아래 ‘비밀번호 찾기 · 처음 설정’을 이용하세요.';
+  el('login-submit').textContent=passwordMode?'새 비밀번호 저장':signup?'가입하고 확인 메일 받기':reset?'비밀번호 설정 메일 받기':resend?'가입 확인 메일 다시 받기':'로그인';
   permissions();
 }
 function openAuth(mode='login'){setAuthMode(mode);if(!el('login-dialog').open)el('login-dialog').showModal();el(mode==='password'?'login-password':'login-email').focus();}
@@ -1109,7 +1129,8 @@ el('loginb').onclick=()=>openAuth();
 el('guide-login').onclick=()=>el('loginb').click();
 el('admin-login').onclick=()=>el('loginb').click();
 el('passwordb').onclick=()=>openAuth('password');
-el('auth-login-mode').onclick=()=>setAuthMode('login');el('auth-signup-mode').onclick=()=>setAuthMode('signup');el('auth-reset-mode').onclick=()=>setAuthMode('reset');
+el('auth-login-mode').onclick=()=>setAuthMode('login');el('auth-signup-mode').onclick=()=>setAuthMode('signup');el('auth-reset-mode').onclick=()=>setAuthMode('reset');el('auth-resend-mode').onclick=()=>setAuthMode('resend');
+el('login-email').addEventListener('input',renderConfirmationCooldown);
 el('close-login').onclick=()=>{if(!authBusy)el('login-dialog').close();};
 el('login-dialog').addEventListener('close',clearPasswords);
 el('login-dialog').addEventListener('cancel',event=>{if(authBusy)event.preventDefault();});
@@ -1118,8 +1139,9 @@ el('login-form').onsubmit=async event=>{
   if(!db){message('login-message','로그인 연결을 사용할 수 없습니다. 상단의 연결 안내를 확인하고 다시 연결하세요.',true);return;}
   const mode=authMode,email=el('login-email').value.trim(),password=el('login-password').value,fullName=normalizeSignupName(el('signup-name').value);
   if(mode==='signup'&&(!fullName||fullName.length>80)){message('login-message',!fullName?'가입할 본인 이름을 입력하세요.':'이름은 80자 이내로 입력하세요.',true);el('signup-name').focus();return;}
+  if(mode==='resend'&&(confirmationCooldowns.get(email.toLowerCase())||0)>Date.now()){renderConfirmationCooldown();return;}
   if(['signup','password'].includes(mode)&&(password.length<8||password!==el('login-password-confirm').value)){message('login-message',password.length<8?'비밀번호를 8자 이상 입력하세요.':'두 비밀번호가 다릅니다. 같은 비밀번호를 다시 입력하세요.',true);return;}
-  authBusy=true;permissions();message('login-message',mode==='reset'||mode==='signup'?'메일 요청을 보내고 있습니다.':'처리하고 있습니다.');
+  authBusy=true;permissions();message('login-message',['reset','signup','resend'].includes(mode)?'메일 요청을 보내고 있습니다.':'처리하고 있습니다.');
   try{
     if(mode==='login'){
       const {data,error}=await timed(db.auth.signInWithPassword({email,password}));if(error)throw error;
@@ -1127,7 +1149,12 @@ el('login-form').onsubmit=async event=>{
       if(!recoveryUserId)el('login-dialog').close();message('auth-status','로그인했습니다. 멤버 관리에서 내 권한을 확인하세요.');
     }else if(mode==='signup'){
       const {error}=await timed(db.auth.signUp({email,password,options:{emailRedirectTo:authRedirect(),data:{full_name:fullName}}}));if(error)throw error;
-      message('login-message','메일함과 스팸함에서 가입 확인 메일을 찾아 링크를 눌러 주세요. 이미 가입한 이메일이라면 로그인하거나 ‘비밀번호 찾기 · 처음 설정’을 이용하세요.');
+      startConfirmationCooldown(email);
+      message('login-message','가입 확인이 필요한 계정이면 확인 메일이 발송됩니다. 가장 최근 메일의 링크를 눌러 주세요. '+confirmationMailHelp+' 다시 요청하려면 1분 뒤 ‘가입 확인 메일 다시 받기’를 이용하세요. 이미 인증했다면 로그인하세요.');
+    }else if(mode==='resend'){
+      const {error}=await timed(db.auth.resend({type:'signup',email,options:{emailRedirectTo:authRedirect()}}));if(error)throw error;
+      startConfirmationCooldown(email);
+      message('login-message','가입 확인이 필요한 계정이면 확인 메일이 발송됩니다. 가장 최근 메일의 링크를 눌러 주세요. '+confirmationMailHelp+' 다시 요청하려면 1분 기다려 주세요.');
     }else if(mode==='reset'){
       const {error}=await timed(db.auth.resetPasswordForEmail(email,{redirectTo:authRedirect()}));if(error)throw error;
       message('login-message','가입된 이메일이면 비밀번호 설정 메일이 발송됩니다. 메일함과 스팸함을 확인하고 가장 최근 메일의 링크를 눌러 주세요.');
@@ -1139,6 +1166,7 @@ el('login-form').onsubmit=async event=>{
     clearPasswords();
   }catch(error){
     clearPasswords();
+    if(mode==='resend'&&(error?.status===429||['over_email_send_rate_limit','over_request_rate_limit'].includes(error?.code)))startConfirmationCooldown(email);
     if(mode==='password'&&(/session_not_found|session_expired|otp_expired|refresh_token_not_found/.test(error?.code||'')||/session missing/i.test(error?.message||''))){clearRecovery();setAuthMode('reset');}
     message('login-message',authExplain(error),true);
   }
