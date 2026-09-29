@@ -176,9 +176,18 @@ psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/roles.sql
 
 `node --experimental-strip-types tests/interview-edge.mjs`는 실제 API 호출 없이 다중 문서 요청·근거 ID·AI 출력·오류 처리를 검사합니다. `node tests/interview-extraction.mjs`는 PDF/DOCX/TXT 판독과 단계 추정을 확인합니다. 로컬 `121자료집`의 네 PDF도 단계 추정 검증에 사용하며, 이 비공개 원본은 저장소나 공개 배포물에 넣지 않습니다.
 
-PDF 고해상도 분석을 실제로 확인하려면 `INTERVIEW_EXTRACTION_OUTPUT=diagnostics-output/interview-pdf-high/fixture-text.json`을 설정해 추출 테스트를 실행한 뒤, 로컬 환경의 `OPENAI_API_KEY`와 `node --experimental-strip-types tests/interview-pdf-live.mjs --run-once`를 사용합니다. 이 검증은 김경태 PDF 두 개로 실제 OpenAI 요청을 한 번만 보내고, 인증·DB·Storage는 메모리 대역을 사용합니다. 실행 기록과 응답은 Git에서 제외된 `diagnostics-output/interview-pdf-high/`에 저장하며, 기존 실행 기록이 있으면 유료 호출을 반복하지 않습니다.
+이번 배포의 실제 AI 확인은 배포 후 운영 사이트에서 관리자가 직접 진행합니다. 김경태의 신상명세표·아는 단계 PDF와 신뢰 단계 PDF 두 개를 선택해 통합 분석을 한 번 실행하고, 제안에 **카드 할인 후 월 5천원으로 이용하는 조건**과 **동물병원·펫샵 점주 소개 요청**이 들어가는지 원문·페이지 근거와 대조합니다. 할인액과 최종 이용료를 혼동하지 않는지, 홍보물의 제3자 연락처가 제안에서 제외되는지도 확인합니다. 배포 전 실제 AI 호출은 실행하지 않습니다.
 
-30MiB 운영 업로드에는 [`supabase/interview-pdf-30mb-bucket.sql`](supabase/interview-pdf-30mb-bucket.sql)의 버킷 설정과 문서 등록 DB 제한이 모두 일치해야 합니다. 기존 `supabase/interviews.sql`의 테이블 CHECK 및 등록 RPC에는 20MiB 제한이 있으므로, 버킷 한 줄 SQL만 실행한 상태에서는 20~30MiB PDF 등록이 되지 않습니다. 이 파일은 수동 실행용이며 애플리케이션 빌드나 배포에서 실행하지 않습니다.
+30MiB 운영 적용 순서는 다음과 같습니다. 아래 SQL은 수동 실행용이며 빌드·배포에서 자동 실행하지 않습니다.
+
+1. 운영자가 [`supabase/interview-pdf-30mb.sql`](supabase/interview-pdf-30mb.sql) 전체를 Supabase SQL Editor에서 실행합니다. 버킷·기존 CHECK·문서 등록 함수의 20MiB 숫자와 오류문구만 30MiB로 변경합니다. 새 컬럼·테이블·함수·권한은 추가하지 않습니다. 이전 버킷 한 줄 SQL은 이 파일에 통합했습니다. 기존 운영 DB에는 전체 `interviews.sql`을 재실행하지 않습니다.
+2. 파일 마지막 SELECT의 결과가 **1행**, `bucket_bytes=31457280`, `bucket_limit_ok`·`private_bucket_ok`·`check_limit_ok`·`rpc_limit_ok`·`rpc_message_ok`가 **모두 true**인지 확인합니다. `document_count`는 적용 전후 같아야 합니다. 같은 SELECT만 다시 실행해도 됩니다.
+3. 운영자가 SQL 실행·확인 결과를 알려주고 배포를 승인하면 **push·analyze-interview Edge 배포 → GitHub Pages와 Edge 완료 확인 → 화면·설정 확인** 순서로 진행합니다. SQL만 먼저 적용해도 기존 화면·Edge의 낮은 제한은 그대로 작동하며, 30MiB 업로드와 고해상도 분석은 두 배포가 끝난 후 사용합니다.
+4. 배포 후 위의 김경태 PDF 두 개로 관리자가 실제 AI 결과를 확인합니다.
+
+되돌려야 할 때는 [`supabase/interview-pdf-30mb-rollback.sql`](supabase/interview-pdf-30mb-rollback.sql)을 수동 실행합니다. 문서와 원본을 지우지 않고 세 제한을 20MiB로 복원하며, 이미 20MiB를 넘는 등록 문서나 보관 원본이 있으면 전체 중단합니다. 마지막 SELECT에서 `bucket_bytes=20971520`, 모든 `*_ok=true`를 확인합니다. 이 SQL은 애플리케이션·Edge 배포를 되돌리지 않습니다. DB의 기존 공통 한도는 숫자만 바뀌므로 DOCX·TXT에도 30MiB가 적용되지만, 화면의 DOCX·TXT 업로드 10MiB와 Edge의 기존 비PDF 제한은 유지됩니다.
+
+`node tests/interview-pdf-limits.mjs`는 로컬 PGlite에서 적용·반복 실행·30MiB 경계·권한과 데이터 보존·확인 쿼리·복원을 검증합니다. 필요하면 `PGLITE_MODULE`에 기존 설치 모듈 경로를 지정합니다. 운영 DB나 OpenAI에는 연결하지 않습니다.
 
 `tests/member-referrals.sql`은 공유 설정까지 적용한 테스트 DB에서 승인 멤버 간 조회, 원본·고객사 범위, 타인 수정 차단, 통합 검토 반영 후 공유를 검사하고 테스트 데이터를 롤백합니다. `node tests/browser.mjs --filter="Shared referral"`은 화면 노출, 로그아웃·권한 변경, 조회 실패·재시도와 편집 충돌을 검증합니다.
 

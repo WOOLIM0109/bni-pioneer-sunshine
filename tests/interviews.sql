@@ -37,7 +37,7 @@ insert into private.member_details(member_id,good_referral,triggers,customer_com
 insert into storage.objects(bucket_id,name,metadata) values
 ('member-interviews','44444444-4444-4444-8444-444444444401/document.pdf','{"size":200,"mimetype":"application/pdf"}'),
 ('member-interviews','44444444-4444-4444-8444-444444444401/analysis.txt','{"size":100,"mimetype":"text/plain"}'),
-('member-interviews','44444444-4444-4444-8444-444444444401/oversize.pdf','{"size":20971521,"mimetype":"application/pdf"}'),
+('member-interviews','44444444-4444-4444-8444-444444444401/oversize.pdf','{"size":31457281,"mimetype":"application/pdf"}'),
 ('member-interviews','44444444-4444-4444-8444-444444444401/wrong.exe','{"size":200,"mimetype":"application/octet-stream"}');
 insert into storage.buckets(id,name,public) values ('sunshine-interview-test-other','sunshine-interview-test-other',false);
 insert into storage.objects(bucket_id,name,metadata) values ('sunshine-interview-test-other','unrelated.txt','{"size":10,"mimetype":"text/plain"}');
@@ -256,7 +256,7 @@ reset role;
 select pg_temp.check_true((select updated_by='33333333-3333-4333-8333-333333333301'::uuid from private.member_details where member_id='44444444-4444-4444-8444-444444444401'),'private audit actor derived from authenticated user');
 select pg_temp.check_true(not exists(select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='private'
   and tablename in ('member_details','member_interviews','member_interview_history')),'private data is not published through public realtime');
-select pg_temp.check_true((select not public and file_size_limit=20971520 and array_length(allowed_mime_types,1)=3 from storage.buckets where id='member-interviews'),'private bucket restricts size and three supported MIME types');
+select pg_temp.check_true((select not public and file_size_limit=31457280 and array_length(allowed_mime_types,1)=3 from storage.buckets where id='member-interviews'),'private bucket restricts size and three supported MIME types');
 select pg_temp.check_true(not exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
   where n.nspname='public' and p.proname in ('get_member_details','update_member_details','create_member_interview','list_member_interviews','get_member_interview',
     'save_member_interview_draft','apply_member_interview','begin_member_interview_analysis','finish_member_interview_analysis','cancel_member_interview_analysis') and p.prosecdef),'public RPC wrappers are security invoker');

@@ -20,7 +20,7 @@ create table if not exists private.member_interviews (
   storage_path text not null unique,
   original_name text not null,
   mime_type text not null,
-  file_size bigint not null check (file_size > 0 and file_size <= 20971520),
+  file_size bigint not null check (file_size > 0 and file_size <= 31457280),
   raw_text text not null default '' check (char_length(raw_text) <= 120000),
   extracted jsonb not null default '{}' check (jsonb_typeof(extracted) = 'object'),
   public_patch jsonb not null default '{}' check (jsonb_typeof(public_patch) = 'object'),
@@ -107,7 +107,7 @@ create trigger members_interviews_delete_guard before delete on public.members
 
 -- Storage metadata comes from Storage, not the create RPC's client parameters.
 insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
-values ('member-interviews','member-interviews',false,20971520,
+values ('member-interviews','member-interviews',false,31457280,
   array['application/pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document','text/plain'])
 on conflict(id) do update set public=false,file_size_limit=excluded.file_size_limit,allowed_mime_types=excluded.allowed_mime_types;
 drop policy if exists sunshine_interview_storage_read on storage.objects;
@@ -253,8 +253,8 @@ begin
   if not found then raise exception using errcode='22023',message='업로드한 원문 파일을 찾지 못했습니다. 파일 업로드를 완료한 후 다시 시도하세요.'; end if;
   if coalesce(meta->>'size','') !~ '^[0-9]{1,10}$' then raise exception using errcode='22023',message='업로드 파일 크기를 확인할 수 없습니다. 다시 업로드하세요.'; end if;
   size_value:=(meta->>'size')::bigint; mime:=lower(coalesce(meta->>'mimetype',''));
-  if size_value<1 or size_value>20971520 or not mime=any(array['application/pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document','text/plain']) then
-    raise exception using errcode='22023',message='20MB 이하 PDF·DOCX·텍스트 파일만 등록할 수 있습니다.';
+  if size_value<1 or size_value>31457280 or not mime=any(array['application/pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document','text/plain']) then
+    raise exception using errcode='22023',message='30MB 이하 PDF·DOCX·텍스트 파일만 등록할 수 있습니다.';
   end if;
   insert into private.member_interviews(member_id,storage_path,original_name,mime_type,file_size,created_by,updated_by)
     values(target_member_id,storage_path,btrim(original_name),mime,size_value,auth.uid(),auth.uid()) returning * into row_value;
