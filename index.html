@@ -1490,15 +1490,17 @@ function renderTeams(){
   teams().forEach(d=>{
     const gaps=Object.entries(d.gaps).sort((a,b)=>b[1]-a[1]).slice(0,6);
     const shared=Object.entries(d.cust).sort((a,b)=>b[1]-a[1]);
+    const leader=d.members.find(member=>d.leader_member_id===collabMemberKey(member));
+    const cardMembers=leader?[leader,...d.members.filter(member=>member!==leader)]:d.members;
     const card=document.createElement('div'); card.className='tsun';card.dataset.teamId=d.id;
     const canOpenChat=canReadMemberReferrals()&&(isAdmin()||collabMemberships.some(link=>link.team_id===d.id&&link.member_id===account.member_id));
     const chatLink=canOpenChat?safeCollabChatLink(collabChatLinks.get(d.id)):'';
     card.innerHTML=`<h3>${esc(d.name)}</h3>
-      <div class="meta">멤버 ${d.members.length}명 · 결원 ${Object.keys(d.gaps).length}개 업종</div>
+      <div class="meta">멤버 ${d.members.length}명 · 초대 후보 ${Object.keys(d.gaps).length}개 직종</div>
       <div class="ptitle" style="margin:0 0 6px">공유 핵심고객</div>
       <div class="chips" style="margin-bottom:12px">${shared.map(([c,n])=>`<span class="chip ${n>1?'sun':''}">${esc(c)}${n>1?' <span class="num">'+n+'</span>':''}</span>`).join('')||'<span class="chip">미입력</span>'}</div>
       <div class="ptitle" style="margin:0 0 6px">현재 멤버</div>
-      <ul class="collab-team-members">${d.members.map(m=>`<li><strong>${d.leader_member_id===collabMemberKey(m)?'★ ':''}${esc(m.n)}${d.leader_member_id===collabMemberKey(m)?' · 팀장':''}</strong><small>${esc(m.f)} · ${esc(m.co)}</small></li>`).join('')||'<li>등록된 팀원이 없습니다.</li>'}</ul>
+      <ul class="collab-team-members">${cardMembers.map(m=>`<li><strong>${d.leader_member_id===collabMemberKey(m)?'★ ':''}${esc(m.n)}${d.leader_member_id===collabMemberKey(m)?' · 팀장':''}</strong><small>${esc(m.f)} · ${esc(m.co)}</small></li>`).join('')||'<li>등록된 팀원이 없습니다.</li>'}</ul>
       <div class="ptitle" style="margin:0 0 6px">이 팀이 초대하면 좋은 비지터 직종</div>
       <div class="dots">${gaps.length?gaps.map(([f,c])=>`<span class="dot hollow">${esc(f)} <span class="num">${c}</span></span>`).join(''):'<span class="chip">없음</span>'}</div>${d.note?'<p class="note">'+esc(d.note)+'</p>':''}${chatLink?`<a class="btn ghost collab-chat" href="${esc(chatLink)}" target="_blank" rel="noopener noreferrer">팀 단톡방 열기</a>`:''}`;
     box.appendChild(card);

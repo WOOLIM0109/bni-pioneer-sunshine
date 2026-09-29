@@ -596,7 +596,7 @@ try {
   await check('Collab ninth-term roster renders five complete teams with corrected member fields and operational roles', async () => {
     const { page, context } = await pageFor({ online: true });
     assert.equal(await page.evaluate(() => window.__db.clientOptions.global.headers['x-sunshine-client']), 'collab9');
-    const snapshot = await page.evaluate(() => ({ members: M, teams: teams().map(team => ({ name: team.name, names: team.members.map(member => member.n) })) }));
+    const snapshot = await page.evaluate(() => ({ members: M, teams: teams().map(team => ({ id: team.id, name: team.name, names: team.members.map(member => member.n), leader: team.members.find(member => member.id === team.leader_member_id)?.n, inviteCount: Object.keys(team.gaps).length })) }));
     assert.equal(snapshot.members.length, 33);assert.equal(new Set(snapshot.members.map(member => member.n)).size, 33);
     assert.deepEqual(snapshot.teams.map(team => team.names.length), [4, 10, 9, 5, 5]);
     assert.equal(new Set(snapshot.teams.flatMap(team => team.names)).size, 33);
@@ -608,11 +608,19 @@ try {
     await page.click('#t2');assert.equal(await page.locator('#teamgrid .tsun').count(), 5);
     assert.equal(await page.locator('#teamgrid .collab-team-members li').count(), 33);
     assert.equal(await page.locator('#teamgrid .collab-team-members strong').filter({ hasText: '★' }).count(), 5);
+    for (const team of snapshot.teams) {
+      const card = page.locator(`#teamgrid .tsun[data-team-id="${team.id}"]`);
+      assert.deepEqual(await card.locator('.collab-team-members strong').allTextContents(), [`★ ${team.leader} · 팀장`, ...team.names.filter(name => name !== team.leader)], `${team.name}: leader first; all remaining members keep their original order.`);
+      assert.equal(await card.locator('.meta').innerText(), `멤버 ${team.names.length}명 · 초대 후보 ${team.inviteCount}개 직종`);
+    }
     const operations = await page.locator('#collab-operations').innerText();
     for (const text of ['의장(심학봉)', '부의장(김경태)', '121마스터(송승훈)', '성장코디(이채홍)', 'ST(정상현)']) assert(operations.includes(text), text);
     await page.evaluate(() => { const old = window.__db.members.find(member => member.name === '송승훈'), replacement = window.__db.members.find(member => member.name === '이은성'); old.chapter_role = null;replacement.chapter_role = '121마스터';window.__db.realtime(); });
     await page.waitForFunction(() => document.getElementById('collab-operations').textContent.includes('121마스터(이은성)'));
     assert(!(await page.locator('#collab-operations').innerText()).includes('121마스터(송승훈)'));
+    await page.evaluate(() => { window.__db.collabTeams[0].leader_member_id = null;window.__db.realtime(); });
+    await page.waitForFunction(id => !document.querySelector(`#teamgrid .tsun[data-team-id="${id}"] .collab-team-members`).textContent.includes('★'), snapshot.teams[0].id);
+    assert.deepEqual(await page.locator(`#teamgrid .tsun[data-team-id="${snapshot.teams[0].id}"] .collab-team-members strong`).allTextContents(), snapshot.teams[0].names, 'A team without a leader keeps its original member order.');
     await context.close();
   });
   await check('Collab multiple memberships appear in both team cards, member groups, badges and deduplicated 121 peers', async () => {
