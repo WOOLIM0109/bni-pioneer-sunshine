@@ -463,6 +463,58 @@ function connectionFixtures() {
     team: '기업', customers: ['공통 고객'], synergies: index ? [] : ['홈페이지 제작', '동일 분야']
   }));
 }
+function sunshineFixtures() {
+  const customers = ['개인·소상공인', '팀 단위 사업자', '스타트업·창업 준비자', '무역·제조업 대표', '하이엔드 전문직', 'BNI 챕터 운영자', '1인 창업자', '팀·기업', '대표·임원', 'BNI 챕터 의장단·디렉터'];
+  const synergies = ['앱 기획자', 'UI/UX 디자이너', '스타트업 대표', '1인 창업자', '기업 브랜드 마케팅 대행사', 'IR 컨설턴트', '무역·제조업체', '전문직 연합회 운영자'];
+  return [
+    { ...structuredClone(seed[0]), name: '송승훈', company: '121마스터', field: '앱 개발 · 맞춤형 미니 앱 제작 · 디지털 명함(DiCA)', customers, synergies, is_real: true },
+    { ...structuredClone(seed[1]), name: '직군 12개 검증', company: '다중 문서 통합 회사', field: '기업의 사업 준비와 성장에 필요한 전문 서비스', customers, synergies: [...synergies, '세무 회계 전문가', '노무 법률 전문가', '기업 행사 기획자', '브랜드 콘텐츠 제작자'], is_real: true },
+    { ...structuredClone(seed[2]), name: '기본 원형 검증', company: '기본 회사', field: '경영 상담', customers: ['제조·공장 대표', '요식업 점주', '숙박·병원·상가 사업주'], synergies: ['에어컨', '상업 인테리어', '축산물 유통', '요식업', '전기공사', '소방설비', '정수기 렌탈'], is_real: true },
+    { ...structuredClone(seed[3]), name: '긴 원문 접근 검증', company: '긴 회사 소개를 그대로 보관하는 테스트 회사', field: '여러 문서에서 받은 긴 전문분야 설명을 손실 없이 확인할 수 있도록 보관합니다. '.repeat(5).trim(), customers: customers.map((customer, index) => `${customer} ${index + 1}번 고객의 자세한 요청과 소개 조건을 그대로 보관합니다.`), synergies: synergies.map((synergy, index) => `${synergy} ${index + 1}번 직군의 상세 업무와 협업 범위를 그대로 보관합니다. `.repeat(3).trim()), is_real: true }
+  ];
+}
+async function settleSunshine(page) {
+  await page.evaluate(async () => {
+    await document.fonts?.ready;
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  });
+}
+async function selectSunshine(page, record) {
+  await page.locator('#mlist .mrow').filter({ has: page.getByText(record.name, { exact: true }) }).click();
+  await settleSunshine(page);
+}
+async function assertSunshine(page, record, width) {
+  const diagram = page.locator('#stage'), list = page.locator('#stagelist');
+  const size = await page.evaluate(() => ({ width: innerWidth, html: document.documentElement.scrollWidth, body: document.body.scrollWidth }));
+  assert(size.html <= size.width && size.body <= size.width, `${record.name} at ${width}px must not overflow the page: ${JSON.stringify(size)}`);
+  assert.equal(await diagram.isVisible(), width > 760, `${record.name} at ${width}px must use the intended diagram/list layout.`);
+  assert.equal(await list.isVisible(), width <= 760);
+  if (width <= 760) {
+    assert.deepEqual(await list.locator('.lcore-customers li').allTextContents(), record.customers);
+    assert.deepEqual(await list.locator('.lrow > span:first-child').allTextContents(), record.synergies);
+    return;
+  }
+  assert.deepEqual(await diagram.locator('.core .cust span').allTextContents(), record.customers, 'Every original customer must remain in the circle.');
+  assert.deepEqual(await diagram.locator('.node .f').allTextContents(), record.synergies, 'Every original synergy must remain in a surrounding circle.');
+  assert((await diagram.locator('.core .field').textContent()).includes(record.field), 'The complete original field must be retained.');
+  const geometry = await diagram.evaluate(stage => {
+    const bounds = stage.getBoundingClientRect();
+    const circles = Array.from(stage.querySelectorAll('.core,.node')).map(element => {
+      const rect = element.getBoundingClientRect();
+      return { label: element.className, x: rect.x + rect.width / 2, y: rect.y + rect.height / 2, radius: rect.width / 2, width: rect.width, height: rect.height, inside: rect.left >= bounds.left - 1 && rect.right <= bounds.right + 1 && rect.top >= bounds.top - 1 && rect.bottom <= bounds.bottom + 1 };
+    });
+    const overlaps = circles.flatMap((circle, index) => circles.slice(index + 1).filter(other => Math.hypot(circle.x - other.x, circle.y - other.y) < circle.radius + other.radius - 1).map(other => [circle.label, other.label]));
+    const content = Array.from(stage.querySelectorAll('.core-content,.card-content')).map(element => {
+      const parent = element.closest('.core,.card'), rect = element.getBoundingClientRect(), circle = parent.getBoundingClientRect();
+      const overflow = element.scrollHeight > element.clientHeight + 1;
+      return { inside: rect.left >= circle.left - 1 && rect.right <= circle.right + 1 && rect.top >= circle.top - 1 && rect.bottom <= circle.bottom + 1, overflow, accessible: !overflow || (/auto|scroll/.test(getComputedStyle(element).overflowY) && element.tabIndex >= 0) };
+    });
+    return { circles, overlaps, content };
+  });
+  assert(geometry.circles.every(circle => circle.inside && Math.abs(circle.width - circle.height) < 1), `${record.name} at ${width}px: circles must fit inside the diagram: ${JSON.stringify(geometry.circles)}`);
+  assert.deepEqual(geometry.overlaps, [], `${record.name} at ${width}px: the center and surrounding circles must not overlap.`);
+  assert(geometry.content.every(content => content.inside && content.accessible), `${record.name} at ${width}px: original text must fit or remain accessible in a focusable scroll area: ${JSON.stringify(geometry.content)}`);
+}
 async function openConnectionReview(page, memberId) {
   await page.click('#t4');
   if (!await page.locator('#link-review-details').evaluate(details => details.open)) await page.click('#link-review-details > summary');
@@ -2025,6 +2077,56 @@ try {
     assert(!/PRIVATE_|INTERVIEW_PRIVATE_/.test(await page.locator('#interview-review').innerHTML()));
     await context.close();
   });
+  await check('Sunshine keeps real and dense member data in nonoverlapping circles across desktop widths', async () => {
+    const records = sunshineFixtures(), { page, context } = await pageFor({ online: true, records });
+    for (const width of [1500, 1180, 820, 400]) {
+      await page.setViewportSize({ width, height: 1100 });
+      for (const record of records.slice(0, 3)) {
+        await selectSunshine(page, record);
+        await assertSunshine(page, record, width);
+      }
+    }
+    await context.close();
+  });
+  await check('Sunshine restores circle geometry after responsive changes and member switches', async () => {
+    const records = sunshineFixtures(), { page, context } = await pageFor({ online: true, records });
+    await page.setViewportSize({ width: 1500, height: 1100 });
+    await selectSunshine(page, records[2]);
+    const baseline = await page.locator('#stage').boundingBox();
+    for (const width of [400, 1500, 820, 400, 1180, 1500]) {
+      await page.setViewportSize({ width, height: 1100 });
+      await selectSunshine(page, records[1]);
+      await assertSunshine(page, records[1], width);
+      await selectSunshine(page, records[2]);
+      await assertSunshine(page, records[2], width);
+    }
+    const restored = await page.locator('#stage').boundingBox();
+    assert(Math.abs(restored.height - baseline.height) <= 1 && Math.abs(restored.width - baseline.width) <= 1, 'A basic member must recover its original diagram size after showing dense members.');
+    await context.close();
+  });
+  await check('Sunshine preserves long source wording in keyboard-accessible circle scroll areas', async () => {
+    const records = sunshineFixtures(), { page, context } = await pageFor({ online: true, records });
+    const record = records[3];
+    for (const width of [1500, 1180, 820, 400]) {
+      await page.setViewportSize({ width, height: 1100 });
+      await selectSunshine(page, record);
+      await assertSunshine(page, record, width);
+      if (width <= 760) continue;
+      const scrollSelector = '#stage .core-content,#stage .card-content,#stage .cust';
+      const scrollables = await page.locator(scrollSelector).evaluateAll(elements => elements.map((element, index) => ({ index, overflow: element.scrollHeight > element.clientHeight + 1 })).filter(item => item.overflow).map(item => item.index));
+      assert(scrollables.length > 0, 'Long source wording must exercise scrollable content instead of clipping or truncating it.');
+      for (const index of scrollables) {
+        const area = page.locator(scrollSelector).nth(index);
+        assert(await area.evaluate(element => element.tabIndex >= 0 && /auto|scroll/.test(getComputedStyle(element).overflowY) && !!element.getAttribute('aria-label')), 'An overflowing circle area must explain its purpose and allow keyboard access.');
+        await area.focus();
+        await page.keyboard.press('End');
+        await page.waitForFunction(({ index, selector }) => document.querySelectorAll(selector)[index].scrollTop > 0, { index, selector: scrollSelector });
+        const end = await area.evaluate(element => { element.scrollTop = element.scrollHeight; return { top: element.scrollTop, bottom: element.scrollHeight - element.clientHeight }; });
+        assert(Math.abs(end.top - end.bottom) <= 1, 'The last part of the original text must remain reachable.');
+      }
+    }
+    await context.close();
+  });
   await check('Every tab fits a 400px viewport in both themes', async () => {
     const { page, context } = await pageFor({ online: true, auth: true });
     for (const theme of ['light', 'dark']) {
@@ -2085,6 +2187,25 @@ try {
           const filename = `${width}-${theme}-${label}.png`;
           await page.screenshot({ path: path.join(directory, filename), animations: 'disabled' });
           console.log(`SCREENSHOT diagnostics-output/interview-integration/${filename}`);
+        }
+      }
+    }
+    await context.close();
+  }
+  if (process.argv.includes('--sunshine-screenshots')) {
+    const directory = fileURLToPath(new URL('../diagnostics-output/sunshine-real-data', import.meta.url));
+    await mkdir(directory, { recursive: true });
+    const records = sunshineFixtures(), { page, context } = await pageFor({ online: true, records });
+    for (const width of [1440, 1180]) {
+      await page.setViewportSize({ width, height: 1100 });
+      for (const theme of ['light', 'dark']) {
+        await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
+        for (const [index, label] of [[0, 'real'], [1, 'dense']]) {
+          await selectSunshine(page, records[index]);
+          await page.locator('#stage').evaluate(element => scrollTo(0, scrollY + element.getBoundingClientRect().top - document.querySelector('nav').getBoundingClientRect().height - 72));
+          const filename = `${width}-${theme}-${label}.png`;
+          await page.screenshot({ path: path.join(directory, filename), fullPage: true, animations: 'disabled' });
+          console.log(`SCREENSHOT diagnostics-output/sunshine-real-data/${filename}`);
         }
       }
     }

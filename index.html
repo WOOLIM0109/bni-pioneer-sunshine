@@ -142,6 +142,7 @@ nav{display:flex;gap:0;flex-wrap:wrap;margin-block:22px 28px;position:sticky;top
 .core .field{margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:16px;color:var(--ink-2);line-height:1.45;word-break:keep-all;overflow-wrap:anywhere}
 .core .field strong{display:block;color:var(--ink);font-family:var(--font-ui);font-size:22px;line-height:1.45;margin-bottom:3px}
 .core .company{display:block;font-size:14px;margin-top:3px}
+.core .cust.is-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 14px;font-size:17px;align-content:start}.core .cust.is-scrollable{overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;padding-right:7px}.core-scroll-note{font-size:12px;color:var(--ink-3);line-height:1.4;margin:6px 0 0}.core-content.is-scrollable,.card-content.is-scrollable{overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}.core-content:focus-visible,.card-content:focus-visible,.core .cust:focus-visible{outline:2px solid var(--red);outline-offset:3px}.card.connected .card-content:focus-visible{outline-color:var(--surface)}
 .stagelist{display:none;flex-direction:column;gap:10px}
 .stage.is-list{display:none}.stagelist.is-list{display:flex}
 .stagelist .list-hint{margin:0 0 4px}
@@ -682,11 +683,21 @@ function renderList(){
 }
 q.addEventListener('input',renderList);
 
+// Equal arc spacing keeps a taller orbit readable when many professions are
+// present. A fixed angular step would crowd the narrow ends of an ellipse.
+function sunOrbitPoints(count,rx,ry){
+  if(!count)return [];
+  const samples=[{x:0,y:-ry,length:0}],steps=720;
+  for(let i=1;i<=steps;i++){const angle=-Math.PI/2+i*2*Math.PI/steps,x=rx*Math.cos(angle),y=ry*Math.sin(angle),previous=samples[i-1];samples.push({x,y,length:previous.length+Math.hypot(x-previous.x,y-previous.y)});}
+  const total=samples[steps].length;let cursor=1;
+  return Array.from({length:count},(_,i)=>{const distance=total*i/count;while(cursor<steps&&samples[cursor].length<distance)cursor++;const a=samples[cursor-1],b=samples[cursor],fraction=(distance-a.length)/(b.length-a.length||1);return {x:a.x+(b.x-a.x)*fraction,y:a.y+(b.y-a.y)*fraction};});
+}
 function renderSun(){
   const m=M[sel], stage=document.getElementById('stage'), rays=document.getElementById('rays'), mobile=document.getElementById('stagelist');
   stage._sunObserver?.disconnect();stage._sunFit=null;
   stage.querySelectorAll('.node,.core').forEach(e=>e.remove());rays.innerHTML='';
   stage.classList.remove('is-list');mobile.classList.remove('is-list');
+  stage.style.height='';
   rays.setAttribute('viewBox','0 0 1000 1000');rays.setAttribute('preserveAspectRatio','xMidYMid meet');
   if(!m){
     const empty='<div class="empty-state">등록된 멤버가 없습니다. 로그인 후 멤버 관리에서 추가하세요.</div>';
@@ -697,9 +708,8 @@ function renderSun(){
   const list=syn(m),customers=m.c?.length?m.c:['미입력'];
   const connected=f=>connectedMembers(m,f);
   const svgElement=(tag,attributes)=>{const element=document.createElementNS('http://www.w3.org/2000/svg',tag);Object.entries(attributes).forEach(([key,value])=>element.setAttribute(key,String(value)));rays.appendChild(element);return element;};
-  [260,325,385].forEach((radius,index)=>svgElement('circle',{cx:500,cy:500,r:radius,fill:'none',stroke:index===1?'var(--red)':'var(--line)','stroke-width':index===1?42:1,'stroke-opacity':index===1?.035:.75}));
   const core=document.createElement('div'); core.className='core';
-  core.innerHTML=`<div class="core-content"><div class="lab">함께 만날 핵심고객</div><div class="cust">${customers.map(c=>'<span>'+esc(c)+'</span>').join('')}</div><div class="field"><strong>${esc(m.n)}</strong>${esc(m.f)}${m.co?'<span class="company">'+esc(m.co)+'</span>':''}</div></div>`;
+  core.innerHTML=`<div class="core-content"><div class="lab">함께 만날 핵심고객</div><div class="cust">${customers.map(c=>'<span>'+esc(c)+'</span>').join('')}</div><p class="core-scroll-note" hidden></p><div class="field"><strong>${esc(m.n)}</strong>${esc(m.f)}${m.co?'<span class="company">'+esc(m.co)+'</span>':''}</div></div>`;
   stage.appendChild(core);
   const n=Math.max(list.length,1),radius=38.5;
   list.forEach((f,i)=>{
@@ -707,23 +717,43 @@ function renderSun(){
     const d=document.createElement('div'); d.className='node'; d.style.left=x+'%'; d.style.top=y+'%';
     d.innerHTML=`<div class="card ${found?'connected':'gap'}"><div class="card-content"><span class="node-state">${found?'연결 가능':'초대 타깃'}</span><div class="f">${esc(f)}</div>${found?'<div class="who">'+matches.map(row=>esc(row.n)+' 대표').join(' · ')+'</div>':''}</div></div>`;
     stage.appendChild(d);
-    svgElement('line',{x1:500,y1:500,x2:x*10,y2:y*10,stroke:found?'var(--red)':'var(--gap)','stroke-width':found?2:1.5,'stroke-dasharray':found?'none':'5 7',opacity:found?.45:.55});
   });
-  mobile.innerHTML=`<p class="list-hint diagram-fallback-note">모든 내용을 편하게 읽을 수 있도록 목록으로 보여드립니다.</p><div class="lcore"><div class="lcore-label">함께 만날 핵심고객</div><ul class="lcore-customers">${customers.map(c=>'<li>'+esc(c)+'</li>').join('')}</ul><div class="lcore-member"><strong>${esc(m.n)}</strong> · ${esc(m.f)}${m.co?'<span class="company">'+esc(m.co)+'</span>':''}</div></div>`
+  mobile.innerHTML=`<div class="lcore"><div class="lcore-label">함께 만날 핵심고객</div><ul class="lcore-customers">${customers.map(c=>'<li>'+esc(c)+'</li>').join('')}</ul><div class="lcore-member"><strong>${esc(m.n)}</strong> · ${esc(m.f)}${m.co?'<span class="company">'+esc(m.co)+'</span>':''}</div></div>`
     +list.map(f=>{const matches=connected(f);return `<div class="lrow ${matches.length?'':'gap'}"><span style="font-weight:600">${esc(f)}</span><span class="lwho">${matches.length?matches.map(row=>esc(row.n)+' 대표').join(' · '):'초대 타깃'}</span></div>`;}).join('');
   if(!list.length)mobile.innerHTML+='<p class="list-hint">등록된 상생직군이 없습니다.</p>';
-  const setList=value=>{stage.classList.toggle('is-list',value);mobile.classList.toggle('is-list',value);};
-  const tooMany=list.length>10||customers.length>6;
   const checkFit=()=>{
-    if(stage._sunFit!==checkFit)return;
-    setList(tooMany);if(tooMany||!stage.clientWidth)return;
-    const coreContent=core.querySelector('.core-content'),style=getComputedStyle(core),inset=parseFloat(style.paddingTop)+parseFloat(style.paddingBottom)+4;
-    const overflow=coreContent.getBoundingClientRect().height>core.clientHeight-inset||Array.from(stage.querySelectorAll('.card')).some(card=>{const content=card.querySelector('.card-content');return content.getBoundingClientRect().height>card.clientHeight-32||content.scrollWidth>card.clientWidth-24;});
-    const nodes=Array.from(stage.querySelectorAll('.node')).map(node=>node.getBoundingClientRect()),center=core.getBoundingClientRect();
-    const collision=nodes.some((node,i)=>{const nx=node.x+node.width/2,ny=node.y+node.height/2;return Math.hypot(nx-center.x-center.width/2,ny-center.y-center.height/2)<(node.width+center.width)/2+14||nodes.some((other,j)=>j>i&&Math.hypot(nx-other.x-other.width/2,ny-other.y-other.height/2)<(node.width+other.width)/2+12);});
-    setList(overflow||collision);
+    if(stage._sunFit!==checkFit||!stage.clientWidth)return;
+    const width=stage.clientWidth,nodeSize=Math.max(120,Math.min(150,width*.18)),padding=14;
+    const coreSize=Math.min(customers.length>6?460:370,width-2*nodeSize-64);
+    core.style.width=coreSize+'px';core.style.height=coreSize+'px';core.style.padding=Math.max(24,coreSize*.09)+'px';
+    const coreContent=core.querySelector('.core-content'),customerBox=core.querySelector('.cust'),scrollNote=core.querySelector('.core-scroll-note');
+    const contentHeight=coreSize-2*Math.max(24,coreSize*.09)-4;
+    coreContent.style.maxHeight='';coreContent.classList.remove('is-scrollable');coreContent.removeAttribute('tabindex');coreContent.removeAttribute('aria-label');
+    customerBox.classList.toggle('is-columns',customers.length>6&&coreSize>=400);customerBox.classList.remove('is-scrollable');customerBox.style.maxHeight='';customerBox.removeAttribute('tabindex');customerBox.removeAttribute('aria-label');scrollNote.hidden=true;
+    const excess=coreContent.getBoundingClientRect().height-contentHeight;
+    if(excess>0){
+      customerBox.style.maxHeight=Math.max(52,customerBox.getBoundingClientRect().height-excess-26)+'px';customerBox.classList.add('is-scrollable');customerBox.tabIndex=0;customerBox.setAttribute('aria-label','핵심고객 '+customers.length+'개 · 스크롤로 전체 보기');
+      scrollNote.textContent='핵심고객 '+customers.length+'개 · 스크롤로 더 보기';scrollNote.hidden=false;
+    }
+    if(coreContent.getBoundingClientRect().height>contentHeight){coreContent.style.maxHeight=contentHeight+'px';coreContent.classList.add('is-scrollable');coreContent.tabIndex=0;coreContent.setAttribute('aria-label',m.n+' 대표 정보 · 스크롤로 전체 보기');}
+    const nodes=Array.from(stage.querySelectorAll('.node')),rx=(width-nodeSize)/2-padding;let ry=rx,points=[];
+    for(let attempt=0;attempt<30;attempt++){
+      points=sunOrbitPoints(nodes.length,rx,ry);
+      const collision=points.some((point,i)=>points.some((other,j)=>j>i&&Math.hypot(point.x-other.x,point.y-other.y)<nodeSize+16));
+      if(!collision)break;ry*=1.15;
+    }
+    const height=2*ry+nodeSize+2*padding,cx=width/2,cy=height/2;
+    stage.style.height=height+'px';rays.innerHTML='';rays.setAttribute('viewBox',`0 0 ${width} ${height}`);
+    [.68,.85,1].forEach((scale,index)=>svgElement('ellipse',{cx,cy,rx:rx*scale,ry:ry*scale,fill:'none',stroke:index===1?'var(--red)':'var(--line)','stroke-width':index===1?width*.042:1,'stroke-opacity':index===1?.035:.75}));
+    nodes.forEach((node,i)=>{
+      const point=points[i],found=node.querySelector('.connected')!==null;
+      node.style.width=nodeSize+'px';node.style.left=(cx+point.x)+'px';node.style.top=(cy+point.y)+'px';
+      const content=node.querySelector('.card-content');content.style.maxHeight='';content.classList.remove('is-scrollable');content.removeAttribute('tabindex');content.removeAttribute('aria-label');
+      if(content.getBoundingClientRect().height>nodeSize*.72){content.style.maxHeight=(nodeSize*.72)+'px';content.classList.add('is-scrollable');content.tabIndex=0;content.setAttribute('aria-label',list[i]+' 상세 내용 · 스크롤로 전체 보기');}
+      svgElement('line',{x1:cx,y1:cy,x2:cx+point.x,y2:cy+point.y,stroke:found?'var(--red)':'var(--gap)','stroke-width':found?2:1.5,'stroke-dasharray':found?'none':'5 7',opacity:found?.45:.55});
+    });
   };
-  stage._sunFit=checkFit;setList(tooMany);requestAnimationFrame(checkFit);
+  stage._sunFit=checkFit;requestAnimationFrame(checkFit);
   if(typeof ResizeObserver!=='undefined'){
     let previousWidth=-1;
     stage._sunObserver=new ResizeObserver(entries=>{const width=entries[0]?.contentRect.width;if(width!==previousWidth){previousWidth=width;requestAnimationFrame(checkFit);}});
