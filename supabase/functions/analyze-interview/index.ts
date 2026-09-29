@@ -10,7 +10,7 @@ type Runtime={env:(name:string)=>string|undefined;fetch:typeof fetch;diagnostic?
 type Json=Record<string,any>;
 export const INTERVIEW_MODEL='gpt-5.4-mini-2026-03-17';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-export const DOCUMENT_LIMITS={count:20,fileBytes:20*1024*1024,totalFileBytes:40*1024*1024,text:120000,totalText:240000};
+export const DOCUMENT_LIMITS={count:20,fileBytes:20*1024*1024,totalFileBytes:40*1024*1024,pdfBytes:30*1024*1024,totalPdfBytes:50_000_000,text:120000,totalText:240000};
 const STAGE_LABELS:Record<string,string>={profile:'신상명세표',visibility:'아는 단계',credibility:'신뢰 단계',profitability:'수익 단계'};
 const KEYS=['field','customers','synergies','wants','good_referral','triggers','customer_companies'];
 const SINGLE=new Set(['field','wants','good_referral']);
@@ -49,7 +49,33 @@ const INSTRUCTIONS=`당신은 BNI 파이오니아 선샤인의 관리자 검토�
 상생직군이 실제 챕터 멤버의 전문분야와 의미가 같으면 해당 멤버의 field 문자열을 띄어쓰기·기호까지 그대로 사용하세요. 연결 가능한 사람을 만들려고 다른 업종을 억지로 같은 것으로 보지 마세요. 챕터에 없는 직군도 필요성이 명확하면 초대 대상으로 제안할 수 있습니다. 고객 유형 역시 기존 customers와 의미가 같을 때는 기존 표현을 사용하여 협업팀의 공통 고객 집계가 가능하게 하세요.
 공개 가능 항목 field/customers/synergies/wants와 승인된 로그인 멤버 전체에게 공유하는 good_referral/triggers에는 실제 고객사 실명, 개인 이름, 전화번호, 이메일, 상세 주소, 금융·건강 등 민감정보를 넣지 마세요. customers는 '제조업 대표', '예비창업자'처럼 고객 유형이어야 합니다. good_referral은 서로 소개할 수 있는 고객 상황, triggers는 연결 기회를 알아볼 수 있는 말로 정리하세요. 실제 고객사 이름은 관리자와 승인된 본인만 보는 customer_companies에만 기록하세요. 분석 초안과 원문은 관리자 검토용이며 good_referral/triggers는 반영 후 멤버 공유 항목입니다. 민감한 연락처는 어느 제안에도 복사하지 말고 제외 사실을 warnings에 요약하세요.
 PDF의 시각 자료와 글자가 다르거나 질문과 답의 연결이 불분명하면 추측하지 말고 warnings에 적으세요. 문서의 이름과 선택된 멤버의 이름이 다르면 detected_name에 문서의 이름을 기록하고 warnings에서 알리세요. summary는 인터뷰 요약이며 공개 여부·승인·저장 완료를 주장하지 마세요.
+PDF 이미지·스캔·홍보물 안의 글자도 인터뷰 본문으로 읽으세요. 텍스트 추출문에 없더라도 실제 페이지 이미지에 보이는 카드 할인 조건, 고객 유형, 리퍼럴 요청을 놓치지 말고 문서 ID와 PDF 페이지 번호·짧은 발췌를 근거로 남기세요. 읽을 수 없는 작은 글자나 잘린 내용을 추측하지 마세요. 홍보물 속 제3자 이름·전화번호·이메일·상세 주소는 멤버 자신의 연락처나 고객 명단으로 간주하지 말고 모든 제안에서 제외하세요.
 모든 제안은 관리자 확인 전 초안입니다. 최대 ${ANALYSIS_LIMITS.suggestions}개 항목만 제안하고 이유와 근거를 간결하게 작성하세요. summary는 ${ANALYSIS_LIMITS.summary}자, detected_name은 ${ANALYSIS_LIMITS.name}자 이내입니다. warnings는 최대 ${ANALYSIS_LIMITS.warnings}개이며 각 ${ANALYSIS_LIMITS.warning}자 이내입니다.`;
+
+function validDocumentMetadata(document:any):document is Json{
+  return object(document)&&typeof document.id==='string'&&UUID.test(document.id)&&typeof document.member_id==='string'&&UUID.test(document.member_id)
+    &&Number.isInteger(document.revision)&&document.revision>=1&&typeof document.mime_type==='string'
+    &&typeof document.original_name==='string'&&!!document.original_name.trim()&&document.original_name.length<=500
+    &&Array.isArray(document.stages)&&document.stages.length<=4&&document.stages.every((stage:any)=>typeof stage==='string'&&Object.hasOwn(STAGE_LABELS,stage))&&new Set(document.stages).size===document.stages.length
+    &&typeof document.created_at==='string'&&Number.isFinite(Date.parse(document.created_at));
+}
+function sameSources(value:any,ids:string[]):boolean{
+  return Array.isArray(value)&&value.length===ids.length&&value.every(id=>typeof id==='string'&&ids.includes(id.toLowerCase()))&&new Set(value.map(id=>id.toLowerCase())).size===ids.length;
+}
+// Budget the original PDF bytes before creating a review. Begin/finish preserve
+// their immutable source snapshot, so never trim that snapshot after leasing it.
+export function selectAnalysisDocuments(documents:Json[]):{documents:Json[];excluded:Json[]}{
+  let otherBytes=0;
+  for(const document of documents){
+    const pdf=document.mime_type==='application/pdf',limit=pdf?DOCUMENT_LIMITS.pdfBytes:DOCUMENT_LIMITS.fileBytes;
+    if(!Number.isInteger(document.file_size)||document.file_size<1||document.file_size>limit)throw fail(413,'file_too_large',pdf?'PDF 원본은 파일당 30MB까지 분석할 수 있습니다. 필요한 부분만 나누어 주세요.':'PDF 외 문서 원본은 파일당 20MB까지 분석할 수 있습니다. 필요한 부분만 나누어 주세요.');
+    if(!pdf){otherBytes+=document.file_size;if(otherBytes>DOCUMENT_LIMITS.totalFileBytes)throw fail(413,'file_too_large','PDF 외 문서 원본의 합계는 40MB까지 분석할 수 있습니다. 문서 수를 줄여 주세요.');}
+  }
+  const pdfs=documents.filter(document=>document.mime_type==='application/pdf').sort((a,b)=>Date.parse(b.created_at)-Date.parse(a.created_at)||a.id.toLowerCase().localeCompare(b.id.toLowerCase()));
+  const included=new Set<string>(),excluded:Json[]=[];let pdfBytes=0;
+  for(const document of pdfs){if(pdfBytes+document.file_size<=DOCUMENT_LIMITS.totalPdfBytes){included.add(document.id.toLowerCase());pdfBytes+=document.file_size;}else excluded.push(document);}
+  return {documents:documents.filter(document=>document.mime_type!=='application/pdf'||included.has(document.id.toLowerCase())),excluded};
+}
 function rpcError(data:any,status:number):HttpError{
   const code=String(data?.message||data?.code||'');
   if(data?.code==='40001')return fail(409,'stale_revision','다른 곳에서 원문이나 검토 내용을 수정했습니다. 최신 내용을 불러온 뒤 다시 분석해 주세요.');
@@ -206,23 +232,35 @@ export function createHandler(runtime:Runtime){return async function handle(requ
     if(new Set(interviewIds).size!==interviewIds.length||(!legacy&&input.interview_id!==undefined))throw fail(400,'invalid_request','중복 없이 분석할 문서 목록을 전달해 주세요.');
     if(legacy&&input.expected_revision!==undefined&&(!Number.isInteger(input.expected_revision)||input.expected_revision<1))throw fail(400,'invalid_request','원문의 최신 버전을 확인해 주세요.');
     rpc=async(name,args,signal=controller.signal)=>{const r=await db('/rest/v1/rpc/'+name,{method:'POST',body:JSON.stringify(args)},signal);const data=await readJSON(r);if(!r.ok)throw rpcError(data,r.status);return data;};
-    const start=await rpc('begin_member_interview_review_analysis',{target_interview_ids:interviewIds});
+    // Metadata has no raw text or history. Select before begin: cancelling a full
+    // lease and restarting with fewer IDs would create a false source history and
+    // hit the database's per-member cooldown.
+    const metadata=await rpc('list_member_interviews',{target_member_id:null});
+    if(!Array.isArray(metadata))throw fail(502,'invalid_documents','문서 목록을 확인하지 못했습니다. 목록을 새로 불러와 주세요.');
+    const selectedMetadata:Json[]=interviewIds.map(id=>{
+      const matches=metadata.filter(document=>object(document)&&typeof document.id==='string'&&document.id.toLowerCase()===id);
+      if(!matches.length)throw fail(400,'invalid_document','선택한 문서를 찾지 못했습니다. 목록을 새로 불러와 주세요.');
+      if(matches.length!==1||!validDocumentMetadata(matches[0]))throw fail(502,'invalid_documents','문서 이름이나 단계 정보를 확인하지 못했습니다. 목록을 새로 불러와 주세요.');
+      return matches[0];
+    });
+    const memberId=selectedMetadata[0].member_id;
+    if(selectedMetadata.some(document=>document.member_id!==memberId))throw fail(400,'invalid_document','다른 멤버의 문서를 함께 분석할 수 없습니다.');
+    if(legacy&&input.expected_revision!==undefined&&selectedMetadata[0].revision!==input.expected_revision)throw fail(409,'stale_revision','원문이 변경되었습니다. 최신 내용을 다시 불러와 주세요.');
+    const selection=selectAnalysisDocuments(selectedMetadata),analysisIds=selection.documents.map(document=>document.id.toLowerCase());
+    const start=await rpc('begin_member_interview_review_analysis',{target_interview_ids:analysisIds});
     if(!object(start)||!UUID.test(start.lease_id)||!object(start.review)||!UUID.test(start.review.id))throw fail(502,'invalid_lease','분석 준비 응답을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.');
     lease={id:start.lease_id,reviewId:start.review.id};const review=start.review;
-    if(!UUID.test(review.member_id)||!Number.isInteger(review.revision)||review.revision<1||!Array.isArray(start.documents)||start.documents.length!==interviewIds.length)throw fail(502,'invalid_documents','선택한 문서 정보를 확인하지 못했습니다. 목록을 새로 불러와 주세요.');
+    if(review.member_id!==memberId||!Number.isInteger(review.revision)||review.revision<1||!sameSources(review.source_interview_ids,analysisIds)||!Array.isArray(start.documents)||start.documents.length!==analysisIds.length)throw fail(502,'invalid_documents','선택한 문서 정보를 확인하지 못했습니다. 목록을 새로 불러와 주세요.');
     const documents:Json[]=start.documents,seenDocuments=new Set<string>();
-    let totalText=0,totalFileBytes=0;
+    let totalText=0;
     for(const document of documents){
-      if(!object(document)||typeof document.id!=='string'||!interviewIds.includes(document.id.toLowerCase())||seenDocuments.has(document.id.toLowerCase())||document.member_id!==review.member_id)throw fail(502,'invalid_documents','선택한 문서와 멤버가 일치하지 않습니다. 목록을 새로 불러와 주세요.');
+      if(!validDocumentMetadata(document)||!analysisIds.includes(document.id.toLowerCase())||seenDocuments.has(document.id.toLowerCase())||document.member_id!==review.member_id)throw fail(502,'invalid_documents','선택한 문서와 멤버가 일치하지 않습니다. 목록을 새로 불러와 주세요.');
       seenDocuments.add(document.id.toLowerCase());
-      if(legacy&&input.expected_revision!==undefined&&document.revision!==input.expected_revision)throw fail(409,'stale_revision','원문이 변경되었습니다. 최신 내용을 다시 불러와 주세요.');
+      const before=selection.documents.find(item=>item.id.toLowerCase()===document.id.toLowerCase())!;
+      if(['revision','file_size','mime_type','created_at','original_name'].some(key=>document[key]!==before[key]))throw fail(409,'stale_revision','분석 준비 중 문서가 변경되었습니다. 최신 내용을 다시 불러와 주세요.');
       if(typeof document.raw_text!=='string'||document.raw_text.length>DOCUMENT_LIMITS.text)throw fail(413,'text_too_large','문서별 원문은 120,000자까지 분석할 수 있습니다. 필요한 부분만 나누어 주세요.');
       totalText+=document.raw_text.length;
       if(totalText>DOCUMENT_LIMITS.totalText)throw fail(413,'text_too_large','선택한 문서의 원문 합계는 240,000자까지 분석할 수 있습니다. 문서 수를 줄여 주세요.');
-      if(!Number.isInteger(document.file_size)||document.file_size<1||document.file_size>DOCUMENT_LIMITS.fileBytes)throw fail(413,'file_too_large','문서 원본은 파일당 20MB까지 분석할 수 있습니다. 필요한 부분만 나누어 주세요.');
-      totalFileBytes+=document.file_size;
-      if(totalFileBytes>DOCUMENT_LIMITS.totalFileBytes)throw fail(413,'file_too_large','선택한 문서 원본의 합계는 40MB까지 분석할 수 있습니다. 문서 수를 줄여 주세요.');
-      if(typeof document.original_name!=='string'||!document.original_name.trim()||document.original_name.length>500||!Array.isArray(document.stages)||document.stages.length>4||document.stages.some((stage:any)=>typeof stage!=='string'||!Object.hasOwn(STAGE_LABELS,stage))||new Set(document.stages).size!==document.stages.length||typeof document.created_at!=='string'||!Number.isFinite(Date.parse(document.created_at)))throw fail(502,'invalid_documents','문서 이름이나 단계 정보를 확인하지 못했습니다. 목록을 새로 불러와 주세요.');
     }
     const membersResponse=await db('/rest/v1/members?select=id,name,company,field,customers,synergies&order=sort_order.asc,name.asc&limit=501');
     const members=await readJSON(membersResponse);
@@ -243,9 +281,9 @@ export function createHandler(runtime:Runtime){return async function handle(requ
         if(!storagePath.startsWith(review.member_id+'/')||storagePath.split('/').some((p:string)=>!p||p==='.'||p==='..')||storagePath.includes('\\'))throw fail(400,'invalid_file_path','원문 파일 경로가 올바르지 않습니다. 파일을 다시 등록해 주세요.');
         const fileResponse=await db('/storage/v1/object/authenticated/member-interviews/'+storagePath.split('/').map(encodeURIComponent).join('/'),{headers:{Accept:'application/pdf'}});
         if(!fileResponse.ok)throw fail(502,'file_unavailable','저장한 PDF를 읽지 못했습니다. 원문 파일을 다시 확인해 주세요.');
-        const bytes=await readBytes(fileResponse,Math.min(interview.file_size,DOCUMENT_LIMITS.fileBytes));
+        const bytes=await readBytes(fileResponse,Math.min(interview.file_size,DOCUMENT_LIMITS.pdfBytes));
         if(bytes.length!==interview.file_size||!new TextDecoder('latin1').decode(bytes.subarray(0,1024)).includes('%PDF-'))throw fail(400,'invalid_pdf','등록된 파일 정보와 PDF가 일치하지 않습니다. 원문을 다시 등록해 주세요.');
-        content.push({type:'input_file',filename:'interview-'+interview.id+'.pdf',file_data:'data:application/pdf;base64,'+toBase64(bytes)});
+        content.push({type:'input_file',filename:'interview-'+interview.id+'.pdf',file_data:'data:application/pdf;base64,'+toBase64(bytes),detail:'high'});
       }else if(!interview.raw_text.trim())throw fail(400,'empty_text','분석할 글자가 없는 문서가 있습니다. UTF-8 TXT로 저장하거나 문서를 다시 올려 주세요.');
     }
     const aiResponse=await runtime.fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:'Bearer '+apiKey,'Content-Type':'application/json'},signal:controller.signal,body:JSON.stringify({model:INTERVIEW_MODEL,store:false,max_output_tokens:6000,reasoning:{effort:'low'},instructions:INSTRUCTIONS,input:[{role:'user',content}],text:{format:{type:'json_schema',name:'member_interview_analysis',strict:true,schema:ANALYSIS_SCHEMA}}})});
@@ -256,9 +294,18 @@ export function createHandler(runtime:Runtime){return async function handle(requ
     if(items.some((item:Json)=>item.type==='refusal'))throw fail(422,'analysis_refused','AI가 이 문서를 분석하지 못했습니다. 원문을 직접 검토해 주세요.');
     const output=items.filter((item:Json)=>item.type==='output_text').map((item:Json)=>item.text).join('');let parsed;
     try{parsed=JSON.parse(output);}catch{throw fail(502,'invalid_analysis',INVALID_ANALYSIS_MESSAGE);}
-    const extracted=validateAnalysis(parsed,String(selected.name||''),interviewIds,runtime.diagnostic||((entry:AnalysisDiagnostic)=>console.warn(JSON.stringify(entry))));
+    const extracted=validateAnalysis(parsed,String(selected.name||''),analysisIds,runtime.diagnostic||((entry:AnalysisDiagnostic)=>console.warn(JSON.stringify(entry))));
+    if(selection.excluded.length){
+      const names=selection.excluded.map(document=>{const name=Array.from(document.original_name.replace(/[\r\n\t]/g,' '));return name.length>60?name.slice(0,59).join('')+'…':name.join('');}).join(', ');
+      const warning='PDF 원본 합계 50MB 제한으로 최신 업로드순으로 선택했습니다. 제외 문서 '+selection.excluded.length+'개: '+names+'. 제외 문서는 텍스트도 이번 분석에 포함되지 않았습니다. 해당 문서는 따로 선택해 분석해 주세요.';
+      // One mandatory notice stays first even when the model fills all 30 slots.
+      const room=ANALYSIS_LIMITS.warnings-1;
+      extracted.warnings=[warning,...(extracted.warnings.length>room?[...extracted.warnings.slice(0,room-1),'추가 주의사항이 있어 일부만 표시합니다. 원문과 모든 제안을 직접 확인해 주세요.']:extracted.warnings)];
+    }
     const saved=await rpc('finish_member_interview_review_analysis',{target_review_id:review.id,lease_id:lease.id,expected_revision:review.revision,analysis:{extracted,public_patch:{},private_patch:{}}});
-    finished=true;return json(saved);
+    finished=true;
+    if(!object(saved)||saved.id!==review.id||saved.member_id!==memberId||!sameSources(saved.source_interview_ids,analysisIds))throw fail(502,'invalid_review','저장된 분석의 근거 문서를 확인하지 못했습니다. 검토 목록을 새로 불러와 주세요.');
+    return json(saved);
   }catch(error){
     if(error instanceof HttpError)return json({error:{code:error.code,message:error.message}},error.status);
     if(controller.signal.aborted)return json({error:{code:'analysis_timeout',message:'분석 시간이 초과되었거나 요청이 취소되었습니다. 원문은 유지됩니다. 잠시 후 다시 시도해 주세요.'}},504);

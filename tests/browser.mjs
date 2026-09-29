@@ -340,7 +340,7 @@ function makeMock(initial, options) {
         { key: 'triggers', value: ['INTERVIEW_PRIVATE_TRIGGER 정부지원 사업이 궁금해요', 'INTERVIEW_PRIVATE_TRIGGER 서류 준비가 어려워요'], reason: '인터뷰에 나온 요청 문장입니다.', evidence: 'AI_PRIVATE_EVIDENCE 트리거 원문', confidence: 'high', basis: 'stated' },
         { key: 'customer_companies', value: ['INTERVIEW_PRIVATE_COMPANY 샘플기업'], reason: '고객사명은 비공개 항목입니다.', evidence: 'AI_PRIVATE_EVIDENCE 고객사 원문', confidence: 'high', basis: 'stated' }
       ];
-      const row = { id: crypto.randomUUID(), member_id: rows[0].member_id, source_interview_ids: clone(ids), extracted: { summary: '멤버 통합 인터뷰 검증 요약', detected_name: state.members.find(member => member.id === rows[0].member_id)?.name || '', warnings: [], suggestions: clone(suggestions).map((suggestion, index) => ({ ...suggestion, sources: suggestion.sources || [rows[index % rows.length].id] })) }, public_patch: {}, private_patch: {}, list_modes: {}, revision: 1, status: 'draft', created_at: timestamp(), updated_at: timestamp() };
+      const row = { id: crypto.randomUUID(), member_id: rows[0].member_id, source_interview_ids: clone(ids), extracted: { summary: '멤버 통합 인터뷰 검증 요약', detected_name: state.members.find(member => member.id === rows[0].member_id)?.name || '', warnings: clone(state.analysisWarnings || []), suggestions: clone(suggestions).map((suggestion, index) => ({ ...suggestion, sources: suggestion.sources || [rows[index % rows.length].id] })) }, public_patch: {}, private_patch: {}, list_modes: {}, revision: 1, status: 'draft', created_at: timestamp(), updated_at: timestamp() };
       state.reviews.push(row);
       return { data: clone(row), error: null };
     } },
@@ -1921,11 +1921,55 @@ try {
       assert.equal(saved.type, mime);
       assert.equal(saved.body, signature);
       assert.equal(saved.calls.length, 1);
+      assert.equal(saved.calls[0].maxBytes, (format === 'pdf' ? 30 : 10) * 1024 * 1024);
       assert.equal(saved.calls[0].maxPages, 60);
       assert.equal(saved.calls[0].maxChars, 120000);
       assert.equal(await page.inputValue('#interview-raw'), INTERVIEW_SOURCE);
       await context.close();
     }
+  });
+  await check('Interview upload byte limits allow PDF 30MB while keeping DOCX and TXT at 10MB', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true });
+    await page.click('#t4');
+    await page.selectOption('#interview-member', seed[0].id);
+    assert.match(await page.locator('#interview-file-note').innerText(), /PDF 최대 30MB.*Word\(\.docx\)·텍스트\(\.txt\) 최대 10MB/);
+    await page.evaluate(text => {
+      window.__extractionCalls = [];
+      extractInterviewFile = async (file, options) => {
+        window.__extractionCalls.push({ name: file.name, size: file.size, maxBytes: options.maxBytes });
+        return { text, format: file.name.split('.').at(-1).toLowerCase(), warnings: [] };
+      };
+    }, INTERVIEW_SOURCE);
+    let saved = 0;
+    for (const [extension, limit] of [['PDF', 30], ['docx', 10], ['txt', 10]]) {
+      for (const extra of [0, 1]) {
+        const name = `size-${extra}.${extension}`, size = limit * 1024 * 1024 + extra;
+        await page.evaluate(({ name, size }) => {
+          const transfer = new DataTransfer();transfer.items.add(new File([new Uint8Array(size)], name));
+          const input = document.getElementById('interview-file');input.files = transfer.files;input.dispatchEvent(new Event('change', { bubbles: true }));
+        }, { name, size });
+        await page.click('#interview-upload');
+        await page.waitForFunction(() => !interviewBusy);
+        if (!extra) saved++;
+        const actual = await page.evaluate(() => ({ rows: window.__db.interviews.length, uploads: window.__db.log.filter(row => row.action === 'storage-upload').length, calls: window.__extractionCalls }));
+        assert.equal(actual.rows, saved, `${name}: only admitted files may be registered.`);
+        assert.equal(actual.uploads, saved, `${name}: rejected files must not reach Storage.`);
+        assert.equal(actual.calls.length, saved, `${name}: rejected files must not reach extraction.`);
+        if (extra) assert.match(await page.locator('#interview-message').innerText(), new RegExp(`${limit}MB를 넘습니다`));
+        else assert.deepEqual(actual.calls.at(-1), { name, size, maxBytes: limit * 1024 * 1024 });
+      }
+    }
+    await context.close();
+  });
+  await check('Interview analysis preserves server PDF budget warnings in the review screen', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true });
+    await uploadInterview(page);
+    const warning = 'PDF 원본 합계 50MB 제한으로 최신 업로드순으로 선택했습니다. 제외 문서 1개: <이전문서>.pdf. 제외 문서는 텍스트도 이번 분석에 포함되지 않았습니다. 해당 문서는 따로 선택해 분석해 주세요.';
+    await page.evaluate(warning => { window.__db.analysisWarnings = [warning]; }, warning);
+    await analyzeInterview(page);
+    assert.deepEqual(await page.locator('#interview-warnings li').allTextContents(), [warning]);
+    assert.equal(await page.locator('#interview-warnings li > *').count(), 0, 'Server warnings and document names must render as text.');
+    await context.close();
   });
   await check('AI proposals remain unchecked until review; only selected fields commit after the server response', async () => {
     const { page, context } = await pageFor({ online: true, auth: true });

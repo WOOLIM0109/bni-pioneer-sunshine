@@ -60,8 +60,8 @@ Supabase `public.members`가 명단의 단일 원본입니다. 데이터는 `sor
 ## 멤버 단위 통합 분석으로 선샤인 업데이트하기
 
 1. 관리자 로그인 후 **멤버 관리 → 멤버 단위 통합 분석**에서 멤버의 이름·회사를 선택합니다. 문서의 이름만으로 자동 연결하지 않습니다.
-2. 같은 멤버의 PDF, Word `.docx`, UTF-8 `.txt` 파일을 여러 개 선택하고 **문서 올리기**를 누릅니다. 각 파일은 원본 보관함과 `member_interviews`에 따로 저장됩니다. 파일당 최대 10MiB, PDF 60쪽, 추출 원문 120,000자이며, 한 번에 20개까지 올릴 수 있습니다. `.doc`·한글 문서는 먼저 PDF 또는 DOCX로 저장하세요. 암호가 걸린 문서는 암호를 제거한 사본이 필요합니다.
-3. 파일명·본문으로 신상명세표(`profile`), 아는 단계(`visibility`), 신뢰 단계(`credibility`), 수익 단계(`profitability`)를 자동 추정합니다. 보관 문서 목록에서 여러 단계를 선택하고 **단계 저장**으로 수정할 수 있습니다. 문서는 처음에 전부 선택되며, 체크한 문서를 **통합 분석하기**로 함께 분석합니다. 합계 원문 240,000자, 원본 파일 40MiB까지입니다. PDF는 페이지의 이미지와 텍스트를, Word·TXT는 추출한 텍스트를 OpenAI API로 전송합니다. 스캔 PDF도 분석할 수 있으나 이미지 속 글자와 표는 반드시 원문과 대조하세요.
+2. 같은 멤버의 PDF, Word `.docx`, UTF-8 `.txt` 파일을 여러 개 선택하고 **문서 올리기**를 누릅니다. 각 파일은 원본 보관함과 `member_interviews`에 따로 저장됩니다. 파일당 PDF 최대 30MiB, DOCX·TXT 최대 10MiB, PDF 60쪽, 추출 원문 120,000자이며, 한 번에 20개까지 올릴 수 있습니다. PPT는 지원하지 않습니다. `.doc`·한글 문서는 먼저 PDF 또는 DOCX로 저장하세요. 암호가 걸린 문서는 암호를 제거한 사본이 필요합니다.
+3. 파일명·본문으로 신상명세표(`profile`), 아는 단계(`visibility`), 신뢰 단계(`credibility`), 수익 단계(`profitability`)를 자동 추정합니다. 보관 문서 목록에서 여러 단계를 선택하고 **단계 저장**으로 수정할 수 있습니다. 문서는 처음에 전부 선택되며, 체크한 문서를 **통합 분석하기**로 함께 분석합니다. 합계 원문은 240,000자까지입니다. PDF 원본 합계가 50,000,000바이트를 넘으면 최신 업로드순으로 한도 안에 들어가는 문서를 선택하고, 제외 파일을 검토 화면의 경고에 표시합니다. 제외 문서는 원문 텍스트와 근거 문서 목록에서도 빠집니다. PDF는 원본 `input_file`에 `detail: "high"`를 지정해 페이지 이미지와 텍스트를 함께 전달하며, Word·TXT는 추출한 텍스트를 OpenAI API로 전송합니다. PDF 외 기존 문서의 분석 한도는 파일당 20MiB·합계 40MiB를 유지합니다. 스캔 PDF도 분석할 수 있으나 이미지 속 글자와 표는 반드시 원문과 대조하세요. 홍보물의 제3자 연락처는 제안에서 제외합니다.
 4. 현재 내용, AI 제안, 근거 문서 배지를 비교합니다. 배지를 누르면 해당 원문을 열 수 있습니다. 신상·아는 단계는 전문분야와 고객·상생직군, 신뢰 단계는 실제 고객사·리퍼럴 근거, 수익 단계는 원하는 소개·협업 기회를 우선 참고하되 다른 단계의 명시적 근거도 사용합니다. 문서 간 충돌은 최근 문서 내용을 우선하고 주의사항에 남깁니다. 비슷한 목록 표현은 합칩니다. AI 제안은 처음에 모두 미선택이며, 목록 항목은 기본 **기존에 추가**로 반영합니다. 해당 행에서 **전체 교체**를 명시한 경우에만 기존 목록을 교체합니다.
 5. 대상 멤버와 공개 범위를 확인한 뒤 **선택한 N개 항목 반영**을 누릅니다. 성공 응답 뒤 선샤인·협업팀·챕터 지도가 함께 갱신됩니다. **검토 내용 보관**은 초안만 저장하며 명단은 바꾸지 않습니다.
 
@@ -175,6 +175,10 @@ psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/roles.sql
 [`tests/interview-reviews.sql`](tests/interview-reviews.sql)은 `interview-reviews.sql`까지 적용한 격리 DB에서 통합 분석을 검증합니다. 두 문서 반영 후 세 번째 문서로 재분석해 목록이 보존되는지, 명시적 전체 교체, 근거 문서 검증, 기존 반영 문서 재사용, 단계 수정, 동시 수정·분석 충돌과 관리자 권한을 확인합니다. 기존 `tests/interviews.sql`은 통합 설정 이전의 단일 문서 기능 회귀용입니다.
 
 `node --experimental-strip-types tests/interview-edge.mjs`는 실제 API 호출 없이 다중 문서 요청·근거 ID·AI 출력·오류 처리를 검사합니다. `node tests/interview-extraction.mjs`는 PDF/DOCX/TXT 판독과 단계 추정을 확인합니다. 로컬 `121자료집`의 네 PDF도 단계 추정 검증에 사용하며, 이 비공개 원본은 저장소나 공개 배포물에 넣지 않습니다.
+
+PDF 고해상도 분석을 실제로 확인하려면 `INTERVIEW_EXTRACTION_OUTPUT=diagnostics-output/interview-pdf-high/fixture-text.json`을 설정해 추출 테스트를 실행한 뒤, 로컬 환경의 `OPENAI_API_KEY`와 `node --experimental-strip-types tests/interview-pdf-live.mjs --run-once`를 사용합니다. 이 검증은 김경태 PDF 두 개로 실제 OpenAI 요청을 한 번만 보내고, 인증·DB·Storage는 메모리 대역을 사용합니다. 실행 기록과 응답은 Git에서 제외된 `diagnostics-output/interview-pdf-high/`에 저장하며, 기존 실행 기록이 있으면 유료 호출을 반복하지 않습니다.
+
+30MiB 운영 업로드에는 [`supabase/interview-pdf-30mb-bucket.sql`](supabase/interview-pdf-30mb-bucket.sql)의 버킷 설정과 문서 등록 DB 제한이 모두 일치해야 합니다. 기존 `supabase/interviews.sql`의 테이블 CHECK 및 등록 RPC에는 20MiB 제한이 있으므로, 버킷 한 줄 SQL만 실행한 상태에서는 20~30MiB PDF 등록이 되지 않습니다. 이 파일은 수동 실행용이며 애플리케이션 빌드나 배포에서 실행하지 않습니다.
 
 `tests/member-referrals.sql`은 공유 설정까지 적용한 테스트 DB에서 승인 멤버 간 조회, 원본·고객사 범위, 타인 수정 차단, 통합 검토 반영 후 공유를 검사하고 테스트 데이터를 롤백합니다. `node tests/browser.mjs --filter="Shared referral"`은 화면 노출, 로그아웃·권한 변경, 조회 실패·재시도와 편집 충돌을 검증합니다.
 

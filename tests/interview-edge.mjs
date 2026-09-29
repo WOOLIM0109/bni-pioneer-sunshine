@@ -1,27 +1,32 @@
 // No network: every Auth, REST, Storage, and OpenAI call uses the test transport.
 // Run: node --experimental-strip-types tests/interview-edge.mjs
 import assert from 'node:assert/strict';
-import {createHandler,INTERVIEW_MODEL,ANALYSIS_SCHEMA,ANALYSIS_LIMITS,DOCUMENT_LIMITS,validateAnalysis} from '../supabase/functions/analyze-interview/index.ts';
+import {createHandler,INTERVIEW_MODEL,ANALYSIS_SCHEMA,ANALYSIS_LIMITS,DOCUMENT_LIMITS,validateAnalysis,selectAnalysisDocuments} from '../supabase/functions/analyze-interview/index.ts';
 const userId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',memberId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',interviewId='cccccccc-cccc-4ccc-8ccc-cccccccccccc',leaseId='dddddddd-dddd-4ddd-8ddd-dddddddddddd',reviewId='eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',secondId='cccccccc-cccc-4ccc-8ccc-cccccccccccd',thirdId='cccccccc-cccc-4ccc-8ccc-ccccccccccce';
 const output={summary:'인터뷰 요약',detected_name:'홍길동',warnings:[],suggestions:[{key:'customers',value:['제조업 대표'],reason:'사업 분야',evidence:'제조업 대표가 주요 고객입니다.',confidence:'high',basis:'stated',sources:[interviewId]}]};
 const suggestion=(key,value,extra={})=>({...output.suggestions[0],key,value,...extra});
 const response=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json'}});
 function setup(options={}){
   const log=[],document={id:interviewId,member_id:memberId,revision:1,raw_text:'제조업 대표가 주요 고객입니다.',original_name:'아는 단계.txt',stages:['visibility'],created_at:'2026-09-21T00:00:00Z',mime_type:'text/plain',storage_path:memberId+'/source.txt',file_size:100,...options.document};
-  const documents=options.documents||[document],review={id:reviewId,member_id:memberId,revision:1,status:'analyzing',source_interview_ids:documents.map(d=>d.id),...options.review};
+  const documents=options.documents||[document];let review;
   const fetch=async(url,init={})=>{
     const parsed=new URL(url),body=init.body?JSON.parse(init.body):null;
     log.push({path:parsed.pathname,query:parsed.search,body,headers:init.headers});
     if(parsed.pathname==='/auth/v1/user')return response(options.unauthorized?{}:{id:userId,email:'admin@example.test',email_confirmed_at:'2026-09-21T00:00:00Z',is_anonymous:false},options.unauthorized?401:200);
     if(parsed.pathname==='/rest/v1/member_accounts')return response([{role:options.role||'admin'}]);
-    if(parsed.pathname==='/rest/v1/rpc/begin_member_interview_review_analysis')return options.beginError?response(options.beginError,400):options.busy?response({message:'analysis_in_progress'},409):response({lease_id:leaseId,expires_at:'2026-09-21T00:03:00Z',review,documents});
+    if(parsed.pathname==='/rest/v1/rpc/list_member_interviews')return options.metadataError?response(options.metadataError,400):response(options.metadata||documents.map(({raw_text,storage_path,...metadata})=>metadata));
+    if(parsed.pathname==='/rest/v1/rpc/begin_member_interview_review_analysis'){
+      review={id:reviewId,member_id:memberId,revision:1,status:'analyzing',source_interview_ids:body.target_interview_ids,...options.review};
+      const snapshot=options.snapshotDocuments||documents.filter(document=>body.target_interview_ids.includes(document.id));
+      return options.beginError?response(options.beginError,400):options.busy?response({message:'analysis_in_progress'},409):response({lease_id:leaseId,expires_at:'2026-09-21T00:03:00Z',review,documents:snapshot});
+    }
     if(parsed.pathname==='/rest/v1/members')return response([{id:memberId,name:'홍길동',company:'길동상사',field:'제조',team:'RETIRED-TEAM-SENTINEL',chapter_role:'OPERATIONS-ROLE-SENTINEL',customers:options.currentCustomers||[],synergies:[]}]);
-    if(parsed.pathname.startsWith('/storage/v1/object/authenticated/'))return new Response(options.pdf||'%PDF-1.7\nfixture');
+    if(parsed.pathname.startsWith('/storage/v1/object/authenticated/'))return new Response(options.pdfByPath?.[decodeURIComponent(parsed.pathname)]||options.pdf||'%PDF-1.7\nfixture');
     if(parsed.pathname==='/v1/responses'){
       if(options.networkFailure)throw new Error('private-upstream-error');
       return response(options.aiResponse||{status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(options.output||output)}]}]},options.aiStatus||200);
     }
-    if(parsed.pathname==='/rest/v1/rpc/finish_member_interview_review_analysis')return options.staleFinish?response({message:'stale_revision'},409):response({...review,revision:2,status:'draft',...body.analysis});
+    if(parsed.pathname==='/rest/v1/rpc/finish_member_interview_review_analysis')return options.staleFinish?response({message:'stale_revision'},409):response({...review,revision:2,status:'draft',...body.analysis,...options.savedReview});
     if(parsed.pathname==='/rest/v1/rpc/cancel_member_interview_review_analysis')return response({released:true});
     throw Error('Unexpected external call '+url);
   };
@@ -67,7 +72,7 @@ await test('Success is stored as extracted draft only using caller JWT',async()=
   const write=s.log.find(x=>x.path.endsWith('/finish_member_interview_review_analysis'));assert.deepEqual(Object.keys(write.body.analysis),['extracted','public_patch','private_patch']);assert.deepEqual(write.body.analysis.public_patch,{});assert.deepEqual(write.body.analysis.private_patch,{});assert.equal(write.headers.Authorization,'Bearer user-jwt');assert.equal(s.log.some(x=>x.path.endsWith('/cancel_member_interview_review_analysis')),false);
   assert.equal(s.log.filter(x=>x.path==='/rest/v1/members').length,1);
 });
-await test('PDF bytes are native input_file and retain no Files API upload',async()=>{const pdf='%PDF-1.7\nfixture',s=setup({pdf,document:{mime_type:'application/pdf',raw_text:'',file_size:pdf.length,storage_path:memberId+'/source.pdf'}});assert.equal((await s.call()).status,200);const part=s.log.find(x=>x.path==='/v1/responses').body.input[0].content.find(x=>x.type==='input_file');assert.equal(part.file_data,'data:application/pdf;base64,'+Buffer.from(pdf).toString('base64'));assert.equal(s.log.some(x=>x.path==='/v1/files'),false);});
+await test('PDF bytes use high-detail native input_file without a Files API upload',async()=>{const pdf='%PDF-1.7\nfixture',s=setup({pdf,document:{mime_type:'application/pdf',raw_text:'',file_size:pdf.length,storage_path:memberId+'/source.pdf'}});assert.equal((await s.call()).status,200);const part=s.log.find(x=>x.path==='/v1/responses').body.input[0].content.find(x=>x.type==='input_file');assert.equal(part.file_data,'data:application/pdf;base64,'+Buffer.from(pdf).toString('base64'));assert.equal(part.detail,'high');assert.equal(s.log.some(x=>x.path==='/v1/files'),false);});
 await test('Invalid storage member path never reaches OpenAI',async()=>{const s=setup({document:{mime_type:'application/pdf',storage_path:'another-member/file.pdf'}});assert.equal((await s.call()).status,400);assert.equal(s.log.some(x=>x.path==='/v1/responses'),false);assert(s.log.some(x=>x.path.endsWith('/cancel_member_interview_review_analysis')));});
 await test('Contact and actual customer company are excluded from public suggestions',async()=>{const s=setup({output:{...output,suggestions:[...output.suggestions,suggestion('wants',['연락: 010-1234-5678']),suggestion('customer_companies',['비공개상사'],{evidence:'비공개상사'}),suggestion('synergies',['비공개상사 담당자'],{basis:'inferred'})]}});const r=await(await s.call()).json();assert.deepEqual(r.extracted.suggestions.map(x=>x.key),['customers','customer_companies']);assert.equal(r.extracted.warnings.length,2);});
 await test('Member-shared referral situations and phrases retain their draft values and storage contract',async()=>{
@@ -185,9 +190,9 @@ await test('Selection validation rejects missing, duplicate, malformed, ambiguou
 await test('Mixed-member selections rejected by the database never reach the model',async()=>{
   const s=setup({beginError:{code:'22023',message:'mixed_member_documents'}}),r=await s.call('POST',{interview_ids:[interviewId,secondId]});assert.equal(r.status,400);assert.equal(s.log.some(x=>x.path==='/v1/responses'),false);assert.equal(s.log.some(x=>x.path.endsWith('/finish_member_interview_review_analysis')),false);
 });
-await test('Database document snapshots must exactly match requested IDs and the review member',async()=>{
+await test('Database document snapshots must exactly match the budgeted IDs and review member',async()=>{
   const doc=setup().document;
-  for(const documents of [[{...doc,member_id:userId}],[{...doc,id:secondId}],[doc,{...doc}],[{...doc,stages:['invalid']}],[{...doc,stages:['profile','profile']}],[{...doc,original_name:''}],[{...doc,created_at:'yesterday'}]]){const s=setup({documents}),r=await s.call('POST',{interview_ids:[interviewId]});assert.equal(r.status,502);assert.equal(s.log.some(x=>x.path==='/v1/responses'),false);assert(s.log.some(x=>x.path.endsWith('/cancel_member_interview_review_analysis')));}
+  for(const snapshotDocuments of [[{...doc,member_id:userId}],[{...doc,id:secondId}],[doc,{...doc}],[{...doc,stages:['invalid']}],[{...doc,stages:['profile','profile']}],[{...doc,original_name:''}],[{...doc,created_at:'yesterday'}]]){const s=setup({snapshotDocuments}),r=await s.call('POST',{interview_ids:[interviewId]});assert.equal(r.status,502);assert.equal(s.log.some(x=>x.path==='/v1/responses'),false);assert(s.log.some(x=>x.path.endsWith('/cancel_member_interview_review_analysis')));}
 });
 await test('Every proposal requires nonempty unique sources from the selection and rejects invented document IDs',async()=>{
   for(const sources of [undefined,[],[secondId],['not-a-uuid'],[123],[interviewId,interviewId],[interviewId,...Array.from({length:20},()=>interviewId)]]){const proposal=suggestion('customers',['제조업 대표'],{sources});if(sources===undefined)delete proposal.sources;const s=setup({output:{...output,suggestions:[proposal]}}),r=await s.call();assert.equal(r.status,502);assert.equal(s.log.some(x=>x.path.endsWith('/finish_member_interview_review_analysis')),false);assert(s.log.some(x=>x.path.endsWith('/cancel_member_interview_review_analysis')));assert(!JSON.stringify(s.diagnostics).includes(secondId));}
@@ -196,7 +201,7 @@ await test('Every proposal requires nonempty unique sources from the selection a
 await test('Strict structured output requires source arrays bounded to the selected document maximum',async()=>{
   for(const branch of ANALYSIS_SCHEMA.properties.suggestions.items.anyOf){assert(branch.required.includes('sources'));assert.equal(branch.properties.sources.minItems,1);assert.equal(branch.properties.sources.maxItems,DOCUMENT_LIMITS.count);assert(branch.properties.sources.items.pattern);}
 });
-await test('Original file and aggregate raw-text limits fail before a paid request and release the review lease',async()=>{
+await test('Existing text and non-PDF limits fail before paid requests and preserve lease discipline',async()=>{
   const doc=setup().document,make=(id,extra)=>({...doc,id,...extra});
   const cases=[
     [make(interviewId,{raw_text:'가'.repeat(120001)})],
@@ -204,12 +209,82 @@ await test('Original file and aggregate raw-text limits fail before a paid reque
     [make(interviewId,{file_size:DOCUMENT_LIMITS.fileBytes+1})],
     [make(interviewId,{file_size:DOCUMENT_LIMITS.fileBytes}),make(secondId,{file_size:DOCUMENT_LIMITS.fileBytes}),make(thirdId,{file_size:1})]
   ];
-  for(const documents of cases){const s=setup({documents}),r=await s.call();assert.equal(r.status,413);assert.equal(s.log.some(x=>x.path==='/v1/responses'),false);assert(s.log.some(x=>x.path.endsWith('/cancel_member_interview_review_analysis')));}
+  for(const [index,documents] of cases.entries()){const s=setup({documents}),r=await s.call();assert.equal(r.status,413);assert.equal(s.log.some(x=>x.path==='/v1/responses'),false);assert.equal(s.log.some(x=>x.path.endsWith('/cancel_member_interview_review_analysis')),index<2);assert.equal(s.log.some(x=>x.path.endsWith('/begin_member_interview_review_analysis')),index<2);}
   const boundary=setup({documents:[make(interviewId,{raw_text:'가'.repeat(120000),file_size:DOCUMENT_LIMITS.fileBytes}),make(secondId,{raw_text:'나'.repeat(120000),file_size:DOCUMENT_LIMITS.fileBytes})]});assert.equal((await boundary.call()).status,200);
 });
 await test('Mixed native PDF and text inputs keep distinct document IDs and headers in a single model call',async()=>{
   const pdf='%PDF-1.7\nfixture',first=setup().document,second={...first,id:secondId,original_name:'신상명세표.pdf',stages:['profile'],mime_type:'application/pdf',raw_text:'',file_size:pdf.length,storage_path:memberId+'/profile.pdf'};
   const s=setup({documents:[first,second],pdf,output:{...output,suggestions:[suggestion('customers',['제조업 대표'],{sources:[interviewId,secondId]})]}}),r=await s.call();assert.equal(r.status,200);
-  const calls=s.log.filter(x=>x.path==='/v1/responses');assert.equal(calls.length,1);const content=calls[0].body.input[0].content,fileIndex=content.findIndex(x=>x.type==='input_file');assert(content[fileIndex-1].text.includes('[문서: 신상명세표.pdf / 단계: 신상명세표]'));assert(content[fileIndex-1].text.includes(secondId));assert.equal(content[fileIndex].filename,'interview-'+secondId+'.pdf');
+  const calls=s.log.filter(x=>x.path==='/v1/responses');assert.equal(calls.length,1);const content=calls[0].body.input[0].content,fileIndex=content.findIndex(x=>x.type==='input_file');assert(content[fileIndex-1].text.includes('[문서: 신상명세표.pdf / 단계: 신상명세표]'));assert(content[fileIndex-1].text.includes(secondId));assert.equal(content[fileIndex].filename,'interview-'+secondId+'.pdf');assert.equal(content[fileIndex].detail,'high');
+});
+const pdfDocument=(id,file_size,created_at='2026-09-21T00:00:00Z',extra={})=>({...setup().document,id,file_size,created_at,mime_type:'application/pdf',original_name:'문서-'+id+'.pdf',storage_path:memberId+'/'+id+'.pdf',raw_text:'',...extra});
+await test('PDF boundaries allow 30 MiB per file and exactly 50,000,000 aggregate bytes',async()=>{
+  assert.equal(DOCUMENT_LIMITS.pdfBytes,30*1024*1024);assert.equal(DOCUMENT_LIMITS.totalPdfBytes,50_000_000);
+  assert.equal(selectAnalysisDocuments([pdfDocument(interviewId,DOCUMENT_LIMITS.pdfBytes)]).excluded.length,0);
+  assert.throws(()=>selectAnalysisDocuments([pdfDocument(interviewId,DOCUMENT_LIMITS.pdfBytes+1)]),error=>error.status===413&&error.code==='file_too_large');
+  const latest=pdfDocument(interviewId,30_000_000,'2026-09-23T00:00:00Z');
+  assert.deepEqual(selectAnalysisDocuments([latest,pdfDocument(secondId,20_000_000)]).documents.map(document=>document.id),[interviewId,secondId]);
+  assert.deepEqual(selectAnalysisDocuments([latest,pdfDocument(secondId,20_000_001)]).excluded.map(document=>document.id),[secondId]);
+  for(const file_size of [0,-1,1.5,NaN])assert.throws(()=>selectAnalysisDocuments([pdfDocument(interviewId,file_size)]),error=>error.status===413);
+});
+await test('Newest-first PDF budgeting greedily continues after a skipped file and preserves non-PDF documents',async()=>{
+  const latest=pdfDocument(thirdId,30_000_000,'2026-09-23T00:00:00Z'),middle=pdfDocument(secondId,25_000_000,'2026-09-22T00:00:00Z'),oldest=pdfDocument(interviewId,20_000_000);
+  const text={...setup().document,id:userId,file_size:DOCUMENT_LIMITS.fileBytes};
+  const selected=selectAnalysisDocuments([oldest,text,middle,latest]);
+  assert.deepEqual(selected.documents.map(document=>document.id),[interviewId,userId,thirdId]);assert.deepEqual(selected.excluded.map(document=>document.id),[secondId]);
+  assert.equal(selected.documents.filter(document=>document.mime_type==='application/pdf').reduce((sum,document)=>sum+document.file_size,0),50_000_000);
+  assert.equal(selectAnalysisDocuments([latest,oldest,text,{...text,id:memberId}]).excluded.length,0,'The existing 40MiB non-PDF budget is separate from native PDF bytes.');
+});
+await test('Equal upload timestamps use deterministic document-ID ordering independent of request order',async()=>{
+  const documents=[pdfDocument(interviewId,30_000_000),pdfDocument(secondId,30_000_000),pdfDocument(thirdId,30_000_000)];
+  for(const order of [documents,[...documents].reverse(),[documents[1],documents[0],documents[2]]]){
+    const selected=selectAnalysisDocuments(order);assert.deepEqual(selected.documents.map(document=>document.id),[interviewId]);assert.deepEqual(selected.excluded.map(document=>document.id),[secondId,thirdId]);
+  }
+});
+await test('Invalid or mixed-member metadata is rejected before any review, file download, or model call',async()=>{
+  const doc=setup().document;
+  const cases=[{metadata:{}},{metadata:[]},{metadata:[doc,doc]},{metadata:[{...doc,created_at:'yesterday'}]},{metadata:[{...doc,revision:0}]},{metadata:[{...doc,stages:['unsupported']}]},{documents:[doc,{...doc,id:secondId,member_id:userId}]}];
+  for(const options of cases){const s=setup(options),r=await s.call();assert([400,502].includes(r.status));assert(!s.log.some(item=>/begin_member|finish_member|cancel_member|\/storage\/|\/v1\/responses/.test(item.path)));}
+  const oversized=setup({documents:[pdfDocument(interviewId,DOCUMENT_LIMITS.pdfBytes+1)]});assert.equal((await oversized.call()).status,413);assert(!oversized.log.some(item=>item.path.includes('begin_member')));
+});
+await test('Metadata changes between selection and the leased snapshot abort before paid analysis',async()=>{
+  const doc=setup().document;
+  for(const change of [{revision:2},{file_size:101},{mime_type:'application/pdf'},{created_at:'2026-09-22T00:00:00Z'},{original_name:'renamed.txt'}]){
+    const s=setup({snapshotDocuments:[{...doc,...change}]}),r=await s.call();assert.equal(r.status,409);assert.equal((await r.json()).error.code,'stale_revision');assert(!s.log.some(item=>item.path==='/v1/responses'));assert(s.log.some(item=>item.path.endsWith('/cancel_member_interview_review_analysis')));
+  }
+});
+await test('The review source list must match actual analysis inputs at both begin and finish',async()=>{
+  for(const source_interview_ids of [undefined,[],[secondId],[interviewId,interviewId]]){
+    const s=setup({review:{source_interview_ids}}),r=await s.call();assert.equal(r.status,502);assert(!s.log.some(item=>item.path==='/v1/responses'));assert(s.log.some(item=>item.path.endsWith('/cancel_member_interview_review_analysis')));
+  }
+  const saved=setup({savedReview:{source_interview_ids:[secondId]}}),r=await saved.call();assert.equal(r.status,502);assert.equal((await r.json()).error.code,'invalid_review');assert(!saved.log.some(item=>item.path.endsWith('/cancel_member_interview_review_analysis')),'A completed save must not be cancelled because its response is inconsistent.');
+});
+await test('Over-budget PDFs are absent from storage reads, text, native inputs, review sources and proposal sources',async()=>{
+  const bytes=Buffer.alloc(DOCUMENT_LIMITS.pdfBytes,32);bytes.write('%PDF-1.7\nfixture');
+  const latest=pdfDocument(secondId,bytes.length,'2026-09-29T00:00:00Z',{original_name:'최신 신뢰.pdf',raw_text:'포함된 최신 문서'}),text={...setup().document,id:thirdId,raw_text:'함께 선택한 텍스트 문서'};
+  const excluded=[interviewId,...Array.from({length:17},(_,index)=>'cccccccc-cccc-4ccc-8ccc-'+index.toString(16).padStart(12,'0'))].map((id,index)=>pdfDocument(id,bytes.length,'2026-09-21T00:00:00Z',{original_name:'제외'+index+'-'+ '문'.repeat(480)+'.pdf',raw_text:'EXCLUDED-TEXT-SENTINEL'+'가'.repeat(120000)}));
+  const documents=[excluded[0],text,latest,...excluded.slice(1)],expectedIds=[thirdId,secondId];
+  const model={...output,warnings:Array.from({length:30},(_,index)=>'모델 주의사항 '+index),suggestions:[suggestion('customers',['제조업 대표'],{sources:[secondId,thirdId]})]};
+  const s=setup({documents,pdf:bytes,output:model}),r=await s.call();assert.equal(r.status,200);const saved=await r.json();
+  assert.deepEqual(saved.source_interview_ids,expectedIds);assert.deepEqual(saved.extracted.suggestions[0].sources,[secondId,thirdId]);
+  assert.equal(saved.extracted.warnings.length,30);const warning=saved.extracted.warnings[0];assert(warning.includes('50MB'));assert(warning.includes('제외 문서 18개'));assert(warning.includes('텍스트도 이번 분석에 포함되지 않았습니다'));
+  for(let index=0;index<18;index++)assert(warning.includes('제외'+index+'-'));assert(Array.from(warning).length<=1500);assert(warning.includes('…'));assert(saved.extracted.warnings.at(-1).includes('추가 주의사항'));
+  const begins=s.log.filter(item=>item.path.endsWith('/begin_member_interview_review_analysis'));assert.equal(begins.length,1);assert.deepEqual(begins[0].body.target_interview_ids,expectedIds);
+  assert.equal(s.log.filter(item=>item.path.endsWith('/list_member_interviews')).length,1);assert.equal(s.log.filter(item=>item.path.startsWith('/storage/')).length,1);assert(!s.log.some(item=>item.path.endsWith('/cancel_member_interview_review_analysis')));
+  const ai=s.log.find(item=>item.path==='/v1/responses').body,content=ai.input[0].content,combined=content.filter(part=>part.type==='input_text').map(part=>part.text).join('\n');
+  assert(combined.includes(latest.raw_text));assert(combined.includes(text.raw_text));assert(!combined.includes('EXCLUDED-TEXT-SENTINEL'));for(const document of excluded)assert(!combined.includes(document.id));
+  assert.deepEqual(content.filter(part=>part.type==='input_file').map(part=>({filename:part.filename,detail:part.detail})),[{filename:'interview-'+secondId+'.pdf',detail:'high'}]);
+  assert.equal(s.log.filter(item=>item.path==='/v1/responses').length,1);
+});
+await test('A model cannot cite a PDF excluded by the aggregate size budget',async()=>{
+  const bytes=Buffer.alloc(DOCUMENT_LIMITS.pdfBytes,32);bytes.write('%PDF-1.7\nfixture');
+  const s=setup({documents:[pdfDocument(interviewId,bytes.length),pdfDocument(secondId,bytes.length,'2026-09-29T00:00:00Z')],pdf:bytes,output}),r=await s.call();
+  assert.equal(r.status,502);assert.equal((await r.json()).error.code,'invalid_analysis');assert(!s.log.some(item=>item.path.endsWith('/finish_member_interview_review_analysis')));assert(s.log.some(item=>item.path.endsWith('/cancel_member_interview_review_analysis')));
+  assert.deepEqual(s.log.find(item=>item.path.endsWith('/begin_member_interview_review_analysis')).body.target_interview_ids,[secondId]);
+});
+await test('Visual-document instructions require image evidence without treating third-party advertising contacts as member facts',async()=>{
+  const s=setup();assert.equal((await s.call()).status,200);const instructions=s.log.find(item=>item.path==='/v1/responses').body.instructions;
+  for(const phrase of ['PDF 이미지·스캔·홍보물 안의 글자도 인터뷰 본문으로','PDF 페이지 번호·짧은 발췌','읽을 수 없는 작은 글자나 잘린 내용을 추측하지','홍보물 속 제3자 이름·전화번호·이메일·상세 주소','모든 제안에서 제외'])assert(instructions.includes(phrase),phrase);
+  assert(!instructions.includes('월 5천원'));assert(!instructions.includes('동물병원'));assert(!instructions.includes('팻샵'));
 });
 console.log(count+' isolated Edge tests passed; no network used.');

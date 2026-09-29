@@ -1,8 +1,10 @@
 // Synthetic parser fixtures and local 121 stage-tag fixtures. Never uploads a file.
 // Run: node tests/interview-extraction.mjs
 // Optional: INTERVIEW_FIXTURES_DIR points to the four private PDFs; absent local fixtures are skipped.
+// Optional: INTERVIEW_EXTRACTION_OUTPUT saves the local Kim fixture text to JSON without printing it.
 import assert from 'node:assert/strict';
-import {readFile,readdir} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
+import {readFile,readdir,mkdir,writeFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import {homedir} from 'node:os';
 import path from 'node:path';
@@ -52,6 +54,22 @@ try{
     const txt=await extractInterviewFile(new File(['핵심고객: 제조업 대표\n<script>bad()</script>'],'test.txt'));
     if(!txt.text.includes('<script>')||document.querySelectorAll('script').length!==1)throw Error('Text was altered or injected');out.push('UTF8 and markup remain text');
     await expectFailure('Unsupported DOC',new File(['anything'],'test.doc'),{},'unsupported_format');
+    // Exercise byte admission with actual File sizes; the read sentinel avoids allocating a second large buffer.
+    for(const [name,size,options,accepted] of [
+      ['over-old-limit.PDF',10*1024*1024+1,{},true],
+      ['boundary.pdf',30*1024*1024,{},true],
+      ['oversize.pdf',30*1024*1024+1,{},false],
+      ['raised-limit.pdf',30*1024*1024+1,{maxBytes:40*1024*1024},false],
+      ['lower-limit.pdf',10*1024*1024+1,{maxBytes:10*1024*1024},false],
+      ['boundary.docx',10*1024*1024,{},true],
+      ['oversize.docx',10*1024*1024+1,{maxBytes:30*1024*1024},false],
+      ['boundary.txt',10*1024*1024,{},true],
+      ['oversize.txt',10*1024*1024+1,{maxBytes:30*1024*1024},false]
+    ]){
+      const sized=new File([new Uint8Array(size)],name);
+      sized.arrayBuffer=async()=>{throw Object.assign(new Error('Byte validation reached the reader'),{code:'read_reached'});};
+      await expectFailure('Format byte limit: '+name,sized,options,accepted?'read_reached':'file_too_large');
+    }
     await expectFailure('Legacy encoding rejected',file([0xb0,0xa1],'test.txt'),{},'encoding');
     await expectFailure('Invalid PDF signature',new File(['not pdf'],'test.pdf'),{},'invalid_pdf');
     await expectFailure('Invalid DOCX ZIP',new File(['not zip'],'test.docx'),{},'invalid_docx');
@@ -91,15 +109,22 @@ try{
     if(error.code!=='ENOENT')throw error;
     console.log('SKIP Local PDF stage checks: private fixture directory is unavailable. Set INTERVIEW_FIXTURES_DIR to run the four private 121 fixtures.');
   }
+  const savedExtractions={};
   for(const name of actualNames){
     const bytes=[...await readFile(path.join(directory,name))];
-    const result=await page.evaluate(async({name,bytes})=>{
+    const result=await page.evaluate(async({name,bytes,saveText})=>{
       const extracted=await extractInterviewFile(new File([new Uint8Array(bytes)],name,{type:'application/pdf'}),{allowScannedPdf:true});
-      return {stages:inferInterviewStages(name,extracted.text),hasText:!!extracted.text.trim(),needsOCR:!!extracted.needsOCR};
-    },{name,bytes});
+      return {stages:inferInterviewStages(name,extracted.text),hasText:!!extracted.text.trim(),needsOCR:!!extracted.needsOCR,...(saveText?{raw_text:extracted.text,warnings:extracted.warnings,pageCount:extracted.pageCount}: {})};
+    },{name,bytes,saveText:!!process.env.INTERVIEW_EXTRACTION_OUTPUT&&name.includes('김경태')});
     assert(result.hasText||result.needsOCR,`${name}: parser must produce text or an explicit OCR notice.`);
     assert.deepEqual(result.stages,expectedStages[name],`${name}: stage tags should match the file name and extracted headings.`);
+    if('raw_text' in result)savedExtractions[name]={source_sha256:createHash('sha256').update(Buffer.from(bytes)).digest('hex'),raw_text:result.raw_text,warnings:result.warnings,needsOCR:result.needsOCR,pageCount:result.pageCount};
     console.log('PASS Local PDF stage inference: '+name+' → '+result.stages.join(', '));
+  }
+  if(process.env.INTERVIEW_EXTRACTION_OUTPUT){
+    assert.equal(Object.keys(savedExtractions).length,2,'Both local Kim PDFs must be available for the requested text export');
+    const destination=path.resolve(process.env.INTERVIEW_EXTRACTION_OUTPUT);await mkdir(path.dirname(destination),{recursive:true});await writeFile(destination,JSON.stringify(savedExtractions,null,2)+'\n','utf8');
+    console.log('Saved two local PDF extractions; no document text printed.');
   }
   assert(requests.every(r=>r.method==='GET'));assert(requests.some(r=>r.url.includes('pdfjs-dist@6.3.289'))); // Worker requests may be absent from page events.
   console.log(`${results.length} parser fixtures, ${stageCases.length} stage keyword cases, and ${actualNames.length} local PDF stage checks passed; no document text printed and no uploads.`);
