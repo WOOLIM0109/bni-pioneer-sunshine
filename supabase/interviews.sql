@@ -1,4 +1,6 @@
 -- Reviewable, rerunnable setup; run AFTER schema.sql / roles.sql.
+-- For member-level integrated reviews, ALWAYS run interview-reviews.sql AFTER
+-- this file (including reruns) so its reusable-document RPC overrides stay active.
 -- Deploy the matching public-only frontend/seed before accepting questionnaires.
 -- No AI requests are made by this SQL. All document/proposal access is admin-only.
 begin;

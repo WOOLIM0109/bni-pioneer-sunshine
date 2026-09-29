@@ -1,10 +1,12 @@
-// Synthetic documents only. Loads the pinned CDN parsers but never uploads a file.
+// Synthetic parser fixtures and local 121 stage-tag fixtures. Never uploads a file.
 // Run: node tests/interview-extraction.mjs
+// Optional: INTERVIEW_FIXTURES_DIR points to the four private PDFs; absent local fixtures are skipped.
 import assert from 'node:assert/strict';
 import {readFile,readdir} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import {homedir} from 'node:os';
 import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import http from 'node:http';
 const require=createRequire(import.meta.url),candidates=['playwright','playwright-core'];
 try{for(const file of await readdir(path.join(homedir(),'AppData/Local/ms-playwright/.links')))candidates.push((await readFile(path.join(homedir(),'AppData/Local/ms-playwright/.links',file),'utf8')).trim());}catch{}
@@ -32,9 +34,11 @@ function docx(){
   return [...Buffer.concat([...local,cd,end])];
 }
 const html=await readFile(new URL('../index.html',import.meta.url),'utf8');
-const start=html.indexOf('// Inline-ready browser helper.'),end=html.indexOf('/* ---------- 비공개 정보 · 인터뷰 문서 ---------- */',start);
+const start=html.indexOf('// Inline-ready browser helper.'),end=html.indexOf('const INTERVIEW_FIELDS=',start);
 assert(start>=0&&end>start,'Production inline extraction helper must be present');
-const source=html.slice(start,end);
+const stageStart=html.indexOf('const INTERVIEW_STAGES='),stageEnd=html.indexOf('function interviewStageLabel',stageStart);
+assert(stageStart>=0&&stageEnd>stageStart,'Production stage inference helper must be present');
+const source=html.slice(start,end)+'\n'+html.slice(stageStart,stageEnd);
 const server=http.createServer((req,res)=>{res.writeHead(200,{'Content-Type':'text/html'});res.end('<!doctype html><html><body><h1>Isolated parser fixture</h1></body></html>');});
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const browser=await playwright.chromium.launch({headless:true});
@@ -62,6 +66,41 @@ try{
     return out;
   },{pdf:pdf(true),empty:pdf(false),docx:docx()});
   for(const r of results)console.log('PASS '+r);
+  const stageCases=[
+    {name:'신상명세표_아는단계.pdf',text:'신뢰 단계 · 수익 단계',expected:['profile','visibility','credibility','profitability']},
+    {name:'meeting.pdf',text:'Visibility CREDIBILITY profitability',expected:['visibility','credibility','profitability']},
+    {name:'신상명세표.pdf',text:'아 는 단 계',expected:['profile','visibility']},
+    {name:'general-notes.txt',text:'단계가 지정되지 않은 인터뷰 자료',expected:[]}
+  ];
+  for(const fixture of stageCases){
+    assert.deepEqual(await page.evaluate(({name,text})=>inferInterviewStages(name,text),fixture),fixture.expected);
+    console.log('PASS Stage inference: '+fixture.name);
+  }
+  const directory=process.env.INTERVIEW_FIXTURES_DIR?path.resolve(process.env.INTERVIEW_FIXTURES_DIR):fileURLToPath(new URL('../121자료집/',import.meta.url));
+  const expectedStages={
+    '121미팅플래너_신뢰단계_김경태_20260928.pdf':['profile','credibility'],
+    '121미팅플래너_신상명세표_아는단계_김경태_20260928.pdf':['profile','visibility'],
+    '송승훈_신뢰단계-2.pdf':['credibility'],
+    '송승훈_아는단계-1.pdf':['visibility']
+  };
+  let actualNames=[];
+  try{
+    actualNames=(await readdir(directory)).filter(name=>name.toLowerCase().endsWith('.pdf')).sort();
+    assert.deepEqual(actualNames,Object.keys(expectedStages).sort(),'The local 121 fixture directory must contain the four expected PDFs');
+  }catch(error){
+    if(error.code!=='ENOENT')throw error;
+    console.log('SKIP Local PDF stage checks: private fixture directory is unavailable. Set INTERVIEW_FIXTURES_DIR to run the four private 121 fixtures.');
+  }
+  for(const name of actualNames){
+    const bytes=[...await readFile(path.join(directory,name))];
+    const result=await page.evaluate(async({name,bytes})=>{
+      const extracted=await extractInterviewFile(new File([new Uint8Array(bytes)],name,{type:'application/pdf'}),{allowScannedPdf:true});
+      return {stages:inferInterviewStages(name,extracted.text),hasText:!!extracted.text.trim(),needsOCR:!!extracted.needsOCR};
+    },{name,bytes});
+    assert(result.hasText||result.needsOCR,`${name}: parser must produce text or an explicit OCR notice.`);
+    assert.deepEqual(result.stages,expectedStages[name],`${name}: stage tags should match the file name and extracted headings.`);
+    console.log('PASS Local PDF stage inference: '+name+' → '+result.stages.join(', '));
+  }
   assert(requests.every(r=>r.method==='GET'));assert(requests.some(r=>r.url.includes('pdfjs-dist@6.3.289'))); // Worker requests may be absent from page events.
-  console.log(results.length+' parser fixture tests passed; synthetic content only; no uploads.');
+  console.log(`${results.length} parser fixtures, ${stageCases.length} stage keyword cases, and ${actualNames.length} local PDF stage checks passed; no document text printed and no uploads.`);
 }finally{await browser.close();await new Promise(resolve=>server.close(resolve));}

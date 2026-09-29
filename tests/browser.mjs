@@ -1,6 +1,7 @@
 // Isolated browser regression checks. All network requests are intercepted;
 // authentication and database writes only touch the in-memory test client.
 // Run: node tests/browser.mjs [--screenshots]
+// Use --filter="interview|document|AI proposals|Multiple member|Saving unchecked" for focused checks.
 // Optionally set PLAYWRIGHT_MODULE to a locally installed playwright/core module.
 import assert from 'node:assert/strict';
 import { readFile, readdir, mkdir } from 'node:fs/promises';
@@ -29,7 +30,7 @@ function makeMock(initial, options) {
     pendingAccessReads: [], holdAccessReads: false, completedAccessReads: 0,
     pendingStorageWrites: [], holdStorageWrites: false, failStorageWrites: false, failStorageReads: false,
     pendingPrivateReads: [], holdPrivateReads: false, pendingAnalysis: [], holdAnalysis: false, failAnalysis: false, aiConfigured: true,
-    storageObjects: Object.create(null), interviews: [],
+    storageObjects: Object.create(null), interviews: [], reviews: [],
     details: initial.map(row => ({ member_id: row.id, good_referral: `PRIVATE_REFERRAL_${row.id}`, triggers: [`PRIVATE_TRIGGER_${row.id}`], customer_companies: [`PRIVATE_COMPANY_${row.id}`], revision: 1 })),
     failReads: options.failReads, failWrites: false, failAccess: options.failAccess, failRpc: false, failRpcName: null, holdRpcName: null, failAccountList: false, failAccountListAfterSave: false, authError: null, callbacks: [],
     accounts: [account('test-user', options.role || 'admin', options.role === 'member' ? initial[0]?.id : null), account('second-user', 'viewer'), { ...account('pending-user', 'viewer'), requested_member_id: initial[1]?.id, request_status: 'pending' }, { ...account('reject-user', 'viewer'), requested_member_id: initial[2]?.id, request_status: 'pending' }],
@@ -48,7 +49,11 @@ function makeMock(initial, options) {
   const timestamp = () => new Date(Date.now() + ++state.revision).toISOString();
   const conflict = () => ({ data: null, error: { message: '다른 관리자가 문서 또는 멤버를 변경했습니다. 다시 열어 최신 내용을 확인하세요.', code: '40001' } });
   const detailFor = memberId => state.details.find(row => row.member_id === memberId) || { member_id: memberId, good_referral: '', triggers: [], customer_companies: [], revision: 0 };
-  const publicInterview = row => Object.fromEntries(['id', 'member_id', 'original_name', 'mime_type', 'file_size', 'status', 'revision', 'created_at', 'updated_at'].map(key => [key, row[key]]));
+  const publicInterview = row => ({ ...Object.fromEntries(['id', 'member_id', 'original_name', 'mime_type', 'file_size', 'status', 'stages', 'revision', 'created_at', 'updated_at'].map(key => [key, row[key]])), usage_status: state.reviews.some(review => review.status === 'applied' && review.source_interview_ids.includes(row.id)) || row.status === 'applied' ? 'applied' : state.reviews.some(review => review.source_interview_ids.includes(row.id)) ? 'analyzed' : 'unanalyzed' });
+  const mergeList = (current, incoming) => {
+    const seen = new Set();
+    return [...current, ...incoming].filter(value => { const key = String(value).normalize('NFKC').toLowerCase().replace(/\s+/g, ''); if (seen.has(key)) return false; seen.add(key); return true; });
+  };
   class Query {
     constructor(table) { this.table = table; this.action = 'select'; this.filters = []; this.orders = []; this.columns = '*'; }
     select(columns = '*') { this.columns = columns; return this; }
@@ -116,7 +121,7 @@ function makeMock(initial, options) {
     constructor(name, value) { this.name = name; this.value = value; }
     abortSignal() { return this; }
     async execute() {
-      const readOnly = ['list_member_accounts', 'get_member_details', 'list_member_interviews', 'get_member_interview'].includes(this.name);
+      const readOnly = ['list_member_accounts', 'get_member_details', 'list_member_interviews', 'get_member_interview', 'list_member_interview_reviews', 'get_member_interview_review'].includes(this.name);
       state.log.push({ action: 'rpc', name: this.name, value: clone(this.value), readOnly });
       if (readOnly) {
         const reader = clone(currentAccount() || null);
@@ -130,7 +135,11 @@ function makeMock(initial, options) {
           data = clone(state.details.filter(row => (reader.role === 'admin' || row.member_id === reader.member_id) && (!this.value?.target_member_id || row.member_id === this.value.target_member_id)));
         } else {
           if (reader?.role !== 'admin') return permissionError();
-          data = this.name === 'list_member_interviews'
+          data = this.name === 'list_member_interview_reviews'
+            ? clone(state.reviews.filter(row => !this.value?.target_member_id || row.member_id === this.value.target_member_id).toSorted((a, b) => b.created_at.localeCompare(a.created_at)))
+            : this.name === 'get_member_interview_review'
+            ? clone(state.reviews.find(row => row.id === this.value?.target_review_id) || null)
+            : this.name === 'list_member_interviews'
             ? clone(state.interviews.filter(row => !this.value?.target_member_id || row.member_id === this.value.target_member_id).map(publicInterview))
             : clone(state.interviews.find(row => row.id === this.value?.target_interview_id) || null);
         }
@@ -171,8 +180,9 @@ function makeMock(initial, options) {
         if (this.name === 'create_member_interview') {
           const object = state.storageObjects[`member-interviews/${input.storage_path}`];
           if (!object || !input.storage_path.startsWith(`${input.target_member_id}/`)) return { data: null, error: { message: '비공개 원본 파일을 먼저 업로드하세요.', code: '22023' } };
-          const row = { id: crypto.randomUUID(), member_id: input.target_member_id, storage_path: input.storage_path, original_name: input.original_name, mime_type: object.type, file_size: object.size, raw_text: '', extracted: {}, public_patch: {}, private_patch: {}, status: 'draft', revision: 1, created_at: timestamp(), updated_at: timestamp(), created_by: own.user_id, updated_by: own.user_id, applied_at: null, history: [] };
+          const row = { id: crypto.randomUUID(), member_id: input.target_member_id, storage_path: input.storage_path, original_name: input.original_name, mime_type: object.type, file_size: object.size, raw_text: '', stages: [], extracted: {}, public_patch: {}, private_patch: {}, status: 'draft', revision: 1, created_at: timestamp(), updated_at: timestamp(), created_by: own.user_id, updated_by: own.user_id, applied_at: null, history: [] };
           state.interviews.push(row);
+          if (state.loseCreateResponse) return { data: null, error: { message: '테스트: 저장 후 응답 연결 끊김', code: 'TEST_RESPONSE_LOST' } };
           return { data: clone(row), error: null };
         }
         const row = state.interviews.find(row => row.id === input.target_interview_id);
@@ -180,8 +190,8 @@ function makeMock(initial, options) {
         if (this.name === 'save_member_interview_draft') {
           const patch = clone(input.draft_patch);
           if (Object.hasOwn(patch, 'replace_review') && typeof patch.replace_review !== 'boolean') return { data: null, error: { code: '22023', message: '잘못된 검토 저장 방식입니다.' } };
-          const next = { raw_text: row.raw_text, extracted: row.extracted, public_patch: row.public_patch, private_patch: row.private_patch, status: patch.status ?? 'draft' };
-          for (const key of ['raw_text', 'extracted']) if (Object.hasOwn(patch, key)) next[key] = patch[key];
+          const next = { raw_text: row.raw_text, stages: row.stages, extracted: row.extracted, public_patch: row.public_patch, private_patch: row.private_patch, status: patch.status ?? row.status };
+          for (const key of ['raw_text', 'stages', 'extracted']) if (Object.hasOwn(patch, key)) next[key] = patch[key];
           for (const key of ['public_patch', 'private_patch']) if (Object.hasOwn(patch, key)) next[key] = patch.replace_review === true ? patch[key] : { ...row[key], ...patch[key] };
           if (Object.keys(next).some(key => JSON.stringify(row[key]) !== JSON.stringify(next[key]))) Object.assign(row, next, { revision: row.revision + 1, updated_at: timestamp(), updated_by: own.user_id });
           return { data: clone(row), error: null };
@@ -194,6 +204,28 @@ function makeMock(initial, options) {
         state.details = state.details.filter(item => item.member_id !== next.member_id).concat(next);
         Object.assign(row, { public_patch: clone(input.public_patch || {}), private_patch: clone(input.private_patch || {}), revision: row.revision + 1, status: 'applied', applied_at: timestamp(), updated_at: timestamp() });
         return { data: { interview_id: row.id, revision: row.revision, status: 'applied', member_id: row.member_id, member_updated_at: member.updated_at, details_revision: next.revision }, error: null };
+      }
+      if (['save_member_interview_review', 'apply_member_interview_review'].includes(this.name)) {
+        if (own?.role !== 'admin') return permissionError();
+        const input = this.value, row = state.reviews.find(row => row.id === input.target_review_id);
+        if (!row || row.revision !== input.expected_revision || row.status === 'applied') return conflict();
+        if (this.name === 'save_member_interview_review') {
+          const patch = clone(input.draft_patch);
+          for (const key of ['extracted', 'public_patch', 'private_patch', 'list_modes']) if (Object.hasOwn(patch, key)) row[key] = patch[key];
+          Object.assign(row, { revision: row.revision + 1, updated_at: timestamp() });
+          return { data: clone(row), error: null };
+        }
+        const member = state.members.find(member => member.id === row.member_id);
+        if (!member || member.updated_at !== input.expected_member_updated_at) return conflict();
+        const detail = detailFor(row.member_id), publicPatch = clone(input.public_patch || {}), privatePatch = clone(input.private_patch || {});
+        for (const [patch, existing] of [[publicPatch, member], [privatePatch, detail]]) for (const key of ['customers', 'synergies', 'triggers', 'customer_companies']) {
+          if (Object.hasOwn(patch, key) && (input.list_modes?.[key] || 'append') === 'append') patch[key] = mergeList(existing[key] || [], patch[key]);
+        }
+        Object.assign(member, publicPatch, { updated_at: timestamp() });
+        const next = { ...detail, ...privatePatch, revision: detail.revision + 1 };
+        state.details = state.details.filter(item => item.member_id !== next.member_id).concat(next);
+        Object.assign(row, { public_patch: clone(input.public_patch || {}), private_patch: clone(input.private_patch || {}), list_modes: clone(input.list_modes || {}), revision: row.revision + 1, status: 'applied', applied_at: timestamp(), updated_at: timestamp() });
+        return { data: { ...clone(row), member_updated_at: member.updated_at, details_revision: next.revision }, error: null };
       }
       if (this.name === 'request_member_access') {
         if (!own) return permissionError();
@@ -218,7 +250,7 @@ function makeMock(initial, options) {
       state.log.push({ action: 'storage-upload', bucket: this.bucket, path: objectPath, options: clone(uploadOptions), name: body.name || '', size: body.size, type: body.type });
       if (state.holdStorageWrites) await new Promise(resolve => state.pendingStorageWrites.push(resolve));
       if (currentAccount()?.role !== 'admin') return permissionError();
-      if (state.failStorageWrites) return { data: null, error: { message: '테스트 비공개 원본 저장 실패', code: 'TEST_STORAGE_FAILURE' } };
+      if (state.failStorageWrites || state.failStorageNames?.includes(body.name)) return { data: null, error: { message: '테스트 비공개 원본 저장 실패', code: 'TEST_STORAGE_FAILURE' } };
       const key = `${this.bucket}/${objectPath}`;
       if (state.storageObjects[key] && !uploadOptions.upsert) return { data: null, error: { message: 'The resource already exists', statusCode: '409' } };
       state.storageObjects[key] = { body, name: body.name || '', type: uploadOptions.contentType || body.type, size: body.size };
@@ -256,8 +288,8 @@ function makeMock(initial, options) {
       state.log.push({ action: 'function', name, value: clone(options.body || {}), method: options.method || 'POST', readOnly });
       if (currentAccount()?.role !== 'admin') return permissionError();
       if (readOnly) return { data: { configured: state.aiConfigured }, error: null };
-      const row = state.interviews.find(item => item.id === options.body?.interview_id);
-      if (!row || row.revision !== options.body?.expected_revision) return conflict();
+      const ids = options.body?.interview_ids, rows = state.interviews.filter(item => ids?.includes(item.id));
+      if (!Array.isArray(ids) || !ids.length || rows.length !== ids.length || rows.some(row => row.member_id !== rows[0].member_id)) return conflict();
       if (state.holdAnalysis) await new Promise(resolve => state.pendingAnalysis.push(resolve));
       if (state.failAnalysis) return { data: null, error: { message: 'Edge Function returned a non-2xx status code', context: { json: async () => ({ error: { code: 'invalid_analysis', message: '분석 결과를 검토안으로 읽지 못했습니다. 원문은 보관되어 있습니다. 오류 코드: analysis_shape' } }) } } };
       const suggestions = state.analysisSuggestions || [
@@ -268,7 +300,8 @@ function makeMock(initial, options) {
         { key: 'triggers', value: ['INTERVIEW_PRIVATE_TRIGGER 정부지원 사업이 궁금해요', 'INTERVIEW_PRIVATE_TRIGGER 서류 준비가 어려워요'], reason: '인터뷰에 나온 요청 문장입니다.', evidence: 'AI_PRIVATE_EVIDENCE 트리거 원문', confidence: 'high', basis: 'stated' },
         { key: 'customer_companies', value: ['INTERVIEW_PRIVATE_COMPANY 샘플기업'], reason: '고객사명은 비공개 항목입니다.', evidence: 'AI_PRIVATE_EVIDENCE 고객사 원문', confidence: 'high', basis: 'stated' }
       ];
-      Object.assign(row, { extracted: { summary: '인터뷰 검증 요약', detected_name: state.members.find(member => member.id === row.member_id)?.name || '', warnings: [], suggestions: clone(suggestions) }, public_patch: {}, private_patch: {}, revision: row.revision + 1, updated_at: timestamp() });
+      const row = { id: crypto.randomUUID(), member_id: rows[0].member_id, source_interview_ids: clone(ids), extracted: { summary: '멤버 통합 인터뷰 검증 요약', detected_name: state.members.find(member => member.id === rows[0].member_id)?.name || '', warnings: [], suggestions: clone(suggestions).map((suggestion, index) => ({ ...suggestion, sources: suggestion.sources || [rows[index % rows.length].id] })) }, public_patch: {}, private_patch: {}, list_modes: {}, revision: 1, status: 'draft', created_at: timestamp(), updated_at: timestamp() };
+      state.reviews.push(row);
       return { data: clone(row), error: null };
     } },
     auth: {
@@ -313,6 +346,8 @@ assert(html.includes('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/
 const { chromium } = await getPlaywright();
 const browser = await chromium.launch({ headless: true });
 const failures = [];
+const testPattern = process.argv.find(arg => arg.startsWith('--filter='))?.slice('--filter='.length);
+const testFilter = testPattern ? new RegExp(testPattern, 'i') : null;
 let seed;
 async function pageFor({ online = false, auth = false, records = seed, links = [], failLinkReads = false, failReads = false, role = 'admin', failAccess = false, basePath = '/', routePath = '', query = '', hash = '' } = {}) {
   const context = await browser.newContext({ viewport: { width: 400, height: 900 }, colorScheme: 'light', serviceWorkers: 'block' });
@@ -383,6 +418,7 @@ function mapSeed(rows) {
 }
 
 async function check(name, run) {
+  if (seed && testFilter && !testFilter.test(name)) return;
   try { await run(); console.log(`PASS ${name}`); }
   catch (error) { console.error(`FAIL ${name}`); if (failures.length) console.error(JSON.stringify(failures)); throw error; }
 }
@@ -401,12 +437,13 @@ async function uploadInterview(page, memberId = seed[0].id) {
   await page.selectOption('#interview-member', memberId);
   await page.setInputFiles('#interview-file', { name: '검증-인터뷰.txt', mimeType: 'text/plain', buffer: Buffer.from(INTERVIEW_SOURCE, 'utf8') });
   await page.click('#interview-upload');
-  await page.waitForFunction(() => window.__db.interviews.some(row => row.raw_text.includes('PRIVATE_INTERVIEW_SOURCE')));
+  await page.waitForFunction(() => !interviewBusy && window.__db.interviews.some(row => row.raw_text.includes('PRIVATE_INTERVIEW_SOURCE')));
   return page.evaluate(() => window.__db.interviews.at(-1).id);
 }
 async function analyzeInterview(page) {
+  const count = await page.evaluate(() => window.__db.reviews.length);
   await page.click('#interview-analyze');
-  await page.waitForFunction(() => document.querySelectorAll('#interview-review [data-field] .interview-check').length > 0);
+  await page.waitForFunction(count => !interviewBusy && window.__db.reviews.length > count && document.querySelectorAll('#interview-review [data-field] .interview-check').length > 0, count);
 }
 async function assertPublicExportPrivate(page) {
   await page.click('#t4');
@@ -432,15 +469,15 @@ async function openConnectionReview(page, memberId) {
   await page.selectOption('#link-member', memberId);
 }
 async function saveInterviewReview(page) {
-  const revision = await page.evaluate(() => interviewDoc.revision);
+  const revision = await page.evaluate(() => interviewReview.revision);
   await page.click('#interview-save');
-  await page.waitForFunction(revision => !interviewBusy && interviewDoc.revision > revision, revision);
+  await page.waitForFunction(revision => !interviewBusy && interviewReview.revision > revision, revision);
 }
 async function reloadInterviewReview(page, id) {
-  await page.selectOption('#interview-history', id);
-  const reads = await page.evaluate(() => window.__db.log.filter(item => item.name === 'get_member_interview').length);
-  await page.click('#interview-open');
-  await page.waitForFunction(reads => !interviewBusy && window.__db.log.filter(item => item.name === 'get_member_interview').length > reads, reads);
+  const reviewId = await page.evaluate(id => window.__db.reviews.find(row => row.id === id || row.source_interview_ids.includes(id))?.id, id);
+  const reads = await page.evaluate(() => window.__db.log.filter(item => item.name === 'get_member_interview_review').length);
+  await page.selectOption('#interview-review-history', reviewId);
+  await page.waitForFunction(reads => !interviewBusy && window.__db.log.filter(item => item.name === 'get_member_interview_review').length > reads, reads);
 }
 try {
   await check('Offline fallback renders all 31 seed members and permits only export', async () => {
@@ -1403,7 +1440,7 @@ try {
     await page.click('#interview-upload');
     await page.waitForFunction(() => /실패/.test(document.getElementById('interview-message').textContent + document.getElementById('interview-file-note').textContent));
     assert.equal(await page.evaluate(() => window.__db.interviews.length), 0);
-    assert.equal(await page.evaluate(() => window.__db.log.filter(row => row.name === 'create_member_interview' || row.name === 'apply_member_interview').length), 0);
+    assert.equal(await page.evaluate(() => window.__db.log.filter(row => row.name === 'create_member_interview' || row.name === 'apply_member_interview_review').length), 0);
     assert.deepEqual(await page.evaluate(() => M[0].c), seed[0].customers);
     await context.close();
   });
@@ -1451,20 +1488,246 @@ try {
     await page.locator('#interview-review [data-field="good_referral"] .interview-check').check();
     assert(await page.locator('#interview-apply').isDisabled(), 'Publishing requires an explicit public-data review confirmation.');
     await page.check('#interview-confirm');
-    await page.evaluate(() => { window.__db.holdWrites = true; window.__db.holdRpcName = 'apply_member_interview'; });
+    await page.evaluate(() => { window.__db.holdWrites = true; window.__db.holdRpcName = 'apply_member_interview_review'; });
     await page.click('#interview-apply');
-    await page.waitForFunction(() => window.__db.pending.length > 0 && window.__db.log.some(row => row.name === 'apply_member_interview'));
+    await page.waitForFunction(() => window.__db.pending.length > 0 && window.__db.log.some(row => row.name === 'apply_member_interview_review'));
     assert.deepEqual(await page.evaluate(() => M[0].c), seed[0].customers);
-    assert.notEqual(await page.evaluate(id => window.__db.interviews.find(row => row.id === id).status, id), 'applied');
+    assert.notEqual(await page.evaluate(id => window.__db.reviews.find(row => row.source_interview_ids.includes(id)).status, id), 'applied');
     await page.evaluate(() => window.__db.release());
     await page.waitForFunction(() => M[0].c.includes('지역 소상공인'));
-    const request = await page.evaluate(() => window.__db.log.find(row => row.name === 'apply_member_interview').value);
+    const request = await page.evaluate(() => window.__db.log.find(row => row.name === 'apply_member_interview_review').value);
     assert.deepEqual(Object.keys(request.public_patch).sort(), ['customers']);
     assert.deepEqual(Object.keys(request.private_patch).sort(), ['good_referral']);
     assert.deepEqual(await page.evaluate(() => M[0].s), seed[0].synergies, 'Unchecked synergy suggestions must remain unchanged.');
     assert.equal(await page.evaluate(memberId => window.__db.details.find(row => row.member_id === memberId).good_referral, seed[0].id), 'INTERVIEW_PRIVATE_REFERRAL 검증 고객');
-    assert.equal(await page.evaluate(id => window.__db.interviews.find(row => row.id === id).status, id), 'applied');
+    assert.equal(await page.evaluate(id => window.__db.reviews.find(row => row.source_interview_ids.includes(id)).status, id), 'applied');
     await assertPublicExportPrivate(page);
+    await context.close();
+  });
+  await check('Multiple member documents retain evidence and append new items when a third document is analyzed', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true });
+    await page.click('#t4');
+    await page.selectOption('#interview-member', seed[0].id);
+    assert(await page.locator('#interview-file').evaluate(input => input.multiple));
+    const documents = [
+      { name: '신상명세표-아는단계.txt', mimeType: 'text/plain', buffer: Buffer.from('신상명세표\n아는 단계 / Visibility\n' + INTERVIEW_SOURCE) },
+      { name: '신뢰단계.txt', mimeType: 'text/plain', buffer: Buffer.from('신뢰 단계 / Credibility\n' + INTERVIEW_SOURCE) }
+    ];
+    await page.setInputFiles('#interview-file', documents);
+    await page.click('#interview-upload');
+    await page.waitForFunction(() => !interviewBusy && window.__db.interviews.length === 2 && window.__db.interviews.every(row => row.raw_text));
+    const originals = await page.evaluate(async () => Promise.all(window.__db.interviews.map(async row => ({ id: row.id, member_id: row.member_id, name: row.original_name, stages: row.stages, content: await window.__db.storageObjects[`member-interviews/${row.storage_path}`].body.text() }))));
+    assert.deepEqual(originals.map(row => row.member_id), [seed[0].id, seed[0].id]);
+    assert.deepEqual(originals.map(row => row.stages), [['profile', 'visibility'], ['credibility']]);
+    assert.deepEqual(originals.map(row => row.content), documents.map(file => file.buffer.toString()));
+    assert.equal(await page.locator('#interview-docs .interview-doc-check').count(), 2);
+    assert(await page.locator('#interview-docs .interview-doc-check').evaluateAll(inputs => inputs.every(input => input.checked && !input.disabled)));
+    assert.match(await page.locator('#interview-docs').innerText(), /미분석/);
+    const sourceIds = originals.map(row => row.id);
+    const credibility = page.locator(`#interview-docs [data-document-id="${sourceIds[1]}"]`);
+    await credibility.locator('.interview-stage-check[value="profitability"]').check();
+    await credibility.locator('.interview-stage-save').click();
+    await page.waitForFunction(id => !interviewBusy && window.__db.interviews.find(row => row.id === id).stages.includes('profitability'), sourceIds[1]);
+    await credibility.locator('.interview-stage-check[value="profitability"]').uncheck();
+    await credibility.locator('.interview-stage-save').click();
+    await page.waitForFunction(id => !interviewBusy && !window.__db.interviews.find(row => row.id === id).stages.includes('profitability'), sourceIds[1]);
+    await analyzeInterview(page);
+    const firstAnalysis = await page.evaluate(() => window.__db.log.filter(item => item.action === 'function' && !item.readOnly).at(-1).value);
+    assert.deepEqual([...firstAnalysis.interview_ids].sort(), [...sourceIds].sort());
+    assert.equal(await page.evaluate(() => window.__db.reviews.length), 1);
+    assert.equal(await page.evaluate(() => window.__db.interviews.length), 2);
+    const badgeNames = await page.locator('#interview-review .interview-source-badge').evaluateAll(badges => badges.map(badge => badge.title));
+    for (const file of documents) assert(badgeNames.some(title => title.includes(file.name)), `${file.name}: proposals must expose their source document.`);
+    assert.match(await page.locator('#interview-review').innerText(), /신뢰 단계/);
+    assert.match(await page.locator('#interview-docs').innerText(), /분석에 포함됨/);
+    assert.match(await page.locator('#interview-document-state').innerText(), /분석에 포함됨/, 'The currently opened document status must refresh after integration.');
+    assert(await page.locator('#interview-review .interview-list-mode').evaluateAll(inputs => inputs.length > 0 && inputs.every(input => input.value === 'append')));
+    await page.locator('#interview-review [data-field="customers"] .interview-check').check();
+    await page.locator('#interview-review [data-field="triggers"] .interview-check').check();
+    await page.check('#interview-confirm');
+    await page.click('#interview-apply');
+    await page.waitForFunction(() => !interviewBusy && window.__db.reviews[0].status === 'applied');
+    const firstCustomers = await page.evaluate(() => [...window.__db.members[0].customers]);
+    const firstTriggers = await page.evaluate(() => [...window.__db.details.find(row => row.member_id === window.__db.members[0].id).triggers]);
+    for (const item of seed[0].customers) assert(firstCustomers.includes(item), 'Default append preserves preexisting public items.');
+    assert(firstCustomers.includes('지역 소상공인'));
+    assert(firstTriggers.includes(`PRIVATE_TRIGGER_${seed[0].id}`), 'Default append preserves preexisting private items.');
+    assert.match(await page.locator('#interview-docs').innerText(), /반영에 사용됨/);
+    assert(await page.locator('#interview-review .interview-value').evaluateAll(inputs => inputs.length > 0 && inputs.every(input => input.disabled)), 'An applied review remains visible and cannot be applied twice.');
+    assert(await page.locator('#interview-docs .interview-doc-check').evaluateAll(inputs => inputs.every(input => !input.disabled)), 'Documents used in an applied review stay selectable.');
+    await page.setInputFiles('#interview-file', { name: '수익단계.txt', mimeType: 'text/plain', buffer: Buffer.from('수익 단계 / Profitability\n새 고객: 병원 운영자\n' + INTERVIEW_SOURCE) });
+    await page.click('#interview-upload');
+    await page.waitForFunction(() => !interviewBusy && window.__db.interviews.length === 3 && window.__db.interviews[2].raw_text);
+    assert(await page.locator('#interview-new-documents').isVisible());
+    assert.match(await page.locator('#interview-new-documents').innerText(), /새 문서가 있습니다.*다시 분석하기/);
+    assert.deepEqual(await page.evaluate(() => window.__db.interviews[2].stages), ['profitability']);
+    assert(await page.locator('#interview-docs .interview-doc-check').evaluateAll(inputs => inputs.length === 3 && inputs.every(input => input.checked && !input.disabled)));
+    await page.evaluate(() => {
+      const ids = window.__db.interviews.map(row => row.id);
+      window.__db.analysisSuggestions = [
+        { key: 'customers', value: ['지역 소상공인', '병원 운영자'], reason: '새 수익 단계의 고객 유형', confidence: 'high', basis: 'stated', sources: [ids[0], ids[2]] },
+        { key: 'triggers', value: ['INTERVIEW_PRIVATE_TRIGGER 새 문의'], reason: '새 문서의 문의', confidence: 'high', basis: 'stated', sources: [ids[1], ids[2]] },
+        { key: 'synergies', value: ['새로운 협업 분야'], reason: '관리자가 전체 교체를 선택하는 검증', confidence: 'medium', basis: 'inferred', sources: [ids[2]] }
+      ];
+    });
+    await analyzeInterview(page);
+    assert.equal(await page.evaluate(() => window.__db.reviews.length), 2);
+    assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.action === 'function' && !item.readOnly).at(-1).value.interview_ids.length), 3);
+    assert(await page.locator('#interview-new-documents').isHidden());
+    for (const width of [400, 1440]) {
+      await page.setViewportSize({ width, height: 1000 });
+      const sizes = await page.evaluate(() => ({ width: innerWidth, html: document.documentElement.scrollWidth, body: document.body.scrollWidth }));
+      assert(sizes.html <= sizes.width && sizes.body <= sizes.width, `Integrated document/review layout must fit ${width}px: ${JSON.stringify(sizes)}`);
+    }
+    assert.equal(await page.locator('#interview-review [data-field="customers"] .interview-list-mode').inputValue(), 'append');
+    await page.locator('#interview-review [data-field="customers"] .interview-check').check();
+    await page.locator('#interview-review [data-field="triggers"] .interview-check').check();
+    await page.locator('#interview-review [data-field="synergies"] .interview-check').check();
+    await page.locator('#interview-review [data-field="synergies"] .interview-list-mode').selectOption('replace');
+    await saveInterviewReview(page);
+    const secondId = await page.evaluate(() => window.__db.reviews[1].id);
+    await reloadInterviewReview(page, secondId);
+    assert.equal(await page.locator('#interview-review [data-field="synergies"] .interview-list-mode').inputValue(), 'replace', 'List mode survives review persistence.');
+    await page.check('#interview-confirm');
+    await page.click('#interview-apply');
+    await page.waitForFunction(() => !interviewBusy && window.__db.reviews[1].status === 'applied');
+    const final = await page.evaluate(() => ({ customers: window.__db.members[0].customers, triggers: window.__db.details.find(row => row.member_id === window.__db.members[0].id).triggers, synergies: window.__db.members[0].synergies }));
+    for (const item of firstCustomers) assert(final.customers.includes(item), `Existing customer lost: ${item}`);
+    for (const item of firstTriggers) assert(final.triggers.includes(item), 'Previously applied private items must survive a new review.');
+    assert(final.customers.includes('병원 운영자'));
+    assert.equal(final.customers.filter(item => item === '지역 소상공인').length, 1);
+    assert(final.triggers.includes('INTERVIEW_PRIVATE_TRIGGER 새 문의'));
+    assert.deepEqual(final.synergies, ['새로운 협업 분야'], 'Explicit replace uses exactly the reviewed list.');
+    await assertPublicExportPrivate(page);
+    await context.close();
+  });
+  await check('Previously applied legacy documents remain editable and can be selected for a new integrated review', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true });
+    const id = await uploadInterview(page);
+    await page.evaluate(id => { window.__db.interviews.find(row => row.id === id).status = 'applied'; }, id);
+    await page.selectOption('#interview-member', seed[1].id);
+    await page.selectOption('#interview-member', seed[0].id);
+    const row = page.locator(`#interview-docs [data-document-id="${id}"]`);
+    assert(await row.locator('.interview-doc-check').isChecked());
+    assert(await row.locator('.interview-doc-check').isEnabled());
+    await row.locator('.interview-stage-check[value="visibility"]').check();
+    await row.locator('.interview-stage-save').click();
+    await page.waitForFunction(() => !interviewBusy && window.__db.interviews[0].stages.includes('visibility'));
+    await analyzeInterview(page);
+    assert.deepEqual(await page.evaluate(() => window.__db.reviews[0].source_interview_ids), [id]);
+    await context.close();
+  });
+  await check('Partial interview batch failures preserve successful originals and continue to the remaining files', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true });
+    await page.click('#t4');
+    await page.selectOption('#interview-member', seed[0].id);
+    await page.evaluate(() => { window.__db.failStorageNames = ['실패-신뢰단계.txt']; });
+    await page.setInputFiles('#interview-file', ['신상명세표.txt', '실패-신뢰단계.txt', '수익단계.txt'].map(name => ({ name, mimeType: 'text/plain', buffer: Buffer.from(INTERVIEW_SOURCE) })));
+    await page.click('#interview-upload');
+    await page.waitForFunction(() => !interviewBusy && /실패-신뢰단계/.test(document.getElementById('interview-message').textContent));
+    assert.deepEqual(await page.evaluate(() => window.__db.interviews.map(row => row.original_name)), ['신상명세표.txt', '수익단계.txt']);
+    assert.equal(await page.evaluate(() => Object.keys(window.__db.storageObjects).length), 2);
+    assert.equal(await page.locator('#interview-docs .interview-doc-check:checked').count(), 2);
+    assert.match(await page.locator('#interview-message').innerText(), /2개 문서를 보관.*실패-신뢰단계/);
+    assert.deepEqual(await page.evaluate(() => window.__db.members), seed);
+    await context.close();
+  });
+  await check('Late interview lists from another member cannot replace the current member documents or review', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true });
+    const first = await uploadInterview(page, seed[0].id);
+    await analyzeInterview(page);
+    const second = await uploadInterview(page, seed[1].id);
+    await analyzeInterview(page);
+    await page.evaluate(() => { window.__db.holdPrivateReads = true; });
+    await page.selectOption('#interview-member', seed[0].id);
+    await page.waitForFunction(() => window.__db.pendingPrivateReads.length >= 2);
+    await page.selectOption('#interview-member', seed[1].id);
+    await page.waitForFunction(() => window.__db.pendingPrivateReads.length >= 4);
+    await page.evaluate(() => window.__db.releasePrivateReads());
+    await page.waitForFunction(id => interviewReview?.member_id === id && interviewDocuments.length === 1, seed[1].id);
+    assert.deepEqual(await page.locator('#interview-docs .interview-doc-check').evaluateAll(inputs => inputs.map(input => input.value)), [second]);
+    assert(!await page.locator(`.interview-source-badge[data-source-id="${first}"]`).count());
+    assert.equal(await page.inputValue('#interview-member'), seed[1].id);
+    assert.equal(await page.inputValue('#interview-raw'), '', 'Changing member clears the previous private original.');
+    await context.close();
+  });
+  await check('An interview create response lost after commit never deletes the saved original', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true });
+    await page.click('#t4');
+    await page.selectOption('#interview-member', seed[0].id);
+    await page.evaluate(() => { window.__db.loseCreateResponse = true; });
+    await page.setInputFiles('#interview-file', { name: '신뢰단계.txt', mimeType: 'text/plain', buffer: Buffer.from(INTERVIEW_SOURCE) });
+    await page.click('#interview-upload');
+    await page.waitForFunction(() => !interviewBusy && document.getElementById('interview-message').classList.contains('error'));
+    assert.equal(await page.evaluate(() => window.__db.interviews.length), 1, 'A lost response may hide a successful commit.');
+    assert.equal(await page.evaluate(() => Object.keys(window.__db.storageObjects).length), 1, 'Original retention is required when creation outcome is uncertain.');
+    assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.action === 'storage-remove').length), 0);
+    assert.equal(await page.locator('#interview-docs .interview-doc-check').count(), 1);
+    await context.close();
+  });
+  await check('Cancelled or unfinished interview analyses never hide the latest usable review', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true });
+    await uploadInterview(page);
+    await analyzeInterview(page);
+    const validId = await page.evaluate(() => window.__db.reviews[0].id);
+    await page.evaluate(() => {
+      const review = window.__db.reviews[0];
+      for (const [index, status] of ['cancelled', 'analyzing'].entries()) window.__db.reviews.push({ ...structuredClone(review), id: crypto.randomUUID(), status, created_at: `2026-10-0${index + 2}T00:00:00.000Z`, extracted: {} });
+    });
+    await page.selectOption('#interview-member', seed[1].id);
+    await page.selectOption('#interview-member', seed[0].id);
+    await page.waitForFunction(id => interviewReview?.id === id, validId);
+    assert.equal(await page.locator('#interview-review-history option').count(), 1);
+    assert.equal(await page.inputValue('#interview-review-history'), validId);
+    assert((await page.locator('#interview-review .interview-check').count()) > 0);
+    await context.close();
+  });
+  await check('Losing access during a multi-file interview upload discards late storage completion and stops the batch', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true });
+    await page.click('#t4');
+    await page.selectOption('#interview-member', seed[0].id);
+    await page.setInputFiles('#interview-file', ['신상명세표.txt', '신뢰단계.txt'].map(name => ({ name, mimeType: 'text/plain', buffer: Buffer.from(INTERVIEW_SOURCE) })));
+    await page.evaluate(() => { window.__db.holdStorageWrites = true; });
+    await page.click('#interview-upload');
+    await page.waitForFunction(() => window.__db.pendingStorageWrites.length === 1);
+    await page.evaluate(() => window.__db.setSession(null));
+    await page.waitForFunction(() => document.getElementById('interview-panel').hidden);
+    await page.evaluate(async () => { window.__db.releaseStorageWrites(); await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); });
+    assert.equal(await page.evaluate(() => window.__db.interviews.length), 0);
+    assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.action === 'storage-upload').length), 1);
+    assert.equal(await page.inputValue('#interview-file'), '');
+    assert.equal(await page.inputValue('#interview-raw'), '');
+    assert.equal(await page.locator('#interview-docs .interview-doc-check').count(), 0);
+    await context.close();
+  });
+  await check('A realtime member change does not silently refresh an interview review baseline before apply', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true });
+    await uploadInterview(page);
+    await analyzeInterview(page);
+    const baseline = await page.evaluate(() => interviewBaseline);
+    const reviewId = await page.evaluate(() => interviewReview.id);
+    await page.locator('#interview-review [data-field="customers"] .interview-check').check();
+    await page.locator('#admin-note').click();
+    await page.evaluate(() => {
+      window.__db.members[0].customers = ['외부에서 추가한 고객'];
+      window.__db.members[0].updated_at = '2026-10-01T00:00:00.000Z';
+      window.__db.realtime();
+    });
+    await page.waitForFunction(() => M[0].c.includes('외부에서 추가한 고객'));
+    assert.equal(await page.evaluate(() => interviewBaseline), baseline);
+    await page.check('#interview-confirm');
+    await page.click('#interview-apply');
+    await page.waitForFunction(() => !interviewBusy && document.getElementById('interview-message').classList.contains('error'));
+    assert.deepEqual(await page.evaluate(() => window.__db.members[0].customers), ['외부에서 추가한 고객']);
+    assert(await page.locator('#interview-review [data-field="customers"] .interview-check').isChecked());
+    await reloadInterviewReview(page, reviewId);
+    assert.equal(await page.evaluate(() => interviewBaseline), '2026-10-01T00:00:00.000Z');
+    assert.match(await page.locator('#interview-review [data-field="customers"] .interview-current').innerText(), /외부에서 추가한 고객/);
+    await page.locator('#interview-review [data-field="customers"] .interview-check').check();
+    await page.check('#interview-confirm');
+    await page.click('#interview-apply');
+    await page.waitForFunction(() => !interviewBusy && window.__db.reviews[0].status === 'applied');
+    assert((await page.evaluate(() => window.__db.members[0].customers)).includes('외부에서 추가한 고객'));
     await context.close();
   });
   await check('Analysis errors preserve the original and show one actionable message without automatic retries', async () => {
@@ -1491,14 +1754,14 @@ try {
       await page.locator('#interview-review [data-field="triggers"] .interview-check').check();
       await page.check('#interview-confirm');
       await page.evaluate(failure => {
-        if (failure === 'server') { window.__db.failRpc = true; window.__db.failRpcName = 'apply_member_interview'; }
+        if (failure === 'server') { window.__db.failRpc = true; window.__db.failRpcName = 'apply_member_interview_review'; }
         else window.__db.members[0].updated_at = '2026-10-01T00:00:00.000Z';
       }, failure);
       await page.click('#interview-apply');
       await page.waitForFunction(() => document.getElementById('interview-message').classList.contains('error'));
       assert.deepEqual(await page.evaluate(() => window.__db.members[0].customers), seed[0].customers);
       assert.deepEqual(await page.evaluate(id => window.__db.details.find(row => row.member_id === id).triggers, seed[0].id), [`PRIVATE_TRIGGER_${seed[0].id}`]);
-      assert.notEqual(await page.evaluate(() => window.__db.interviews[0].status), 'applied');
+      assert.notEqual(await page.evaluate(() => window.__db.reviews[0].status), 'applied');
       await context.close();
     }
   });
@@ -1519,13 +1782,11 @@ try {
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     assert.equal(await row.locator('.interview-value').inputValue(), '직접 검토한 공개 고객 유형\n편집 중인 두 번째 유형');
     assert(await row.locator('.interview-check').isChecked());
-    assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.name === 'apply_member_interview').length), 0);
+    assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.name === 'apply_member_interview_review').length), 0);
     await page.click('#interview-save');
     await page.waitForFunction(() => /보관|저장/.test(document.getElementById('interview-message').textContent));
     assert.deepEqual(await page.evaluate(() => M[0].c), seed[0].customers, 'Saving a review draft must not publish it.');
-    await page.selectOption('#interview-history', await page.evaluate(() => window.__db.interviews[0].id));
-    await page.click('#interview-open');
-    await page.waitForFunction(() => /불러왔습니다/.test(document.getElementById('interview-message').textContent));
+    await reloadInterviewReview(page, await page.evaluate(() => window.__db.reviews[0].id));
     assert.equal(await row.locator('.interview-value').inputValue(), '직접 검토한 공개 고객 유형\n편집 중인 두 번째 유형');
     assert(await row.locator('.interview-check').isChecked());
     assert.equal(await unchecked.locator('.interview-value').inputValue(), '아직 선택하지 않은 직군 초안');
@@ -1545,17 +1806,17 @@ try {
     assert(await customers.isChecked()); assert(await referral.isChecked()); assert(await page.isChecked('#interview-real'));
     await customers.uncheck(); await referral.uncheck(); await page.uncheck('#interview-real'); await synergies.check();
     await saveInterviewReview(page);
-    const request = await page.evaluate(() => window.__db.log.filter(item => item.name === 'save_member_interview_draft').at(-1).value.draft_patch);
-    assert.equal(request.replace_review, true);
+    const request = await page.evaluate(() => window.__db.log.filter(item => item.name === 'save_member_interview_review').at(-1).value.draft_patch);
     assert.deepEqual(Object.keys(request.public_patch), ['synergies']); assert.deepEqual(request.private_patch, {});
     await reloadInterviewReview(page, id);
     assert(!await customers.isChecked()); assert(!await referral.isChecked()); assert(!await page.isChecked('#interview-real')); assert(await synergies.isChecked());
     await synergies.uncheck(); await saveInterviewReview(page); await reloadInterviewReview(page, id);
     assert(await page.locator('#interview-review .interview-check').evaluateAll(inputs => inputs.every(input => !input.checked)));
-    const saved = await page.evaluate(() => window.__db.interviews[0]);
-    assert.deepEqual(saved.public_patch, {}); assert.deepEqual(saved.private_patch, {}); assert.equal(saved.raw_text, INTERVIEW_SOURCE);
+    const saved = await page.evaluate(() => window.__db.reviews[0]);
+    assert.deepEqual(saved.public_patch, {}); assert.deepEqual(saved.private_patch, {});
+    assert.equal(await page.evaluate(() => window.__db.interviews[0].raw_text), INTERVIEW_SOURCE);
     assert.deepEqual(await page.evaluate(() => window.__db.members), seed);
-    assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.name === 'apply_member_interview').length), 0);
+    assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.name === 'apply_member_interview_review').length), 0);
     await context.close();
   });
   await check('Normalized identical fields show every matching member while similar candidates require explicit confirmation', async () => {
@@ -1746,7 +2007,7 @@ try {
       assert.equal(await page.inputValue('#interview-raw'), '');
       assert.equal(await page.inputValue('#interview-file'), '');
       assert(!/PRIVATE_|INTERVIEW_PRIVATE_/.test(await page.locator('#interview-review').innerHTML()));
-      assert.equal(await page.evaluate(() => window.__db.log.filter(row => row.name === 'apply_member_interview').length), 0);
+      assert.equal(await page.evaluate(() => window.__db.log.filter(row => row.name === 'apply_member_interview_review').length), 0);
       await assertPublicExportPrivate(page);
       await context.close();
     }
@@ -1754,9 +2015,8 @@ try {
   await check('Late private document reads cannot repopulate the page after logout', async () => {
     const { page, context } = await pageFor({ online: true, auth: true });
     const id = await uploadInterview(page);
-    await page.selectOption('#interview-history', id);
     await page.evaluate(() => { window.__db.holdPrivateReads = true; });
-    await page.click('#interview-open');
+    await page.locator(`[data-document-id="${id}"] .interview-document-open`).click();
     await page.waitForFunction(() => window.__db.pendingPrivateReads.length > 0);
     await page.evaluate(() => window.__db.setSession(null));
     await page.waitForFunction(() => document.getElementById('interview-panel').hidden);
@@ -1805,6 +2065,31 @@ try {
   });
   assert.deepEqual(failures, [], 'No browser runtime errors');
   console.log('All browser checks passed. No external authentication or data writes were performed.');
+  if (process.argv.includes('--interview-screenshots')) {
+    const directory = fileURLToPath(new URL('../diagnostics-output/interview-integration', import.meta.url));
+    await mkdir(directory, { recursive: true });
+    const { page, context } = await pageFor({ online: true, auth: true });
+    await page.click('#t4');
+    await page.selectOption('#interview-member', seed[0].id);
+    await page.setInputFiles('#interview-file', ['121미팅플래너_신상명세표_아는단계_검증용_20260929.txt', '121미팅플래너_신뢰단계_검증용_20260929.txt'].map(name => ({ name, mimeType: 'text/plain', buffer: Buffer.from(INTERVIEW_SOURCE) })));
+    await page.click('#interview-upload');
+    await page.waitForFunction(() => !interviewBusy && window.__db.interviews.length === 2);
+    await analyzeInterview(page);
+    await page.locator('#interview-review [data-field="customers"] .interview-check').check();
+    for (const width of [400, 1440]) {
+      await page.setViewportSize({ width, height: width === 400 ? 1100 : 1000 });
+      for (const theme of ['light', 'dark']) {
+        await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
+        for (const [label, selector] of [['documents', '#interview-docs'], ['review', '#interview-review']]) {
+          await page.locator(selector).evaluate(element => scrollTo(0, scrollY + element.getBoundingClientRect().top - document.querySelector('nav').getBoundingClientRect().height - 16));
+          const filename = `${width}-${theme}-${label}.png`;
+          await page.screenshot({ path: path.join(directory, filename), animations: 'disabled' });
+          console.log(`SCREENSHOT diagnostics-output/interview-integration/${filename}`);
+        }
+      }
+    }
+    await context.close();
+  }
   if (process.argv.includes('--screenshots')) {
     const directory = fileURLToPath(new URL('../diagnostics-output', import.meta.url));
     await mkdir(directory, { recursive: true });

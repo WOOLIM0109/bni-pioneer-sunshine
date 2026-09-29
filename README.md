@@ -44,22 +44,22 @@ Supabase `public.members`가 명단의 단일 원본입니다. 데이터는 `sor
 
 인터뷰 원본 파일·추출 원문·AI 제안·검토 기록은 **관리자만** 읽고 저장합니다. `private` 스키마와 비공개 Storage 버킷 `member-interviews`에 보관하며, 공개 Realtime·JSON 내보내기·오프라인 시드에는 포함하지 않습니다. 좋은 리퍼럴·리퍼럴 트리거·실제 고객사명은 `private.member_details`로 분리되어 관리자와 승인된 해당 멤버만 열람할 수 있습니다. 공개 `customers`에는 실제 고객사 실명 대신 고객 유형을 기록합니다.
 
-## 인터뷰 문서로 선샤인 업데이트하기
+## 멤버 단위 통합 분석으로 선샤인 업데이트하기
 
-1. 관리자 로그인 후 **멤버 관리 → 인터뷰로 선샤인 다듬기**에서 멤버의 이름·회사를 선택합니다. 문서의 이름만으로 자동 연결하지 않습니다.
-2. PDF, Word `.docx`, UTF-8 `.txt` 파일을 선택하고 **문서 올리기**를 누릅니다. 최대 10MiB, PDF 60쪽, 추출 원문 120,000자입니다. `.doc`·한글 문서는 먼저 PDF 또는 DOCX로 저장하세요. 암호가 걸린 문서는 암호를 제거한 사본이 필요합니다.
-3. **AI 분석하기**를 누릅니다. PDF는 페이지의 이미지와 텍스트를, Word·TXT는 추출한 텍스트를 OpenAI API로 전송합니다. 스캔 PDF도 분석할 수 있으나 이미지 속 글자와 표는 반드시 원문과 대조하세요. Word의 그림 속 글자가 중요하면 PDF로 변환해서 올리세요.
-4. 현재 내용, AI 제안, 문서 근거를 비교합니다. 핵심고객 유형·상생직군·파워팀 등을 직접 고치고 반영할 항목만 체크합니다. AI 제안은 처음에 모두 미선택이며 빈 항목 때문에 기존 정보가 지워지지 않습니다.
+1. 관리자 로그인 후 **멤버 관리 → 멤버 단위 통합 분석**에서 멤버의 이름·회사를 선택합니다. 문서의 이름만으로 자동 연결하지 않습니다.
+2. 같은 멤버의 PDF, Word `.docx`, UTF-8 `.txt` 파일을 여러 개 선택하고 **문서 올리기**를 누릅니다. 각 파일은 원본 보관함과 `member_interviews`에 따로 저장됩니다. 파일당 최대 10MiB, PDF 60쪽, 추출 원문 120,000자이며, 한 번에 20개까지 올릴 수 있습니다. `.doc`·한글 문서는 먼저 PDF 또는 DOCX로 저장하세요. 암호가 걸린 문서는 암호를 제거한 사본이 필요합니다.
+3. 파일명·본문으로 신상명세표(`profile`), 아는 단계(`visibility`), 신뢰 단계(`credibility`), 수익 단계(`profitability`)를 자동 추정합니다. 보관 문서 목록에서 여러 단계를 선택하고 **단계 저장**으로 수정할 수 있습니다. 문서는 처음에 전부 선택되며, 체크한 문서를 **통합 분석하기**로 함께 분석합니다. 합계 원문 240,000자, 원본 파일 40MiB까지입니다. PDF는 페이지의 이미지와 텍스트를, Word·TXT는 추출한 텍스트를 OpenAI API로 전송합니다. 스캔 PDF도 분석할 수 있으나 이미지 속 글자와 표는 반드시 원문과 대조하세요.
+4. 현재 내용, AI 제안, 근거 문서 배지를 비교합니다. 배지를 누르면 해당 원문을 열 수 있습니다. 신상·아는 단계는 전문분야와 고객·상생직군, 신뢰 단계는 실제 고객사·리퍼럴 근거, 수익 단계는 원하는 소개·협업·파워팀을 우선 참고하되 다른 단계의 명시적 근거도 사용합니다. 문서 간 충돌은 최근 문서 내용을 우선하고 주의사항에 남깁니다. 비슷한 목록 표현은 합칩니다. AI 제안은 처음에 모두 미선택이며, 목록 항목은 기본 **기존에 추가**로 반영합니다. 해당 행에서 **전체 교체**를 명시한 경우에만 기존 목록을 교체합니다.
 5. 대상 멤버와 공개 범위를 확인한 뒤 **선택한 N개 항목 반영**을 누릅니다. 성공 응답 뒤 선샤인·파워팀·챕터 지도가 함께 갱신됩니다. **검토 내용 보관**은 초안만 저장하며 명단은 바꾸지 않습니다.
 
-보관 문서에서 원본과 이전 검토안을 다시 열 수 있습니다. 이미 반영한 문서는 중복 반영하지 못하므로 수정 자료는 새 문서로 올립니다. 검토 중 다른 관리자가 멤버 정보를 바꾸면 저장을 막고 다시 비교하도록 안내합니다. 원문이 연결된 멤버는 보관 기록을 보호하기 위해 삭제가 제한됩니다.
+통합 분석 결과는 `private.member_interview_reviews`에 멤버별 검토 기록으로 보관되며 각 제안의 `sources`에 근거 문서 ID가 저장됩니다. 문서 상태는 **미분석 / 분석에 포함됨 / 반영에 사용됨**으로 표시합니다. 이미 반영한 문서도 언제든 새 통합 분석에 포함할 수 있습니다. 새 문서를 추가하면 **새 문서가 있습니다 · 다시 분석하기** 안내가 나타납니다. 기존 검토 기록은 유지되며 새 분석은 새 검토안을 만듭니다. 반영이 끝난 검토안의 재반영은 막습니다. 검토 중 다른 관리자가 멤버 정보나 근거 문서를 바꾸면 반영을 막고 다시 비교·분석하도록 안내합니다. 원문이 연결된 멤버는 보관 기록을 보호하기 위해 삭제가 제한됩니다.
 
 ### AI 서버 연결 — 최초 한 번
 
-1. 기존 역할 설정 후 [`supabase/interviews.sql`](supabase/interviews.sql)을 적용합니다. 기존 공개 리퍼럴·트리거는 비공개 테이블로 옮기고 공개 복사본을 비웁니다. 재실행은 가능하지만 공개·비공개 값이 충돌하면 중단합니다.
+1. 기존 역할 설정 후 [`supabase/interviews.sql`](supabase/interviews.sql), [`supabase/interview-reviews.sql`](supabase/interview-reviews.sql) 순으로 적용합니다. 이미 인터뷰 기능을 사용 중인 서버는 새 `interview-reviews.sql`만 적용하면 됩니다. 기존 공개 리퍼럴·트리거는 비공개 테이블로 옮기고 공개 복사본을 비웁니다. 재실행은 가능하지만 공개·비공개 값이 충돌하면 중단합니다. 기본 설정을 재실행할 때도 항상 `interview-reviews.sql`을 마지막에 실행해야 통합 분석 RPC가 유지됩니다.
 2. [`supabase/functions/analyze-interview/index.ts`](supabase/functions/analyze-interview/index.ts)를 `analyze-interview` Edge Function으로 배포하고 JWT 검증을 켭니다. 함수는 Auth의 실제 사용자와 DB의 관리자 역할을 다시 확인합니다. 데이터베이스 관리자 키는 사용하지 않습니다.
 3. Supabase **Edge Functions → Secrets**에 `OPENAI_API_KEY`를 등록합니다. API 키는 채팅, HTML, 저장소에 넣지 않습니다. 기본 `SUPABASE_URL`·`SUPABASE_ANON_KEY`는 Edge Function 서버 환경에서 읽습니다. 개발용 Origin이 필요하면 `ALLOWED_ORIGINS`에 허용할 출처를 쉼표로 명시합니다. 기본값은 `https://woolim0109.github.io,https://sunshine.bni-pioneer.com`이며, `ALLOWED_ORIGINS`를 지정하면 기본 목록을 대체하므로 운영에 필요한 출처를 모두 포함하세요.
-4. OpenAI API 프로젝트의 결제·사용 한도를 확인하고 페이지를 새로고침합니다. ChatGPT 구독과 API 사용료는 별도입니다. 현재 분석 모델은 `gpt-5.4-mini-2026-03-17`이며 최대 출력 6,000토큰, 문서별 중복 분석 방지와 100초 요청 제한을 적용합니다. API 응답 보관 옵션은 `store:false`입니다. 공급자의 별도 데이터 처리 정책은 [OpenAI API 데이터 안내](https://developers.openai.com/api/docs/guides/your-data)를 확인하세요.
+4. OpenAI API 프로젝트의 결제·사용 한도를 확인하고 페이지를 새로고침합니다. ChatGPT 구독과 API 사용료는 별도입니다. 현재 분석 모델은 `gpt-5.4-mini-2026-03-17`이며 최대 출력 6,000토큰, 멤버별 중복 분석 방지와 100초 요청 제한을 적용합니다. API 응답 보관 옵션은 `store:false`입니다. 공급자의 별도 데이터 처리 정책은 [OpenAI API 데이터 안내](https://developers.openai.com/api/docs/guides/your-data)를 확인하세요.
 
 프런트엔드는 계속 `index.html` 한 파일입니다. 문서 판독기는 필요할 때만 jsDelivr의 고정 버전 PDF.js `6.3.289`와 Mammoth `1.12.3`을 불러옵니다. 파일 원문을 브라우저 저장소에 보관하지 않으며, 계정 전환·권한 상실 때 비공개 메모리와 화면을 지웁니다.
 
@@ -154,6 +154,10 @@ psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/roles.sql
 ```
 
 [`tests/interviews.sql`](tests/interviews.sql)은 원문 보관·검토 선택·공개/비공개 반영을, [`tests/connections.sql`](tests/connections.sql)은 연결 읽기·관리자 확정·동시 수정 충돌·해제를 검증합니다. 두 검사는 각각 해당 설정 SQL까지 적용된 별도 검증 DB에서 실행하세요.
+
+[`tests/interview-reviews.sql`](tests/interview-reviews.sql)은 `interview-reviews.sql`까지 적용한 격리 DB에서 통합 분석을 검증합니다. 두 문서 반영 후 세 번째 문서로 재분석해 목록이 보존되는지, 명시적 전체 교체, 근거 문서 검증, 기존 반영 문서 재사용, 단계 수정, 동시 수정·분석 충돌과 관리자 권한을 확인합니다. 기존 `tests/interviews.sql`은 통합 설정 이전의 단일 문서 기능 회귀용입니다.
+
+`node --experimental-strip-types tests/interview-edge.mjs`는 실제 API 호출 없이 다중 문서 요청·근거 ID·AI 출력·오류 처리를 검사합니다. `node tests/interview-extraction.mjs`는 PDF/DOCX/TXT 판독과 단계 추정을 확인합니다. 로컬 `121자료집`의 네 PDF도 단계 추정 검증에 사용하며, 이 비공개 원본은 저장소나 공개 배포물에 넣지 않습니다.
 
 ## 비공개 데이터 유지
 
