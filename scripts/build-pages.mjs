@@ -145,8 +145,10 @@ export async function buildSite({ baseUrl } = {}) {
   }
   await copyPublicAssets(path.join(root, 'assets'), path.join(output, 'assets'));
   if (routes.some(route => route.slug === 'collab-teams')) {
-    await mkdir(path.join(output, 'power-teams'), { recursive: true });
-    await writeFile(path.join(output, 'power-teams', 'index.html'), renderLegacyTeamRedirect(base.href), 'utf8');
+    for (const slug of ['power-teams', 'chapter-map']) {
+      await mkdir(path.join(output, slug), { recursive: true });
+      await writeFile(path.join(output, slug, 'index.html'), renderLegacyTeamRedirect(base.href), 'utf8');
+    }
   }
   await writeFile(path.join(output, '.nojekyll'), '', 'utf8');
   await writeFile(path.join(output, '404.html'), notFoundPage(base, routes), 'utf8');

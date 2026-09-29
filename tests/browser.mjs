@@ -378,7 +378,10 @@ function makeMock(initial, options) {
 
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const routes = routesFromHtml(html);
-assert.deepEqual(routes.map(route => route.slug), ['sunshine', 'collab-teams', 'chapter-map', 'members']);
+assert.deepEqual(routes.map(route => route.slug), ['sunshine', 'collab-teams', 'members']);
+const sunshineRoute = routes.find(route => route.slug === 'sunshine');
+const collabRoute = routes.find(route => route.slug === 'collab-teams');
+const membersRoute = routes.find(route => route.slug === 'members');
 assert(!html.includes('service_role'), 'The HTML must not mention privileged credentials.');
 assert(!html.includes('pioneer-sunshine-roster-v1') && !html.includes('pioneer-sunshine-v2'), 'Roster localStorage must be removed.');
 assert(html.includes('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js'), 'Supabase CDN must be version-pinned.');
@@ -409,7 +412,7 @@ async function pageFor({ online = false, auth = false, records = seed, links = [
     const address = new URL(url);
     if (address.origin === 'http://localhost:43127' && route.request().resourceType() === 'document') {
       documentRequests.push(address.pathname);
-      if (address.pathname === `${basePath}power-teams/` || address.pathname === `${basePath}power-teams/index.html`) return route.fulfill({status:200,contentType:'text/html',body:renderLegacyTeamRedirect(baseUrl)});
+      if (['power-teams/', 'power-teams/index.html', 'chapter-map/', 'chapter-map/index.html'].some(alias => address.pathname === `${basePath}${alias}`)) return route.fulfill({status:200,contentType:'text/html',body:renderLegacyTeamRedirect(baseUrl)});
       const routePage = routes.find(item => address.pathname === `${basePath}${item.slug}/` || address.pathname === `${basePath}${item.slug}/index.html`);
       const isHome = address.pathname === basePath || address.pathname === `${basePath}index.html`;
       return route.fulfill({ status: routePage || isHome ? 200 : 404, contentType: 'text/html', body: routePage || isHome ? renderPage(document, routePage || null, { baseUrl }) : '<h1>Not found</h1>' });
@@ -612,12 +615,24 @@ try {
       const card = page.locator(`#teamgrid .tsun[data-team-id="${team.id}"]`);
       assert.deepEqual(await card.locator('.collab-team-members strong').allTextContents(), [`★ ${team.leader} · 팀장`, ...team.names.filter(name => name !== team.leader)], `${team.name}: leader first; all remaining members keep their original order.`);
       assert.equal(await card.locator('.meta').innerText(), `멤버 ${team.names.length}명 · 초대 후보 ${team.inviteCount}개 직종`);
+      assert.deepEqual(await card.locator('.ptitle').allTextContents(), ['현재 멤버', '공유 핵심고객', '이 팀이 초대하면 좋은 비지터 직종']);
+      assert.deepEqual(await card.locator(':scope > .collab-team-members, :scope > .chips, :scope > .dots').evaluateAll(elements => elements.map(element => element.className)), ['collab-team-members', 'chips', 'dots']);
     }
-    const operations = await page.locator('#collab-operations').innerText();
-    for (const text of ['의장(심학봉)', '부의장(김경태)', '121마스터(송승훈)', '성장코디(이채홍)', 'ST(정상현)']) assert(operations.includes(text), text);
+    assert.equal(await page.locator('#collab-operations').count(), 0);
+    assert(!(await page.locator('#v2').innerText()).includes('운영진 안내'));
+    assert.equal(await page.locator('#t3, #v3').count(), 0, 'The retired chapter map must not remain in navigation or page markup.');
+    await page.click('#t1');
+    const songRow = page.locator('#mlist .mrow').filter({ has: page.getByText('송승훈', { exact: true }) });
+    assert.equal(await songRow.locator('.role-badge').innerText(), '121마스터');
+    await songRow.click();assert.equal(await page.locator('#wantbox .role-badge').innerText(), '121마스터');
     await page.evaluate(() => { const old = window.__db.members.find(member => member.name === '송승훈'), replacement = window.__db.members.find(member => member.name === '이은성'); old.chapter_role = null;replacement.chapter_role = '121마스터';window.__db.realtime(); });
-    await page.waitForFunction(() => document.getElementById('collab-operations').textContent.includes('121마스터(이은성)'));
-    assert(!(await page.locator('#collab-operations').innerText()).includes('121마스터(송승훈)'));
+    await page.waitForFunction(() => M.find(member => member.n === '이은성').role === '121마스터');
+    assert.equal(await songRow.locator('.role-badge').count(), 0);
+    assert.equal(await page.locator('#wantbox .role-badge').count(), 0);
+    const replacementRow = page.locator('#mlist .mrow').filter({ has: page.getByText('이은성', { exact: true }) });
+    assert.equal(await replacementRow.locator('.role-badge').innerText(), '121마스터');
+    await replacementRow.click();assert.equal(await page.locator('#wantbox .role-badge').innerText(), '121마스터');
+    await page.click('#t2');
     await page.evaluate(() => { window.__db.collabTeams[0].leader_member_id = null;window.__db.realtime(); });
     await page.waitForFunction(id => !document.querySelector(`#teamgrid .tsun[data-team-id="${id}"] .collab-team-members`).textContent.includes('★'), snapshot.teams[0].id);
     assert.deepEqual(await page.locator(`#teamgrid .tsun[data-team-id="${snapshot.teams[0].id}"] .collab-team-members strong`).allTextContents(), snapshot.teams[0].names, 'A team without a leader keeps its original member order.');
@@ -645,6 +660,10 @@ try {
       const expected = await page.evaluate(role => role === 'admin' ? 5 : role === 'member' ? window.__db.collabMemberships.filter(link => link.member_id === window.__db.accounts[0].member_id).length : 0, role);
       if (expected) await page.waitForFunction(count => collabChatLinks.size === count, expected);
       await page.click('#t2');assert.equal(await page.locator('.collab-chat').count(), expected, role);
+      for (const card of await page.locator('#teamgrid .tsun').all()) {
+        const sections = await card.locator(':scope > .collab-team-members, :scope > .chips, :scope > .dots, :scope > .collab-chat').evaluateAll(elements => elements.map(element => element.matches('.collab-chat') ? 'chat' : element.className));
+        assert.deepEqual(sections, ['collab-team-members', 'chips', 'dots', ...(await card.locator('.collab-chat').count() ? ['chat'] : [])], `${role}: members, shared customers, visitor candidates, then the authorized team chat.`);
+      }
       const visibleLinks = await page.locator('.collab-chat').evaluateAll(links => links.map(link => ({ href: link.href, rel: link.rel })));
       assert(visibleLinks.every(link => link.href.startsWith('https://open.kakao.com/') && link.rel.includes('noopener')));
       if (!expected) assert(!(await page.content()).includes('PRIVATE_CHAT_'), `${role} must not receive private links in the DOM.`);
@@ -664,11 +683,13 @@ try {
     assert(!await page.locator('#collab-read-warning').isVisible());
     await context.close();
   });
-  await check('Collab old power-team bookmarks redirect to the new path while preserving query and fragment', async () => {
+  await check('Collab old power-team and chapter-map bookmarks redirect while preserving query and fragment', async () => {
     for (const basePath of ['/', '/bni-pioneer-sunshine/']) {
-      const { page, context, baseUrl } = await pageFor({ online: true, basePath, routePath: 'power-teams/', query: '?from=bookmark', hash: '#team' });
-      await page.waitForURL(new URL('collab-teams/?from=bookmark#team', baseUrl).href);await assertRoute(page, routes[1], baseUrl);
-      await context.close();
+      for (const routePath of ['power-teams/', 'power-teams/index.html', 'chapter-map/', 'chapter-map/index.html']) {
+        const { page, context, baseUrl } = await pageFor({ online: true, basePath, routePath, query: '?from=bookmark', hash: '#team' });
+        await page.waitForURL(new URL('collab-teams/?from=bookmark#team', baseUrl).href);await assertRoute(page, collabRoute, baseUrl);
+        await context.close();
+      }
     }
   });
   await check('Collab administrator can add, rename, reorder, assign multiple memberships and remove a populated team atomically', async () => {
@@ -787,20 +808,20 @@ try {
       await page.evaluate(() => { window.__routeDb = window.__db; window.__routeMembers = JSON.stringify(M); window.__routeSession = session; });
       await page.click('#t4');
       await page.fill('#io', 'UNSAVED_ROUTE_DRAFT');
-      const visitOrder = [routes[3], routes[1], routes[2], routes[0]];
+      const visitOrder = [membersRoute, collabRoute, sunshineRoute];
       for (const route of visitOrder) {
         await page.click(`#t${route.view.slice(1)}`);
         assert.equal(page.url(), new URL(`${route.slug}/`, baseUrl).href);
         await assertRoute(page, route, baseUrl);
       }
-      for (const route of [routes[2], routes[1], routes[3], null]) {
+      for (const route of [collabRoute, membersRoute, null]) {
         await page.goBack();
         await assertRoute(page, route, baseUrl);
         assert.equal(page.url(), new URL(route ? `${route.slug}/` : '', baseUrl).href);
       }
       assert.equal(await page.inputValue('#q'), seed[0].name);
       await page.goForward();
-      await assertRoute(page, routes[3], baseUrl);
+      await assertRoute(page, membersRoute, baseUrl);
       assert.equal(await page.inputValue('#io'), 'UNSAVED_ROUTE_DRAFT');
       assert.deepEqual(await page.evaluate(() => ({ database: window.__routeDb === window.__db, members: window.__routeMembers === JSON.stringify(M), session: window.__routeSession === session })), { database: true, members: true, session: true });
       assert.deepEqual(documentRequests, [basePath], 'Switching pages must not reload the document or authentication client.');
@@ -823,11 +844,11 @@ try {
     await page.click('#t2', { modifiers: ['Control'] });
     const newPage = await opened;
     await newPage.waitForLoadState('domcontentloaded');
-    await assertRoute(newPage, routes[1], baseUrl);
+    await assertRoute(newPage, collabRoute, baseUrl);
     assert.equal(page.url(), baseUrl);
     assert.equal(newPage.url(), new URL('collab-teams/', baseUrl).href);
     await newPage.close();
-    for (const [tab, key, route] of [['#t3', 'Enter', routes[2]], ['#t4', 'Space', routes[3]]]) {
+    for (const [tab, key, route] of [['#t2', 'Enter', collabRoute], ['#t4', 'Space', membersRoute]]) {
       await page.focus(tab);
       await page.keyboard.press(key);
       await assertRoute(page, route, baseUrl);
@@ -868,7 +889,7 @@ try {
     assert.equal(await recovered.page.evaluate(() => new URL(window.__db.initialUrl).hash), recoveryHash);
     assert.equal(new URL(recovered.page.url()).search, '?from=email');
     await recovered.page.waitForFunction(() => document.getElementById('login-dialog').open && document.getElementById('login-dialog').dataset.mode === 'password');
-    await assertRoute(recovered.page, routes[3], recovered.baseUrl);
+    await assertRoute(recovered.page, membersRoute, recovered.baseUrl);
     await recovered.context.close();
     const errorHash = '#error=access_denied&error_code=otp_expired&error_description=Email+link+has+expired';
     const expired = await pageFor({ online: true, basePath: '/bni-pioneer-sunshine/', routePath: 'members/', query: '?from=email', hash: errorHash });
@@ -877,7 +898,7 @@ try {
     assert.match(await expired.page.locator('#login-message').innerText(), /만료/);
     assert.equal(new URL(expired.page.url()).pathname, '/bni-pioneer-sunshine/members/');
     assert.equal(new URL(expired.page.url()).search, '?from=email');
-    await assertRoute(expired.page, routes[3], expired.baseUrl);
+    await assertRoute(expired.page, membersRoute, expired.baseUrl);
     await expired.context.close();
   });
   await check('Anonymous online readers see persisted members and cannot mutate', async () => {
@@ -1678,8 +1699,9 @@ try {
     assert.equal(await page.evaluate(() => M[0].g), undefined, 'Legacy team values must not be used for current memberships.');
     assert.deepEqual(await page.evaluate(() => M[0].c), ['constructor', '__proto__', 'toString']);
     assert(!/오프라인/.test(await page.locator('#connection-badge').innerText()));
-    await page.click('#t3');
-    assert.match(await page.locator('#custtable').innerText(), /constructor/);
+    await page.click('#t2');
+    const sharedCustomers = await page.locator('#teamgrid .chips .chip').allTextContents();
+    for (const customer of ['constructor', '__proto__', 'toString']) assert(sharedCustomers.some(text => text === customer || text.startsWith(customer + ' ')), `${customer} remains a literal shared customer label.`);
     await context.close();
   });
   await check('Shared referrals reach approved members while private details and public exports stay permission-scoped', async () => {
@@ -2280,7 +2302,7 @@ try {
     await page.waitForFunction(() => !busy && connectedMembers(M[0], M[0].s[0]).length === 1);
     assert.deepEqual(await page.evaluate(() => connectedMembers(M[0], M[0].s[0]).map(member => member.id)), [records[1].id]);
     assert.equal(await page.evaluate(() => Object.values(teams()).find(team=>team.members.some(member=>member.id===M[0].id)).gaps['홈페이지 제작'] ?? 0), 0);
-    assert(!await page.evaluate(() => eureka().some(item => item.f === '홈페이지 제작')));
+    assert(!(await page.locator('#teamgrid .dots .dot').allTextContents()).some(text => text.startsWith('홈페이지 제작 ')), 'Confirmed connections are removed from the team visitor candidates.');
     const saved = await page.evaluate(() => window.__db.log.find(item => item.name === 'set_member_synergy_link').value);
     assert.deepEqual(saved, { source_member_id: records[0].id, synergy: '홈페이지 제작', target_member_id: records[1].id, expected_member_updated_at: records[0].updated_at, expected_link_updated_at: null });
     assert.deepEqual(await page.evaluate(() => M[0].s), records[0].synergies);
@@ -2509,7 +2531,7 @@ try {
     const { page, context } = await pageFor({ online: true, auth: true });
     for (const theme of ['light', 'dark']) {
       await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
-      for (const tab of ['#t1', '#t2', '#t3', '#t4']) {
+      for (const tab of routes.map(route => `#t${route.view.slice(1)}`)) {
         await page.click(tab);
         const sizes = await page.evaluate(() => ({ width: innerWidth, html: document.documentElement.scrollWidth, body: document.body.scrollWidth }));
         assert(sizes.html <= sizes.width && sizes.body <= sizes.width, `${theme} ${tab}: ${JSON.stringify(sizes)}`);
@@ -2613,7 +2635,7 @@ try {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
       for (const theme of ['light', 'dark']) {
         await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
-        for (const view of ['v1', 'v2', 'v3', 'v4']) {
+        for (const view of routes.map(route => route.view)) {
           await page.click(`#t${view.slice(1)}`);
           await page.evaluate(() => scrollTo(0, 0));
           const name = `browser-${viewport.label}-${theme}-${view}.png`;

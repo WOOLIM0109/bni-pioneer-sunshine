@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { renderPage, routesFromHtml, renderLegacyTeamRedirect } from '../scripts/build-pages.mjs';
+import { buildSite, renderPage, routesFromHtml, renderLegacyTeamRedirect } from '../scripts/build-pages.mjs';
 import vm from 'node:vm';
 
 const source = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const routes = routesFromHtml(source);
-assert.deepEqual(routes.map(route => route.slug), ['sunshine', 'collab-teams', 'chapter-map', 'members']);
+assert.deepEqual(routes.map(route => route.slug), ['sunshine', 'collab-teams', 'members']);
 const getAttribute = (tag, name) => tag.match(new RegExp(`\\s${name}="([^"]*)"`))?.[1];
 const meta = (html, name) => [...html.matchAll(/<meta\b[^>]*>/g)].map(match => match[0]).find(tag => getAttribute(tag, 'name') === name || getAttribute(tag, 'property') === name);
 
@@ -18,6 +18,8 @@ for (const baseUrl of ['https://woolim0109.github.io/bni-pioneer-sunshine/', 'ht
   assert(redirect.includes('noindex'));
   for (const route of [null, ...routes]) {
     const html = renderPage(source, route, { baseUrl });
+    assert.doesNotMatch(html, /(?:id|data-v|aria-controls)="[vt]3"/);
+    assert.doesNotMatch(html, /챕터(?: 전체)? 지도|renderChapter|collab-operations/);
     const expectedUrl = new URL(route ? `${route.slug}/` : '', baseUrl).href;
     assert.equal(getAttribute(html.match(/<link\b[^>]*rel="canonical"[^>]*>/)[0], 'href'), expectedUrl);
     assert.equal(getAttribute(meta(html, 'og:url'), 'content'), expectedUrl);
@@ -51,7 +53,7 @@ assert.throws(() => routesFromHtml(source.replace('// PAGE_ROUTES_START', '// MI
 assert.throws(() => routesFromHtml(replaceRoutes([...routes, routes[0]])), /must be unique/);
 assert.throws(() => routesFromHtml(replaceRoutes([{ ...routes[0], slug: '../private' }])), /safe slug/);
 assert.throws(() => renderPage(source.replace('data-v="v4"', 'data-v="missing"'), routes[0]), /declared route/);
-assert.throws(() => renderPage(source.replace('<section id="v3"', '<section id="missing"'), routes[0]), /v3 section/);
+assert.throws(() => renderPage(source.replace('<section id="v2"', '<section id="missing"'), routes[0]), /v2 section/);
 assert.throws(() => renderPage(source, routes[0], { baseUrl: 'https://example.test/?token=secret' }), /base URL/);
 assert.throws(() => renderPage(source, { ...routes[0], slug: 'missing' }), /undeclared route/);
 
@@ -59,4 +61,12 @@ const escapedRoutes = routes.map((route, index) => index ? route : { ...route, t
 const escapedHtml = renderPage(replaceRoutes(escapedRoutes), escapedRoutes[0]);
 assert.ok(escapedHtml.includes('<title>고객 &amp; &quot;성장&quot; &lt;모임&gt; | 파이오니아 선샤인</title>'));
 assert.equal(getAttribute(meta(escapedHtml, 'og:description'), 'content'), 'A &amp; B의 &quot;공유&quot; &lt;페이지&gt;');
-console.log(`Page build checks passed: ${routes.length} routes, home, metadata, native links, base paths, and invalid source rejection.`);
+const built = await buildSite();
+assert.equal(built.pages, 4, 'Only home and the three remaining screens are built as application pages.');
+for (const slug of ['power-teams', 'chapter-map']) {
+  const redirect = await readFile(`${built.output}/${slug}/index.html`, 'utf8');
+  assert.equal(redirect, renderLegacyTeamRedirect(built.baseUrl), `${slug} is emitted as a redirect, not an application page.`);
+}
+const notFound = await readFile(`${built.output}/404.html`, 'utf8');
+assert.doesNotMatch(notFound, /chapter-map|챕터 전체 지도/);
+console.log(`Page build checks passed: ${routes.length} routes, home, both legacy redirects, metadata, native links, base paths, and invalid source rejection.`);
