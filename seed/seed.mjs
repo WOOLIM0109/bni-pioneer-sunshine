@@ -8,7 +8,7 @@ if (args.some(arg => !['--dry-run', '--help'].includes(arg))) {
   console.error('알 수 없는 옵션입니다. node seed/seed.mjs [--dry-run] 형식으로 실행하세요.');
   process.exitCode = 1;
 } else if (args.includes('--help')) {
-  console.log('사용법: node seed/seed.mjs [--dry-run]\n실제 주입에는 SUPABASE_URL과 SUPABASE_SERVICE_ROLE_KEY 환경변수가 필요합니다.\n--dry-run은 연결 없이 HTML 시드 31명과 필드 대응을 확인합니다.');
+  console.log('사용법: node seed/seed.mjs [--dry-run]\n실제 주입에는 SUPABASE_URL과 SUPABASE_SERVICE_ROLE_KEY 환경변수가 필요합니다.\n--dry-run은 연결 없이 HTML의 현재 멤버 시드와 필드 대응을 확인합니다. 협업팀 배정은 별도 SQL로 관리합니다.');
 } else {
   try {
     await main(args.includes('--dry-run'));
@@ -29,8 +29,8 @@ async function main(dryRun) {
   }
   // This intentionally evaluates only the checked-in array, never remote input.
   const members = new Script(`(${declaration[1]})`).runInNewContext(Object.create(null), { timeout: 1000 });
-  if (!Array.isArray(members) || members.length !== 31) {
-    throw new Error(`최초 시드는 31명이어야 합니다. 현재 ${members?.length ?? '알 수 없는 수'}명입니다. 원본 배열을 확인하세요.`);
+  if (!Array.isArray(members) || !members.length) {
+    throw new Error('최초 시드는 한 명 이상의 멤버 배열이어야 합니다. 원본 배열을 확인하세요.');
   }
   const seenNames = new Set();
   const rows = members.map((member, index) => {
@@ -62,19 +62,17 @@ async function main(dryRun) {
       name,
       company: requiredText('co'),
       field: requiredText('f'),
-      team: requiredText('g') || '미정',
+      chapter_role: optionalText('role').trim() || null,
       customers: textArray('c'),
       synergies: textArray('s'),
       wants: optionalText('w'),
-      good_referral: optionalText('v'),
-      triggers: textArray('tg'),
       is_new: flag('nw'),
       is_real: flag('real'),
       sort_order: index,
     };
   });
   if (dryRun) {
-    console.log(`검증 완료: ${rows.length}명, sort_order 0–${rows.length - 1}, 필드 12개. 서버 연결과 데이터 변경은 하지 않았습니다.`);
+    console.log(`검증 완료: ${rows.length}명, sort_order 0–${rows.length - 1}, 필드 ${Object.keys(rows[0]).length}개. 협업팀 배정과 멤버 공유 리퍼럴은 별도 관리합니다. 서버 연결과 데이터 변경은 하지 않았습니다.`);
     return;
   }
 

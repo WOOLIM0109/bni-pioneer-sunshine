@@ -15,7 +15,7 @@ function setup(options={}){
     if(parsed.pathname==='/auth/v1/user')return response(options.unauthorized?{}:{id:userId,email:'admin@example.test',email_confirmed_at:'2026-09-21T00:00:00Z',is_anonymous:false},options.unauthorized?401:200);
     if(parsed.pathname==='/rest/v1/member_accounts')return response([{role:options.role||'admin'}]);
     if(parsed.pathname==='/rest/v1/rpc/begin_member_interview_review_analysis')return options.beginError?response(options.beginError,400):options.busy?response({message:'analysis_in_progress'},409):response({lease_id:leaseId,expires_at:'2026-09-21T00:03:00Z',review,documents});
-    if(parsed.pathname==='/rest/v1/members')return response([{id:memberId,name:'홍길동',company:'길동상사',field:'제조',team:'기업',customers:options.currentCustomers||[],synergies:[]}]);
+    if(parsed.pathname==='/rest/v1/members')return response([{id:memberId,name:'홍길동',company:'길동상사',field:'제조',team:'RETIRED-TEAM-SENTINEL',chapter_role:'OPERATIONS-ROLE-SENTINEL',customers:options.currentCustomers||[],synergies:[]}]);
     if(parsed.pathname.startsWith('/storage/v1/object/authenticated/'))return new Response(options.pdf||'%PDF-1.7\nfixture');
     if(parsed.pathname==='/v1/responses'){
       if(options.networkFailure)throw new Error('private-upstream-error');
@@ -42,6 +42,11 @@ await test('Custom domain and existing Pages origin allow preflight without auth
 await test('Custom-domain configuration GET authenticates an admin without invoking AI',async()=>{
   const origin='https://sunshine.bni-pioneer.com',s=setup(),r=await s.call('GET',undefined,origin);assert.equal(r.status,200);assert.equal(r.headers.get('Access-Control-Allow-Origin'),origin);assert.deepEqual(await r.json(),{configured:true});assert.deepEqual(s.log.map(x=>x.path),['/auth/v1/user','/rest/v1/member_accounts']);
   const denied=setup({role:'member'});assert.equal((await denied.call('GET',undefined,origin)).status,403);assert.equal(denied.log.some(x=>x.path==='/v1/responses'),false);
+});
+await test('Ninth-term client header passes browser CORS preflight without Auth or model calls',async()=>{
+  const calls=[],handler=createHandler({env:key=>({SUPABASE_URL:'https://example.supabase.co',SUPABASE_ANON_KEY:'test-key'}[key]),fetch:async(...args)=>{calls.push(args);throw Error('Preflight must not make a network request.');}});
+  const r=await handler(new Request('https://example.supabase.co/functions/v1/analyze-interview',{method:'OPTIONS',headers:{Origin:'https://woolim0109.github.io','Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'authorization,apikey,content-type,x-client-info,x-sunshine-client'}}));
+  assert.equal(r.status,204);assert(r.headers.get('Access-Control-Allow-Headers').split(',').map(value=>value.trim().toLowerCase()).includes('x-sunshine-client'));assert.equal(calls.length,0);
 });
 await test('Custom-domain lookalikes and insecure origins fail before any external call',async()=>{
   for(const origin of ['https://sunshine.bni-pioneer.com.attacker.example','https://sunshine-bni-pioneer.com','https://attacker.sunshine.bni-pioneer.com','http://sunshine.bni-pioneer.com'])for(const method of ['OPTIONS','GET']){const s=setup(),r=await s.call(method,undefined,origin);assert.equal(r.status,403);assert.equal(r.headers.get('Access-Control-Allow-Origin'),null);assert.equal(s.log.length,0);}
@@ -77,22 +82,43 @@ await test('Incomplete or invalid model output never overwrites draft',async()=>
 await test('Stale save keeps original and releases lease',async()=>{const s=setup({staleFinish:true});assert.equal((await s.call()).status,409);assert(s.log.some(x=>x.path.endsWith('/cancel_member_interview_review_analysis')));});
 await test('Upstream secrets and errors are not returned',async()=>{const s=setup({networkFailure:true}),r=await s.call();assert.equal(r.status,502);assert(!(await r.text()).includes('private'));assert(s.log.some(x=>x.path.endsWith('/cancel_member_interview_review_analysis')));});
 await test('SQLSTATE mapped independently of Korean error text',async()=>{for(const [code,status] of [['40001',409],['55000',409],['22023',400]]){const s=setup({beginError:{code,message:'한국어로 작성된 오류입니다.'}});assert.equal((await s.call()).status,status);assert.equal(s.log.some(x=>x.path==='/v1/responses'),false);}});
-await test('Overlong AI value omitted without losing other safe draft suggestions',async()=>{const s=setup({output:{...output,suggestions:[suggestion('customers',['가'.repeat(1001),'제조업 대표']),suggestion('team',['기업'])]}});const r=await s.call();assert.equal(r.status,200);const {extracted}=await r.json();assert.deepEqual(extracted.suggestions.map(x=>x.value),[['제조업 대표'],['기업']]);assert(extracted.warnings.some(x=>x.includes('1000자')));});
+await test('Overlong AI value omitted without losing other safe draft suggestions',async()=>{const s=setup({output:{...output,suggestions:[suggestion('customers',['가'.repeat(1001),'제조업 대표']),suggestion('field',['기업 컨설팅'])]}});const r=await s.call();assert.equal(r.status,200);const {extracted}=await r.json();assert.deepEqual(extracted.suggestions.map(x=>x.value),[['제조업 대표'],['기업 컨설팅']]);assert(extracted.warnings.some(x=>x.includes('1000자')));});
 await test('AI HTTP 500 and 429 release lease and never save',async()=>{for(const status of [500,429]){const s=setup({aiStatus:status,aiResponse:{error:{message:'sensitive upstream diagnostics'}}}),r=await s.call();assert.equal(r.status,status===429?429:502);assert(!(await r.text()).includes('sensitive'));assert.equal(s.log.some(x=>x.path.endsWith('/finish_member_interview_review_analysis')),false);assert(s.log.some(x=>x.path.endsWith('/cancel_member_interview_review_analysis')));}});
 await test('Requested strict schema shares every text/list limit and key-specific cardinality',async()=>{
   const s=setup();await s.call();const schema=s.log.find(x=>x.path==='/v1/responses').body.text.format.schema;
   assert.deepEqual(schema,ANALYSIS_SCHEMA);assert.equal(schema.properties.summary.maxLength,ANALYSIS_LIMITS.summary);assert.equal(schema.properties.detected_name.maxLength,ANALYSIS_LIMITS.name);
-  assert.equal(schema.properties.warnings.maxItems,ANALYSIS_LIMITS.warnings);assert.equal(schema.properties.warnings.items.maxLength,ANALYSIS_LIMITS.warning);assert.equal(schema.properties.suggestions.maxItems,8);
-  const branches=schema.properties.suggestions.items.anyOf;assert.equal(branches.length,8);assert.equal(new Set(branches.map(x=>x.properties.key.enum[0])).size,8);
-  for(const branch of branches){const p=branch.properties,key=p.key.enum[0];assert.equal(branch.additionalProperties,false);assert.deepEqual(branch.required,Object.keys(p));assert.equal(p.value.maxItems,['field','team','wants','good_referral'].includes(key)?1:30);assert.equal(p.value.items.maxLength,ANALYSIS_LIMITS.value);assert.equal(p.reason.maxLength,ANALYSIS_LIMITS.reason);assert.equal(p.evidence.maxLength,ANALYSIS_LIMITS.evidence);}
+  assert.equal(schema.properties.warnings.maxItems,ANALYSIS_LIMITS.warnings);assert.equal(schema.properties.warnings.items.maxLength,ANALYSIS_LIMITS.warning);assert.equal(schema.properties.suggestions.maxItems,7);
+  const branches=schema.properties.suggestions.items.anyOf;assert.equal(branches.length,7);assert.equal(new Set(branches.map(x=>x.properties.key.enum[0])).size,7);
+  for(const branch of branches){const p=branch.properties,key=p.key.enum[0];assert.equal(branch.additionalProperties,false);assert.deepEqual(branch.required,Object.keys(p));assert.equal(p.value.maxItems,['field','wants','good_referral'].includes(key)?1:30);assert.equal(p.value.items.maxLength,ANALYSIS_LIMITS.value);assert.equal(p.reason.maxLength,ANALYSIS_LIMITS.reason);assert.equal(p.evidence.maxLength,ANALYSIS_LIMITS.evidence);}
+});
+await test('Team assignments and chapter roles stay outside the model schema and member context',async()=>{
+  const s=setup(),r=await s.call();assert.equal(r.status,200);
+  const memberRead=s.log.find(x=>x.path==='/rest/v1/members'),columns=new URLSearchParams(memberRead.query).get('select').split(',');
+  assert.deepEqual(columns,['id','name','company','field','customers','synergies']);
+  const ai=s.log.find(x=>x.path==='/v1/responses').body;
+  assert.deepEqual(ai.text.format.schema.properties.suggestions.items.anyOf.map(branch=>branch.properties.key.enum[0]),['field','customers','synergies','wants','good_referral','triggers','customer_companies']);
+  const text=ai.input[0].content[0].text,context=JSON.parse(text.slice(text.indexOf('\n')+1));
+  assert.deepEqual(Object.keys(context.selected_member),columns);assert.deepEqual(Object.keys(context.chapter_members[0]),columns);
+  assert(!text.includes('RETIRED-TEAM-SENTINEL'));assert(!text.includes('OPERATIONS-ROLE-SENTINEL'));
+  assert(ai.instructions.includes('협업팀 소속·팀장과 챕터 역할은 운영진이 지정합니다.'));
+  assert(ai.instructions.includes('배정 지시를 넣지 마세요.'));assert(!ai.instructions.includes('파워팀'));
+});
+await test('Retired team and operational-role suggestions cannot be saved even alongside valid suggestions',async()=>{
+  for(const key of ['team','chapter_role','collab_teams','leader_member_id']){
+    const s=setup({output:{...output,suggestions:[...output.suggestions,suggestion(key,['지정 요청'])]}}),r=await s.call();
+    assert.equal(r.status,502);assert.equal((await r.json()).error.code,'invalid_analysis');
+    assert.equal(s.log.some(x=>x.path.endsWith('/finish_member_interview_review_analysis')),false);
+    assert(s.log.some(x=>x.path.endsWith('/cancel_member_interview_review_analysis')));
+    assert(s.diagnostics.some(x=>x.code==='invalid_key'));
+  }
 });
 await test('Multiple visitor/referral statements join losslessly into reviewed scalar drafts',async()=>{
   const s=setup({output:{...output,suggestions:[...output.suggestions,suggestion('wants',['제조업 대표','지역 유통사 대표']),suggestion('good_referral',['공장 이전을 검토하는 기업','신규 판로를 찾는 기업'])]}}),r=await s.call();assert.equal(r.status,200);const {extracted}=await r.json();
   assert.deepEqual(extracted.suggestions.find(x=>x.key==='wants').value,['제조업 대표\n지역 유통사 대표']);assert.deepEqual(extracted.suggestions.find(x=>x.key==='good_referral').value,['공장 이전을 검토하는 기업\n신규 판로를 찾는 기업']);assert.equal(extracted.warnings.length,2);assert.equal(s.log.filter(x=>x.path==='/v1/responses').length,1);
 });
-await test('Conflicting field/team values are omitted rather than selecting the first',async()=>{
-  const s=setup({output:{...output,suggestions:[...output.suggestions,suggestion('field',['제조','유통']),suggestion('team',['기업','생활'])]}});const {extracted}=await(await s.call()).json();assert.deepEqual(extracted.suggestions.map(x=>x.key),['customers']);assert.equal(extracted.warnings.filter(x=>x.includes('서로 다른 값')).length,2);
-  assert.deepEqual(validateAnalysis({...output,suggestions:[suggestion('team',['기업','기업'])]},'홍길동',[interviewId]).suggestions[0].value,['기업']);
+await test('Conflicting specialty values are omitted rather than selecting the first',async()=>{
+  const s=setup({output:{...output,suggestions:[...output.suggestions,suggestion('field',['제조','유통'])]}});const {extracted}=await(await s.call()).json();assert.deepEqual(extracted.suggestions.map(x=>x.key),['customers']);assert.equal(extracted.warnings.filter(x=>x.includes('서로 다른 값')).length,1);
+  assert.deepEqual(validateAnalysis({...output,suggestions:[suggestion('field',['제조','제조'])]},'홍길동',[interviewId]).suggestions[0].value,['제조']);
 });
 await test('Duplicate keys omit that entire key and preserve unrelated suggestions',async()=>{
   const s=setup({output:{...output,suggestions:[suggestion('wants',['제조 대표']),suggestion('wants',['유통 대표']),...output.suggestions]}});const {extracted}=await(await s.call()).json();assert.deepEqual(extracted.suggestions.map(x=>x.key),['customers']);assert(extracted.warnings.some(x=>x.includes('중복')));
@@ -101,7 +127,7 @@ await test('Merged scalar over limit is omitted whole, never silently truncated'
   for(const [length,kept] of [[499,true],[500,false]]){const s=setup({output:{...output,suggestions:[...output.suggestions,suggestion('good_referral',['가'.repeat(length),'나'.repeat(length)])]}});const {extracted}=await(await s.call()).json();assert.equal(extracted.suggestions.some(x=>x.key==='good_referral'),kept);assert(extracted.suggestions.some(x=>x.key==='customers'));}
 });
 await test('List overflow and long explanation retain only reviewable bounded items',async()=>{
-  const s=setup({output:{...output,suggestions:[suggestion('customers',Array.from({length:31},(_,i)=>'고객 유형 '+i)),suggestion('team',['기업'],{evidence:'나'.repeat(1501)}),suggestion('wants',['제조 대표'],{reason:'가'.repeat(1001)})]}});const {extracted}=await(await s.call()).json();assert.equal(extracted.suggestions.length,1);assert.equal(extracted.suggestions[0].value.length,30);assert(extracted.warnings.some(x=>x.includes('앞의 30개')));assert.equal(extracted.warnings.filter(x=>x.includes('근거가 너무 길어')).length,2);
+  const s=setup({output:{...output,suggestions:[suggestion('customers',Array.from({length:31},(_,i)=>'고객 유형 '+i)),suggestion('field',['기업 컨설팅'],{evidence:'나'.repeat(1501)}),suggestion('wants',['제조 대표'],{reason:'가'.repeat(1001)})]}});const {extracted}=await(await s.call()).json();assert.equal(extracted.suggestions.length,1);assert.equal(extracted.suggestions[0].value.length,30);assert(extracted.warnings.some(x=>x.includes('앞의 30개')));assert.equal(extracted.warnings.filter(x=>x.includes('근거가 너무 길어')).length,2);
 });
 await test('Over-limit summaries and warnings do not discard safe suggestions',async()=>{
   const s=setup({output:{...output,summary:'가'.repeat(5001),detected_name:'나'.repeat(201),warnings:['다'.repeat(1501),...Array.from({length:31},(_,i)=>'주의사항 '+i)]}});const {extracted}=await(await s.call()).json();assert.equal(extracted.summary,'');assert.equal(extracted.detected_name,'');assert.deepEqual(extracted.suggestions,output.suggestions);assert(extracted.warnings.length<=30);assert(extracted.warnings.some(x=>x.includes('요약만 제외')));assert(extracted.warnings.every(x=>Array.from(x).length<=1500));
@@ -111,17 +137,17 @@ await test('Privacy guards inspect duplicate company entries and over-limit raw 
     [suggestion('customer_companies',['첫회사']),suggestion('customer_companies',['비공개상사']),suggestion('wants',['비공개상사 대표'])],
     [suggestion('customer_companies',[...Array.from({length:30},(_,i)=>'테스트 회사 '+i),'비공개상사']),suggestion('wants',['비공개상사 대표'])],
     [suggestion('customer_companies',['비공개상사'],{evidence:'가'.repeat(1501)}),suggestion('wants',['비공개상사 대표'])],
-    [suggestion('customers',[...Array.from({length:30},(_,i)=>'고객 유형 '+i),'010-1234-5678']),suggestion('team',['기업'])],
-    [suggestion('wants',['제조 대표','문의: secret@example.test']),suggestion('team',['기업'])]
+    [suggestion('customers',[...Array.from({length:30},(_,i)=>'고객 유형 '+i),'010-1234-5678']),suggestion('field',['기업 컨설팅'])],
+    [suggestion('wants',['제조 대표','문의: secret@example.test']),suggestion('field',['기업 컨설팅'])]
   ];
   for(const suggestions of cases){const s=setup({output:{...output,suggestions}}),r=await s.call();assert.equal(r.status,200);const {extracted}=await r.json();assert(!extracted.suggestions.some(x=>x.key==='wants'));assert(!extracted.suggestions.some(x=>x.value.some(v=>v.includes('010-')||v.includes('@'))));assert(s.diagnostics.some(x=>['private_company','private_contact'].includes(x.code)));}
 });
 await test('Structural errors remain strict even beyond duplicate/array limits',async()=>{
-  const malformed=[{...output,suggestions:[...Array.from({length:8},()=>suggestion('team',['기업'])),suggestion('team',[123])]}, {...output,warnings:[false]}, {...output,suggestions:[suggestion('wants',['정상'],{confidence:'certain'})]}, {...output,suggestions:[suggestion('unexpected-private-key',['문장'])]}, {...output,suggestions:[suggestion('wants',['정상'],{extra:'private-text'})]}];
+  const malformed=[{...output,suggestions:[...Array.from({length:8},()=>suggestion('field',['기업 컨설팅'])),suggestion('field',[123])]}, {...output,warnings:[false]}, {...output,suggestions:[suggestion('wants',['정상'],{confidence:'certain'})]}, {...output,suggestions:[suggestion('unexpected-private-key',['문장'])]}, {...output,suggestions:[suggestion('wants',['정상'],{extra:'private-text'})]}];
   for(const result of malformed){const s=setup({output:result}),r=await s.call();assert.equal(r.status,502);assert.equal(s.log.some(x=>x.path.endsWith('/finish_member_interview_review_analysis')),false);assert(s.log.some(x=>x.path.endsWith('/cancel_member_interview_review_analysis')));assert.equal(s.log.filter(x=>x.path==='/v1/responses').length,1);}
 });
 await test('Diagnostics expose only fixed codes/paths/types/lengths, not content or API credentials',async()=>{
-  const s=setup({output:{...output,suggestions:[suggestion('wants',['PRIVATE-CONTENT-SENTINEL','두 번째 문장']),suggestion('team',['기업','생활'])]}}),r=await s.call();assert.equal(r.status,200);const body=await r.json();assert(!('diagnostics' in body));assert(s.diagnostics.length>=2);
+  const s=setup({output:{...output,suggestions:[suggestion('wants',['PRIVATE-CONTENT-SENTINEL','두 번째 문장']),suggestion('field',['기업 컨설팅','생활용품 제조'])]}}),r=await s.call();assert.equal(r.status,200);const body=await r.json();assert(!('diagnostics' in body));assert(s.diagnostics.length>=2);
   for(const diagnostic of s.diagnostics){assert(Object.keys(diagnostic).every(k=>['code','path','type','length'].includes(k)));assert.match(diagnostic.path,/^\$(?:\.(?:summary|detected_name|warnings|suggestions|key|value|reason|evidence|confidence|basis)|\[\d+\])*$/);}
   assert(!JSON.stringify(s.diagnostics).includes('PRIVATE-CONTENT-SENTINEL'));assert(!JSON.stringify(s.diagnostics).includes('private-test-key'));
   const invalid=setup({output:{...output,suggestions:[suggestion('PRIVATE-PROPERTY-SENTINEL',['내용'])]}});await invalid.call();assert(!JSON.stringify(invalid.diagnostics).includes('PRIVATE-PROPERTY-SENTINEL'));

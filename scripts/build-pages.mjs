@@ -108,6 +108,14 @@ function notFoundPage(base, routes) {
 `;
 }
 
+export function renderLegacyTeamRedirect(baseUrl) {
+  const target = new URL('collab-teams/', normalizeBaseUrl(baseUrl)).href;
+  const targetLiteral = JSON.stringify(target).replace(/</g, '\\u003c');
+  return `<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><link rel="canonical" href="${escapeHtml(target)}"><title>협업팀으로 이동 | 파이오니아 선샤인</title></head><body><p>9기 협업팀 화면으로 이동합니다. <a href="${escapeHtml(target)}">협업팀 열기</a></p><script>location.replace(${targetLiteral}+location.search+location.hash);</script></body></html>
+`;
+}
+
 async function copyPublicAssets(from, to) {
   const publicExtensions = new Set(['.png', '.jpg', '.jpeg', '.webp', '.avif', '.gif', '.svg', '.ico', '.woff', '.woff2']);
   await mkdir(to, { recursive: true });
@@ -136,6 +144,10 @@ export async function buildSite({ baseUrl } = {}) {
     await writeFile(path.join(directory, 'index.html'), html, 'utf8');
   }
   await copyPublicAssets(path.join(root, 'assets'), path.join(output, 'assets'));
+  if (routes.some(route => route.slug === 'collab-teams')) {
+    await mkdir(path.join(output, 'power-teams'), { recursive: true });
+    await writeFile(path.join(output, 'power-teams', 'index.html'), renderLegacyTeamRedirect(base.href), 'utf8');
+  }
   await writeFile(path.join(output, '.nojekyll'), '', 'utf8');
   await writeFile(path.join(output, '404.html'), notFoundPage(base, routes), 'utf8');
   return { output, pages: pages.length, baseUrl: base.href };

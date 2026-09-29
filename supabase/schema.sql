@@ -8,6 +8,7 @@ create table if not exists public.members (
   company       text not null default '',
   field         text not null default '',
   team          text not null default '미정',
+  chapter_role  text,
   customers     text[] not null default '{}',
   synergies     text[] not null default '{}',
   wants         text not null default '',
@@ -22,6 +23,7 @@ create table if not exists public.members (
 
 -- 성함에는 UNIQUE를 걸지 않습니다. 동명이인은 별도 UUID로 관리합니다.
 create index if not exists members_sort_idx on public.members (sort_order, name);
+alter table public.members add column if not exists chapter_role text;
 
 create schema if not exists private;
 revoke all on schema private from public, anon, authenticated;
@@ -291,35 +293,53 @@ create policy members_delete_admin on public.members for delete to authenticated
 grant usage on schema public to anon, authenticated, service_role;
 revoke all on public.members from public, anon, authenticated;
 -- Explicit columns keep the editor's audit email out of the public API/realtime.
-grant select (id, name, company, field, team, customers, synergies, wants,
+grant select (id, name, company, field, team, chapter_role, customers, synergies, wants,
   good_referral, triggers, is_new, is_real, sort_order, updated_at)
   on public.members to anon, authenticated;
 grant insert, update, delete on public.members to authenticated;
 grant select, insert, update, delete on public.members to service_role;
 
 create or replace function private.guard_member_management()
-returns trigger language plpgsql security definer set search_path = ''
-as $$
+returns trigger language plpgsql security definer set search_path='' as $$
 begin
-  if tg_op = 'DELETE' then
-    if exists (select 1 from public.member_accounts where member_id = old.id) then
-      raise exception using errcode = 'P0001', message = '계정과 연결된 멤버입니다. 권한 관리에서 해당 계정을 읽기로 바꾼 뒤 삭제하세요.';
+  if tg_op='DELETE' then
+    if exists(select 1 from public.member_accounts where member_id=old.id) then
+      raise exception using errcode='P0001',message='계정과 연결된 멤버입니다. 권한 관리에서 해당 계정을 읽기로 바꾼 뒤 삭제하세요.';
     end if;
     return old;
   end if;
-  if auth.uid() is not null and not private.is_member_admin() and (
+  if auth.uid() is not null and ((tg_op='INSERT' and new.team<>'미정') or
+    (tg_op='UPDATE' and new.team is distinct from old.team)) then
+    raise exception using errcode='42501',message='기존 파워팀 입력은 종료되었습니다. 새로고침한 뒤 협업팀 관리와 새 경청표 순서를 이용하세요.';
+  end if;
+  if tg_op='UPDATE' and auth.uid() is not null and not private.is_member_admin() and (
     new.id is distinct from old.id or new.sort_order is distinct from old.sort_order
     or new.is_new is distinct from old.is_new or new.is_real is distinct from old.is_real
-  ) then
-    raise exception using errcode = '42501', message = '멤버 구분과 순서는 관리자만 변경할 수 있습니다. 본인 소개 항목만 수정하세요.';
+    or new.chapter_role is distinct from old.chapter_role) then
+    raise exception using errcode='42501',message='역할·멤버 구분·순서는 관리자만 변경할 수 있습니다. 본인 소개 항목만 수정하세요.';
   end if;
   return new;
-end;
-$$;
-revoke all on function private.guard_member_management() from public, anon, authenticated;
+end $$;
+revoke all on function private.guard_member_management() from public,anon,authenticated;
 drop trigger if exists members_management_guard on public.members;
-create trigger members_management_guard before update or delete on public.members
-  for each row execute function private.guard_member_management();
+create trigger members_management_guard before insert or update or delete on public.members
+for each row execute function private.guard_member_management();
+create or replace function private.reject_legacy_member_team_write()
+returns trigger language plpgsql security definer set search_path='' as $$
+begin
+  if auth.uid() is not null and (tg_op='UPDATE' or
+    coalesce(coalesce(nullif(current_setting('request.headers',true),''),'{}')::jsonb->>'x-sunshine-client','')<>'collab9') then
+    raise exception using errcode='42501',message='이전 경청표 입력 방식은 종료되었습니다. 페이지를 새로고침한 뒤 새 입력 순서를 확인하세요.';
+  end if;
+  return new;
+end $$;
+revoke all on function private.reject_legacy_member_team_write() from public,anon,authenticated;
+drop trigger if exists members_legacy_insert_guard on public.members;
+create trigger members_legacy_insert_guard before insert on public.members
+for each row execute function private.reject_legacy_member_team_write();
+drop trigger if exists members_legacy_team_guard on public.members;
+create trigger members_legacy_team_guard before update of team on public.members
+for each row execute function private.reject_legacy_member_team_write();
 
 create or replace function private.touch_members()
 returns trigger language plpgsql security definer set search_path = ''

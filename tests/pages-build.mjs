@@ -1,14 +1,21 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { renderPage, routesFromHtml } from '../scripts/build-pages.mjs';
+import { renderPage, routesFromHtml, renderLegacyTeamRedirect } from '../scripts/build-pages.mjs';
+import vm from 'node:vm';
 
 const source = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const routes = routesFromHtml(source);
-assert.deepEqual(routes.map(route => route.slug), ['sunshine', 'power-teams', 'chapter-map', 'members']);
+assert.deepEqual(routes.map(route => route.slug), ['sunshine', 'collab-teams', 'chapter-map', 'members']);
 const getAttribute = (tag, name) => tag.match(new RegExp(`\\s${name}="([^"]*)"`))?.[1];
 const meta = (html, name) => [...html.matchAll(/<meta\b[^>]*>/g)].map(match => match[0]).find(tag => getAttribute(tag, 'name') === name || getAttribute(tag, 'property') === name);
 
 for (const baseUrl of ['https://woolim0109.github.io/bni-pioneer-sunshine/', 'https://sunshine.bni-pioneer.com/', 'http://localhost:43127/']) {
+  const redirect = renderLegacyTeamRedirect(baseUrl);
+  const redirectScript = redirect.match(/<script>([\s\S]*?)<\/script>/)[1];
+  let destination;
+  vm.runInNewContext(redirectScript, { location: { search: '?from=old', hash: '#type=recovery&access_token=fixture', replace: value => { destination = value; } } });
+  assert.equal(destination, new URL('collab-teams/', baseUrl).href + '?from=old#type=recovery&access_token=fixture');
+  assert(redirect.includes('noindex'));
   for (const route of [null, ...routes]) {
     const html = renderPage(source, route, { baseUrl });
     const expectedUrl = new URL(route ? `${route.slug}/` : '', baseUrl).href;

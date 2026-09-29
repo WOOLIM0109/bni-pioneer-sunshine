@@ -102,10 +102,10 @@ begin
     or jsonb_typeof(analysis->'suggestions') is distinct from 'array' then
     raise exception using errcode='22023',message='통합 분석 결과와 제안 목록을 확인하세요.';
   end if;
-  if jsonb_array_length(analysis->'suggestions')>8 then raise exception using errcode='22023',message='분석 제안은 8개 이하로 저장하세요.'; end if;
+  if jsonb_array_length(analysis->'suggestions')>7 then raise exception using errcode='22023',message='분석 제안은 7개 이하로 저장하세요.'; end if;
   for suggestion in select value from jsonb_array_elements(analysis->'suggestions') loop
     key_name:=suggestion->>'key';
-    if jsonb_typeof(suggestion)<>'object' or key_name is null or not key_name=any(array['field','team','customers','synergies','wants','good_referral','triggers','customer_companies'])
+    if jsonb_typeof(suggestion)<>'object' or key_name is null or not key_name=any(array['field','customers','synergies','wants','good_referral','triggers','customer_companies'])
       or key_name=any(keys) or jsonb_typeof(suggestion->'value') is distinct from 'array'
       or jsonb_typeof(suggestion->'sources') is distinct from 'array' then
       raise exception using errcode='22023',message='각 제안에는 중복 없는 항목·값·근거 문서가 필요합니다.';
@@ -122,7 +122,7 @@ begin
       if not source_id=any(source_ids) then raise exception using errcode='22023',message='선택하지 않은 문서는 제안의 근거가 될 수 없습니다.'; end if;
     end loop;
     if exists(select 1 from jsonb_array_elements(suggestion->'value') v where jsonb_typeof(v)<>'string' or char_length(v#>>'{}')>1000)
-      or jsonb_array_length(suggestion->'value')>(case when key_name=any(array['field','team','wants','good_referral']) then 1 else 30 end) then
+      or jsonb_array_length(suggestion->'value')>(case when key_name=any(array['field','wants','good_referral']) then 1 else 30 end) then
       raise exception using errcode='22023',message='제안 값의 형식과 길이를 확인하세요.';
     end if;
   end loop;
@@ -297,7 +297,6 @@ begin
     name=case when public_patch?'name' then btrim(public_patch->>'name') else name end,
     company=case when public_patch?'company' then public_patch->>'company' else company end,
     field=case when public_patch?'field' then public_patch->>'field' else field end,
-    team=case when public_patch?'team' then coalesce(nullif(btrim(public_patch->>'team'),''),'미정') else team end,
     customers=case when public_patch?'customers' then private.merge_interview_list(customers,public_patch->'customers',coalesce(list_modes->>'customers','append')) else customers end,
     synergies=case when public_patch?'synergies' then private.merge_interview_list(synergies,public_patch->'synergies',coalesce(list_modes->>'synergies','append')) else synergies end,
     wants=case when public_patch?'wants' then public_patch->>'wants' else wants end,

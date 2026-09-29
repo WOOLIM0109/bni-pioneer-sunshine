@@ -150,7 +150,7 @@ begin
   if patch is null or jsonb_typeof(patch)<>'object' or pg_column_size(patch)>1048576 then
     raise exception using errcode='22023', message='저장할 항목은 1MB 이하의 JSON 객체여야 합니다.';
   end if;
-  if patch_kind='public' then allowed:=array['name','company','field','team','customers','synergies','wants','is_new','is_real'];
+  if patch_kind='public' then allowed:=array['name','company','field','customers','synergies','wants','is_new','is_real'];
   elsif patch_kind='private' then allowed:=array['good_referral','triggers','customer_companies'];
   else raise exception using errcode='22023', message='잘못된 저장 구분입니다.'; end if;
   for k,v in select key,value from jsonb_each(patch) loop
@@ -372,7 +372,6 @@ begin
     name=case when public_patch?'name' then btrim(public_patch->>'name') else name end,
     company=case when public_patch?'company' then public_patch->>'company' else company end,
     field=case when public_patch?'field' then public_patch->>'field' else field end,
-    team=case when public_patch?'team' then coalesce(nullif(btrim(public_patch->>'team'),''),'미정') else team end,
     customers=case when public_patch?'customers' then array(select jsonb_array_elements_text(public_patch->'customers')) else customers end,
     synergies=case when public_patch?'synergies' then array(select jsonb_array_elements_text(public_patch->'synergies')) else synergies end,
     wants=case when public_patch?'wants' then public_patch->>'wants' else wants end,

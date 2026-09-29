@@ -2,6 +2,9 @@
 -- This is NOT a deployment migration: it always rolls back test users and rows.
 -- Example: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/roles.sql
 begin;
+-- New member inserts carry the collaboration client marker; role/RLS checks
+-- still independently deny viewers and ordinary members with that same marker.
+select set_config('request.headers','{"x-sunshine-client":"collab9"}',true);
 set local statement_timeout = '30s';
 
 create function pg_temp.check_true(ok boolean, label text)

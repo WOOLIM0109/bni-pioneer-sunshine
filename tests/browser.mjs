@@ -9,7 +9,7 @@ import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { routesFromHtml, renderPage } from '../scripts/build-pages.mjs';
+import { routesFromHtml, renderPage, renderLegacyTeamRedirect } from '../scripts/build-pages.mjs';
 
 const require = createRequire(import.meta.url);
 async function getPlaywright() {
@@ -22,10 +22,21 @@ async function getPlaywright() {
 
 function makeMock(initial, options) {
   const clone = value => JSON.parse(JSON.stringify(value));
+  const collabRoster = [
+    ['라이프 이벤트 협업팀', '마루이', '윤민수', '이화춘', '심학봉'],
+    ['부동산&공간 협업팀', '박선영', '권두현', '이상호', '정명수', '박진성', '김지현', '조은영', '오예준', '조진성', '박병준'],
+    ['B2B 기업지원 협업팀', '송승훈', '조현우', '김근우', '박미성', '홍정택', '이도현', '이해경', '박지형', '이은성'],
+    ['웰니스 협업팀', '이채홍', '김경태', '정상현', '이훈', '이소연'],
+    ['푸드·기프트&프랜차이즈 협업팀', '임춘식', '김윤호', '이수민', '문성우', '최경수']
+  ];
+  const findMember = name => initial.find(row => row.name.replace(/\s/g, '') === name);
+  const initialTeams = options.collabTeams || collabRoster.map(([name, leader], index) => ({ id: `c0000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`, name, sort_order: index, leader_member_id: findMember(leader)?.id || null, note: '', created_at: '2026-09-29T00:00:00Z', updated_at: '2026-09-29T00:00:00Z', chat_link: `https://open.kakao.com/o/PRIVATE_CHAT_${index}` }));
+  const initialMemberships = options.collabMemberships || collabRoster.flatMap(([, ...names], index) => names.flatMap(name => findMember(name) ? [{ team_id: initialTeams[index].id, member_id: findMember(name).id, created_at: '2026-09-29T00:00:00Z' }] : []));
   const account = (id, role, member = null) => ({ user_id: id, email: `${id}@example.test`, role, member_id: member, requested_member_id: null, request_status: 'none', updated_at: '2026-09-21T00:00:00.000Z', email_confirmed: true, signup_name: '' });
   const state = window.__db = {
     initialUrl: location.href,
     members: clone(initial), links: clone(options.links || []), failLinkReads: !!options.failLinkReads, log: [], pending: [], holdWrites: false, revision: 0,
+    collabTeams: clone(initialTeams), collabMemberships: clone(initialMemberships), collabPending: clone(options.collabPending || []), collabRevision: 1, failCollabReads: !!options.failCollabReads,
     pendingReads: [], holdReads: false, completedReads: 0,
     pendingAccessReads: [], holdAccessReads: false, completedAccessReads: 0,
     pendingStorageWrites: [], holdStorageWrites: false, failStorageWrites: false, failStorageReads: false,
@@ -71,6 +82,7 @@ function makeMock(initial, options) {
       state.log.push({ action: this.action, table: this.table, columns: this.columns, value: this.value });
       const accessRead = this.table === 'member_accounts' && this.action === 'select';
       const linkRead = this.table === 'member_synergy_links' && this.action === 'select';
+      const collabRead = ['collab_teams', 'collab_team_members'].includes(this.table) && this.action === 'select';
       const accessUser = state.session?.user.id;
       const accessAdmin = currentAccount()?.role === 'admin';
       const accountSnapshot = accessRead ? clone(state.accounts.filter(row => accessAdmin || row.user_id === accessUser)) : null;
@@ -79,17 +91,23 @@ function makeMock(initial, options) {
       if (!accessRead && this.action === 'select' && state.holdReads) await new Promise(resolve => state.pendingReads.push(resolve));
       if (accessRead ? state.failAccess : this.action === 'select' ? state.failReads : state.failWrites) return { data: null, error: { message: accessRead ? '테스트 권한 조회 실패' : '테스트 연결 실패', code: 'TEST_FAILURE' } };
       if (linkRead && state.failLinkReads) return { data: null, error: { message: '테스트 연결 지정 조회 실패', code: 'TEST_LINK_FAILURE' } };
+      if (collabRead && state.failCollabReads) return { data: null, error: { message: '테스트 협업팀 조회 실패', code: 'TEST_COLLAB_FAILURE' } };
       const matches = row => this.filters.every(filter => filter(row));
       let data;
       if (accessRead) {
         data = accountSnapshot.filter(matches);
       } else if (linkRead) {
         data = state.links.filter(matches);
+      } else if (collabRead) {
+        if (this.table === 'collab_teams' && (this.columns === '*' || this.columns.includes('chat_link'))) return permissionError();
+        data = (this.table === 'collab_teams' ? state.collabTeams : state.collabMemberships).filter(matches);
       } else if (this.table !== 'members') {
         return permissionError();
       } else if (['good_referral', 'triggers', 'customer_companies'].some(key => this.columns.split(',').includes(key) || Object.hasOwn(this.value || {}, key))) {
         return permissionError();
       } else if (this.action !== 'select' && currentAccount()?.role !== 'admin' && !(this.action === 'update' && currentAccount()?.role === 'member' && state.members.filter(matches).every(row => row.id === currentAccount().member_id))) {
+        return permissionError();
+      } else if (this.action !== 'select' && currentAccount()?.role !== 'admin' && Object.hasOwn(this.value || {}, 'chapter_role')) {
         return permissionError();
       } else if (this.action === 'insert') {
         data = (Array.isArray(this.value) ? this.value : [this.value]).map((row, i) => ({
@@ -104,6 +122,8 @@ function makeMock(initial, options) {
       } else if (this.action === 'delete') {
         data = state.members.filter(matches);
         state.members = state.members.filter(row => !matches(row));
+        state.collabMemberships = state.collabMemberships.filter(link => !data.some(row => row.id === link.member_id));
+        state.collabTeams.forEach(team => { if (data.some(row => row.id === team.leader_member_id)) team.leader_member_id = null; });
       } else {
         data = state.members.filter(matches);
       }
@@ -121,12 +141,18 @@ function makeMock(initial, options) {
     constructor(name, value) { this.name = name; this.value = value; }
     abortSignal() { return this; }
     async execute() {
-      const readOnly = ['list_member_accounts', 'get_member_details', 'get_member_referrals', 'list_member_interviews', 'get_member_interview', 'list_member_interview_reviews', 'get_member_interview_review'].includes(this.name);
+      const readOnly = ['get_collab_team_admin', 'get_collab_team_chat_links', 'list_member_accounts', 'get_member_details', 'get_member_referrals', 'list_member_interviews', 'get_member_interview', 'list_member_interview_reviews', 'get_member_interview_review'].includes(this.name);
       state.log.push({ action: 'rpc', name: this.name, value: clone(this.value), readOnly });
       if (readOnly) {
         const reader = clone(currentAccount() || null);
         let data;
-        if (this.name === 'list_member_accounts') {
+        if (this.name === 'get_collab_team_admin') {
+          if (reader?.role !== 'admin') return permissionError();
+          data = clone({ revision: state.collabRevision, teams: state.collabTeams, memberships: state.collabMemberships.map(({team_id,member_id}) => ({team_id,member_id})), pending_names: state.collabPending });
+        } else if (this.name === 'get_collab_team_chat_links') {
+          if (!reader || !['admin', 'member'].includes(reader.role)) return permissionError();
+          data = clone(state.collabTeams.filter(team => reader.role === 'admin' || state.collabMemberships.some(link => link.team_id === team.id && link.member_id === reader.member_id)).map(team => ({team_id:team.id,chat_link:team.chat_link})));
+        } else if (this.name === 'list_member_accounts') {
           if (reader?.role !== 'admin') return permissionError();
           if (state.failAccountList) return { data: null, error: { message: '테스트 가입자 목록 조회 실패', code: 'TEST_FAILURE' } };
           return { data: clone(state.accounts), error: null };
@@ -153,6 +179,16 @@ function makeMock(initial, options) {
       if (state.holdWrites && (!state.holdRpcName || state.holdRpcName === this.name)) await new Promise(resolve => state.pending.push(resolve));
       if (state.failRpc && (!state.failRpcName || state.failRpcName === this.name)) return { data: null, error: { message: '테스트 권한 저장 실패', code: 'TEST_FAILURE' } };
       const own = currentAccount();
+      if (this.name === 'save_collab_teams') {
+        if (own?.role !== 'admin') return permissionError();
+        if (state.collabRevision !== this.value.expected_revision) return conflict();
+        const {teams, memberships, pending_names=[]} = this.value;
+        if (new Set(teams.map(team => team.id)).size !== teams.length || new Set(teams.map(team => team.name.trim())).size !== teams.length || teams.some(team => !team.name.trim())) return {data:null,error:{code:'22023',message:'협업팀 이름과 식별자를 확인하세요.'}};
+        if (memberships.some(link => !teams.some(team => team.id === link.team_id) || !state.members.some(member => member.id === link.member_id))) return {data:null,error:{code:'22023',message:'등록된 멤버와 협업팀을 선택하세요.'}};
+        if (teams.some(team => team.leader_member_id && !memberships.some(link => link.team_id === team.id && link.member_id === team.leader_member_id))) return {data:null,error:{code:'22023',message:'팀장은 해당 팀원 중 선택하세요.'}};
+        state.collabTeams = clone(teams);state.collabMemberships = clone(memberships);state.collabPending = clone(pending_names);state.collabRevision++;
+        return {data:clone({revision:state.collabRevision,teams:state.collabTeams,memberships:state.collabMemberships,pending_names:state.collabPending}),error:null};
+      }
       if (this.name === 'set_member_synergy_link') {
         if (own?.role !== 'admin') return permissionError();
         const input = this.value, member = state.members.find(row => row.id === input.source_member_id);
@@ -180,6 +216,7 @@ function makeMock(initial, options) {
       if (['create_member_interview', 'save_member_interview_draft', 'apply_member_interview'].includes(this.name)) {
         if (own?.role !== 'admin') return permissionError();
         const input = this.value;
+        if (['team', 'chapter_role'].some(key => Object.hasOwn(input.public_patch || input.draft_patch?.public_patch || {}, key))) return {data:null,error:{code:'22023',message:'협업팀과 역할은 운영진 관리에서 지정하세요.'}};
         if (this.name === 'create_member_interview') {
           const object = state.storageObjects[`member-interviews/${input.storage_path}`];
           if (!object || !input.storage_path.startsWith(`${input.target_member_id}/`)) return { data: null, error: { message: '비공개 원본 파일을 먼저 업로드하세요.', code: '22023' } };
@@ -211,6 +248,7 @@ function makeMock(initial, options) {
       if (['save_member_interview_review', 'apply_member_interview_review'].includes(this.name)) {
         if (own?.role !== 'admin') return permissionError();
         const input = this.value, row = state.reviews.find(row => row.id === input.target_review_id);
+        if (['team', 'chapter_role'].some(key => Object.hasOwn(input.public_patch || input.draft_patch?.public_patch || {}, key)) || input.draft_patch?.extracted?.suggestions?.some(item => ['team', 'chapter_role'].includes(item.key))) return {data:null,error:{code:'22023',message:'협업팀과 역할은 운영진 관리에서 지정하세요.'}};
         if (!row || row.revision !== input.expected_revision || row.status === 'applied') return conflict();
         if (this.name === 'save_member_interview_review') {
           const patch = clone(input.draft_patch);
@@ -282,7 +320,7 @@ function makeMock(initial, options) {
       return { data: { publicUrl: `https://public-fixture.invalid/${encodeURIComponent(objectPath)}` } };
     }
   }
-  window.supabase = { createClient: () => ({
+  window.supabase = { createClient: (_url, _key, clientOptions) => (state.clientOptions = clone(clientOptions), {
     from: table => new Query(table),
     rpc: (name, value) => new Rpc(name, value),
     storage: { from: bucket => new StorageBucket(bucket) },
@@ -298,7 +336,6 @@ function makeMock(initial, options) {
       const suggestions = state.analysisSuggestions || [
         { key: 'customers', value: ['지역 소상공인', '학원 운영자'], reason: '공통 고객 유형을 정리했습니다.', evidence: 'AI_PRIVATE_EVIDENCE 고객 유형 원문', confidence: 'high', basis: 'stated' },
         { key: 'synergies', value: ['앱·웹개발', '세무사'], reason: '공통 고객을 만나는 직군입니다.', evidence: 'AI_PRIVATE_EVIDENCE 연결 근거 원문', confidence: 'medium', basis: 'inferred' },
-        { key: 'team', value: ['기업'], reason: '기업 고객을 공유합니다.', evidence: '', confidence: 'medium', basis: 'inferred' },
         { key: 'good_referral', value: ['INTERVIEW_PRIVATE_REFERRAL 검증 고객'], reason: '대표가 직접 요청했습니다.', evidence: 'AI_PRIVATE_EVIDENCE 좋은 리퍼럴 원문', confidence: 'high', basis: 'stated' },
         { key: 'triggers', value: ['INTERVIEW_PRIVATE_TRIGGER 정부지원 사업이 궁금해요', 'INTERVIEW_PRIVATE_TRIGGER 서류 준비가 어려워요'], reason: '인터뷰에 나온 요청 문장입니다.', evidence: 'AI_PRIVATE_EVIDENCE 트리거 원문', confidence: 'high', basis: 'stated' },
         { key: 'customer_companies', value: ['INTERVIEW_PRIVATE_COMPANY 샘플기업'], reason: '고객사명은 비공개 항목입니다.', evidence: 'AI_PRIVATE_EVIDENCE 고객사 원문', confidence: 'high', basis: 'stated' }
@@ -341,7 +378,7 @@ function makeMock(initial, options) {
 
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const routes = routesFromHtml(html);
-assert.deepEqual(routes.map(route => route.slug), ['sunshine', 'power-teams', 'chapter-map', 'members']);
+assert.deepEqual(routes.map(route => route.slug), ['sunshine', 'collab-teams', 'chapter-map', 'members']);
 assert(!html.includes('service_role'), 'The HTML must not mention privileged credentials.');
 assert(!html.includes('pioneer-sunshine-roster-v1') && !html.includes('pioneer-sunshine-v2'), 'Roster localStorage must be removed.');
 assert(html.includes('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js'), 'Supabase CDN must be version-pinned.');
@@ -352,7 +389,11 @@ const failures = [];
 const testPattern = process.argv.find(arg => arg.startsWith('--filter='))?.slice('--filter='.length);
 const testFilter = testPattern ? new RegExp(testPattern, 'i') : null;
 let seed;
-async function pageFor({ online = false, auth = false, records = seed, links = [], failLinkReads = false, failReads = false, role = 'admin', failAccess = false, basePath = '/', routePath = '', query = '', hash = '' } = {}) {
+async function pageFor({ online = false, auth = false, records = seed, links = [], failLinkReads = false, failReads = false, role = 'admin', failAccess = false, failCollabReads = false, collabTeams, collabMemberships, collabPending, basePath = '/', routePath = '', query = '', hash = '' } = {}) {
+  if (records?.[0]?.name === '연결 요청자' && !collabTeams) {
+    collabTeams = [{id:'c0000000-0000-4000-8000-000000000001',name:'기업 협업팀',sort_order:0,leader_member_id:records[0].id,note:'',chat_link:'',created_at:'2026-09-29T00:00:00Z',updated_at:'2026-09-29T00:00:00Z'}];
+    collabMemberships = records.map(row=>({team_id:collabTeams[0].id,member_id:row.id,created_at:'2026-09-29T00:00:00Z'}));
+  }
   const context = await browser.newContext({ viewport: { width: 400, height: 900 }, colorScheme: 'light', serviceWorkers: 'block' });
   context.on('page', page => {
     page.on('pageerror', error => failures.push(error.message));
@@ -368,12 +409,13 @@ async function pageFor({ online = false, auth = false, records = seed, links = [
     const address = new URL(url);
     if (address.origin === 'http://localhost:43127' && route.request().resourceType() === 'document') {
       documentRequests.push(address.pathname);
+      if (address.pathname === `${basePath}power-teams/` || address.pathname === `${basePath}power-teams/index.html`) return route.fulfill({status:200,contentType:'text/html',body:renderLegacyTeamRedirect(baseUrl)});
       const routePage = routes.find(item => address.pathname === `${basePath}${item.slug}/` || address.pathname === `${basePath}${item.slug}/index.html`);
       const isHome = address.pathname === basePath || address.pathname === `${basePath}index.html`;
       return route.fulfill({ status: routePage || isHome ? 200 : 404, contentType: 'text/html', body: routePage || isHome ? renderPage(document, routePage || null, { baseUrl }) : '<h1>Not found</h1>' });
     }
     if (url.includes('/@supabase/supabase-js@')) return online
-      ? route.fulfill({ status: 200, contentType: 'application/javascript', body: `(${makeMock.toString()})(${JSON.stringify(records)}, ${JSON.stringify({ auth, failReads, role, failAccess, links, failLinkReads })});` })
+      ? route.fulfill({ status: 200, contentType: 'application/javascript', body: `(${makeMock.toString()})(${JSON.stringify(records)}, ${JSON.stringify({ auth, failReads, role, failAccess, links, failLinkReads, failCollabReads, collabTeams, collabMemberships, collabPending })});` })
       : route.abort();
     return route.abort();
   });
@@ -417,7 +459,7 @@ async function assertRoute(page, route, baseUrl) {
 }
 
 function mapSeed(rows) {
-  return rows.map((m, index) => ({ id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`, name: m.n, company: m.co || '', field: m.f || '', team: m.g || '미정', customers: m.c || [], synergies: m.s || [], wants: m.w || '', is_new: !!m.nw, is_real: !!m.real, sort_order: index, updated_at: '2026-09-21T00:00:00.000Z', updated_by: '' }));
+  return rows.map((m, index) => ({ id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`, name: m.n, company: m.co || '', field: m.f || '', team: '미정', chapter_role: m.role || null, customers: m.c || [], synergies: m.s || [], wants: m.w || '', is_new: !!m.nw, is_real: !!m.real, sort_order: index, updated_at: '2026-09-21T00:00:00.000Z', updated_by: '' }));
 }
 
 async function check(name, run) {
@@ -535,9 +577,9 @@ async function reloadInterviewReview(page, id) {
   await page.waitForFunction(reads => !interviewBusy && window.__db.log.filter(item => item.name === 'get_member_interview_review').length > reads, reads);
 }
 try {
-  await check('Offline fallback renders all 31 seed members and permits only export', async () => {
+  await check('Offline fallback renders all 33 seed members and permits only export', async () => {
     const { page, context } = await pageFor();
-    assert.equal(await page.evaluate(() => M.length), 31);
+    assert.equal(await page.evaluate(() => M.length), 33);
     assert(await page.evaluate(() => M.every(member => !['v', 'tg', 'good_referral', 'triggers', 'customer_companies'].some(key => Object.hasOwn(member, key)))), 'Offline seed data is shipped publicly and must not embed private referral fields.');
     seed = mapSeed(await page.evaluate(() => M));
     assert.match(await page.locator('body').innerText(), /오프라인.*읽기 전용/);
@@ -548,7 +590,171 @@ try {
     for (const selector of ['#newrow', '#bulkb', '#importb']) assert(await page.locator(selector).isDisabled(), selector);
     assert(await page.locator('#exportb').isEnabled());
     await page.click('#exportb');
-    assert.equal(JSON.parse(await page.inputValue('#io')).length, 31);
+    assert.equal(JSON.parse(await page.inputValue('#io')).length, 33);
+    await context.close();
+  });
+  await check('Collab ninth-term roster renders five complete teams with corrected member fields and operational roles', async () => {
+    const { page, context } = await pageFor({ online: true });
+    assert.equal(await page.evaluate(() => window.__db.clientOptions.global.headers['x-sunshine-client']), 'collab9');
+    const snapshot = await page.evaluate(() => ({ members: M, teams: teams().map(team => ({ name: team.name, names: team.members.map(member => member.n) })) }));
+    assert.equal(snapshot.members.length, 33);assert.equal(new Set(snapshot.members.map(member => member.n)).size, 33);
+    assert.deepEqual(snapshot.teams.map(team => team.names.length), [4, 10, 9, 5, 5]);
+    assert.equal(new Set(snapshot.teams.flatMap(team => team.names)).size, 33);
+    assert(!snapshot.members.some(member => ['김철홍', '이서원', '이 훈'].includes(member.n)));
+    const song = snapshot.members.find(member => member.n === '송승훈');
+    assert.equal(song.co, '앱 개발 · 맞춤형 미니 앱 제작 · 디지털 명함(DiCA)');assert.equal(song.f, '앱,웹개발(디지탈명함)');assert.equal(song.role, '121마스터');
+    assert.equal(snapshot.members.find(member => member.n === '권두현').role, '');
+    assert(snapshot.teams[2].names.includes('이은성'));assert(snapshot.teams[3].names.includes('이소연'));assert(!snapshot.teams[2].names.includes('이소연'));
+    await page.click('#t2');assert.equal(await page.locator('#teamgrid .tsun').count(), 5);
+    assert.equal(await page.locator('#teamgrid .collab-team-members li').count(), 33);
+    assert.equal(await page.locator('#teamgrid .collab-team-members strong').filter({ hasText: '★' }).count(), 5);
+    const operations = await page.locator('#collab-operations').innerText();
+    for (const text of ['의장(심학봉)', '부의장(김경태)', '121마스터(송승훈)', '성장코디(이채홍)', 'ST(정상현)']) assert(operations.includes(text), text);
+    await page.evaluate(() => { const old = window.__db.members.find(member => member.name === '송승훈'), replacement = window.__db.members.find(member => member.name === '이은성'); old.chapter_role = null;replacement.chapter_role = '121마스터';window.__db.realtime(); });
+    await page.waitForFunction(() => document.getElementById('collab-operations').textContent.includes('121마스터(이은성)'));
+    assert(!(await page.locator('#collab-operations').innerText()).includes('121마스터(송승훈)'));
+    await context.close();
+  });
+  await check('Collab multiple memberships appear in both team cards, member groups, badges and deduplicated 121 peers', async () => {
+    const { page, context } = await pageFor({ online: true });
+    const person = seed.find(member => member.name === '송승훈');
+    await page.evaluate(id => { window.__db.collabMemberships.push({ team_id: window.__db.collabTeams[0].id, member_id: id });window.__db.realtime(); }, person.id);
+    await page.waitForFunction(id => memberCollabTeams(M.find(member => member.id === id)).length === 2, person.id);
+    assert.equal(await page.locator('#mlist .mrow').filter({ has: page.getByText('송승훈', { exact: true }) }).count(), 2);
+    await page.locator('#mlist .mrow').filter({ has: page.getByText('송승훈', { exact: true }) }).first().click();
+    const badges = await page.locator('#wantbox .collab-badge').allTextContents();
+    assert.deepEqual(badges, ['라이프 이벤트 협업팀', 'B2B 기업지원 협업팀 · 팀장']);
+    const peers = await page.locator('#wantbox .collab-peer').allTextContents();
+    assert.equal(peers.length, 12);assert.equal(new Set(peers).size, 12);assert(!peers.some(text => text.startsWith('송승훈')));assert(peers.some(text => text.startsWith('마루이')));assert(peers.some(text => text.startsWith('이은성')));
+    await page.locator('#wantbox .collab-peer').filter({ hasText: '이은성' }).click();assert.match(await page.locator('#wantbox .want-title').innerText(), /이은성/);
+    await page.click('#t2');const cards = await page.locator('#teamgrid .tsun').allTextContents();
+    assert(cards[0].includes('송승훈'));assert(cards[2].includes('송승훈'));assert(cards[0].includes('멤버 5명'));assert(cards[2].includes('멤버 9명'));
+    await context.close();
+  });
+  await check('Collab chat links are visible only to admins and their own team members and never enter public exports', async () => {
+    for (const role of ['anonymous', 'viewer', 'member', 'admin']) {
+      const { page, context } = await pageFor({ online: true, auth: role !== 'anonymous', role: role === 'anonymous' ? 'viewer' : role });
+      const expected = await page.evaluate(role => role === 'admin' ? 5 : role === 'member' ? window.__db.collabMemberships.filter(link => link.member_id === window.__db.accounts[0].member_id).length : 0, role);
+      if (expected) await page.waitForFunction(count => collabChatLinks.size === count, expected);
+      await page.click('#t2');assert.equal(await page.locator('.collab-chat').count(), expected, role);
+      const visibleLinks = await page.locator('.collab-chat').evaluateAll(links => links.map(link => ({ href: link.href, rel: link.rel })));
+      assert(visibleLinks.every(link => link.href.startsWith('https://open.kakao.com/') && link.rel.includes('noopener')));
+      if (!expected) assert(!(await page.content()).includes('PRIVATE_CHAT_'), `${role} must not receive private links in the DOM.`);
+      await assertPublicExportPrivate(page);assert(!(await page.inputValue('#io')).includes('PRIVATE_CHAT_'));
+      const publicReads = await page.evaluate(() => window.__db.log.filter(item => item.table === 'collab_teams'));
+      assert(publicReads.every(item => item.columns !== '*' && !item.columns.includes('chat_link')));
+      assert.equal(await page.locator('#collab-admin-panel').isVisible(), role === 'admin');
+      await context.close();
+    }
+  });
+  await check('Collab failed reads show an explicit unavailable state and recover without inventing team membership', async () => {
+    const { page, context } = await pageFor({ online: true, failCollabReads: true });
+    await page.click('#t2');assert(await page.locator('#collab-read-warning').isVisible());assert.equal(await page.locator('#teamgrid .tsun').count(), 0);
+    assert.equal(await page.evaluate(() => M.length), 33);assert.match(await page.locator('#teamgrid').innerText(), /불러오지 못/);
+    await page.evaluate(() => { window.__db.failCollabReads = false; });await page.click('#collab-retry');
+    await page.waitForFunction(() => document.querySelectorAll('#teamgrid .tsun').length === 5);
+    assert(!await page.locator('#collab-read-warning').isVisible());
+    await context.close();
+  });
+  await check('Collab old power-team bookmarks redirect to the new path while preserving query and fragment', async () => {
+    for (const basePath of ['/', '/bni-pioneer-sunshine/']) {
+      const { page, context, baseUrl } = await pageFor({ online: true, basePath, routePath: 'power-teams/', query: '?from=bookmark', hash: '#team' });
+      await page.waitForURL(new URL('collab-teams/?from=bookmark#team', baseUrl).href);await assertRoute(page, routes[1], baseUrl);
+      await context.close();
+    }
+  });
+  await check('Collab administrator can add, rename, reorder, assign multiple memberships and remove a populated team atomically', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true });await page.click('#t4');await page.waitForFunction(() => collabAdminReady);
+    assert.equal(await page.locator('#collab-matrix tbody tr').count(), 33);assert.equal(await page.locator('.collab-membership:checked').count(), 33);
+    await page.click('#collab-team-add');const newId = await page.locator('#collab-admin-teams .collab-admin-team').last().getAttribute('data-team-id');
+    const card = page.locator(`#collab-admin-teams [data-team-id="${newId}"]`), members = [seed[0], seed[1]];
+    await card.locator('.collab-team-name').fill('지역 프로젝트 협업팀');await card.locator('.collab-team-name').press('Tab');
+    for (const member of members) await page.locator(`.collab-membership[data-team-id="${newId}"][data-member-id="${member.id}"]`).check();
+    assert.deepEqual(await card.locator('.collab-team-leader option').evaluateAll(options => options.map(option => option.value)), ['', ...members.map(member => member.id)]);
+    await card.locator('.collab-team-leader').selectOption(members[0].id);
+    await page.locator(`.collab-membership[data-team-id="${newId}"][data-member-id="${members[0].id}"]`).uncheck();
+    assert.equal(await card.locator('.collab-team-leader').inputValue(), '');
+    await page.locator(`.collab-membership[data-team-id="${newId}"][data-member-id="${members[0].id}"]`).check();await card.locator('.collab-team-leader').selectOption(members[0].id);
+    await card.locator('.collab-team-chat').fill('https://open.kakao.com/o/PRIVATE_CHAT_NEW');await card.locator('.collab-team-note').fill('지역 고객을 위한 공동 소개');
+    await card.locator('.collab-team-up').click();assert.equal(await page.locator('#collab-admin-teams .collab-admin-team').nth(4).getAttribute('data-team-id'), newId);
+    assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.name === 'save_collab_teams').length), 0);
+    await page.click('#collab-save');await page.waitForFunction(() => !busy && window.__db.collabRevision === 2 && !collabDirty);
+    const saved = await page.evaluate(id => ({ team: window.__db.collabTeams.find(team => team.id === id), links: window.__db.collabMemberships.filter(link => link.team_id === id), writes: window.__db.log.filter(item => item.name === 'save_collab_teams') }), newId);
+    assert.equal(saved.team.name, '지역 프로젝트 협업팀');assert.equal(saved.team.leader_member_id, members[0].id);assert.equal(saved.team.sort_order, 4);assert.equal(saved.links.length, 2);assert.equal(saved.writes.length, 1);assert.equal(saved.writes[0].value.expected_revision, 1);
+    await page.click('#t2');assert.equal(await page.locator('#teamgrid .tsun').count(), 6);assert.match(await page.locator(`#teamgrid [data-team-id="${newId}"]`).innerText(), /멤버 2명/);
+    await page.click('#t4');page.removeAllListeners('dialog');page.once('dialog', dialog => dialog.dismiss());await card.locator('.collab-team-delete').click();assert.equal(await card.count(), 1);
+    page.once('dialog', dialog => dialog.accept());await card.locator('.collab-team-delete').click();assert.equal(await card.count(), 0);await page.click('#collab-save');
+    await page.waitForFunction(() => !busy && window.__db.collabRevision === 3);assert.equal(await page.evaluate(() => window.__db.members.length), 33);assert.equal(await page.evaluate(() => window.__db.collabTeams.length), 5);
+    await context.close();
+  });
+  await check('Collab warnings retain unmatched names without creating members and stale saves preserve the local draft', async () => {
+    const pendingName = '아직 등록되지 않은 공지 멤버', teamId = 'c0000000-0000-4000-8000-000000000001';
+    const { page, context } = await pageFor({ online: true, auth: true, collabPending: [{ team_id: teamId, name: pendingName }] });await page.click('#t4');await page.waitForFunction(() => collabAdminReady);
+    assert.match(await page.locator('#collab-unmatched').innerText(), /1명/);assert((await page.locator('#collab-pending-names').innerText()).includes(pendingName));
+    assert.equal(await page.evaluate(() => window.__db.members.length), 33);
+    const memberId = seed.find(member => member.name === '마루이').id;
+    await page.locator(`.collab-membership[data-team-id="${teamId}"][data-member-id="${memberId}"]`).uncheck();assert.match(await page.locator('#collab-unassigned').innerText(), /1명.*마루이/);
+    const input = page.locator(`#collab-admin-teams [data-team-id="${teamId}"] .collab-team-name`);await input.fill('저장되지 않은 수정안');await page.click('#collab-admin-title');
+    await page.evaluate(() => { window.__db.collabRevision++;window.__db.collabTeams[0].name = '다른 관리자가 저장한 팀';window.__db.realtime(); });
+    await page.waitForFunction(() => collabTeams.some(team => team.name === '다른 관리자가 저장한 팀'));
+    assert.equal(await input.inputValue(), '저장되지 않은 수정안');await page.click('#collab-save');
+    await page.waitForFunction(() => !busy && document.getElementById('collab-message').classList.contains('error'));
+    assert.equal(await input.inputValue(), '저장되지 않은 수정안');assert.equal(await page.evaluate(() => window.__db.collabTeams[0].name), '다른 관리자가 저장한 팀');
+    await page.click('#collab-reset');await page.waitForFunction(() => collabAdminReady && !collabDirty);assert.equal(await input.inputValue(), '다른 관리자가 저장한 팀');
+    await page.locator('.collab-pending-remove').click();await page.click('#collab-save');await page.waitForFunction(() => !busy && !window.__db.collabPending.length);
+    assert.equal(await page.evaluate(() => window.__db.members.length), 33);await context.close();
+  });
+  await check('Collab dirty management state and delayed private links are cleared on logout and role revocation', async () => {
+    for (const revoke of [false, true]) {
+      const { page, context } = await pageFor({ online: true, auth: true });await page.click('#t4');await page.waitForFunction(() => collabAdminReady && collabChatLinks.size === 5);
+      await page.locator('.collab-team-name').first().fill('PRIVATE_COLLAB_DRAFT');
+      await page.evaluate(() => { window.__db.holdPrivateReads = true;void loadCollabPrivate(); });await page.waitForFunction(() => window.__db.pendingPrivateReads.length >= 2);
+      await page.evaluate(revoke => { if (revoke) { window.__db.accounts[0].role = 'viewer';void loadAccess(); } else window.__db.setSession(null); }, revoke);
+      await page.waitForFunction(() => document.getElementById('collab-admin-panel').hidden && collabChatLinks.size === 0 && collabAdminDraft === null);
+      await page.evaluate(() => window.__db.releasePrivateReads());await page.waitForFunction(() => window.__db.pendingPrivateReads.length === 0);
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      assert(!await page.locator('#collab-admin-panel').isVisible());assert.equal(await page.locator('.collab-chat').count(), 0);assert.equal(await page.locator('.collab-team-chat').count(), 0);
+      assert(!(await page.content()).includes('PRIVATE_COLLAB_DRAFT'));assert(!(await page.content()).includes('PRIVATE_CHAT_'));
+      assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.name === 'save_collab_teams').length), 0);await context.close();
+    }
+  });
+  await check('Collab membership removal immediately clears cached chat links and ignores older private read responses', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true, role: 'member' });await page.click('#t2');await page.waitForFunction(() => collabChatLinks.size > 0);
+    await page.evaluate(() => { window.__db.holdPrivateReads = true;void loadCollabPrivate(); });await page.waitForFunction(() => window.__db.pendingPrivateReads.length > 0);
+    await page.evaluate(async () => { const memberId = window.__db.accounts[0].member_id;window.__db.collabMemberships = window.__db.collabMemberships.filter(link => link.member_id !== memberId);await loadMembers(); });
+    assert.equal(await page.locator('.collab-chat').count(), 0);assert.equal(await page.evaluate(() => collabChatLinks.size), 0);
+    await page.evaluate(() => window.__db.releasePrivateReads());await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.equal(await page.locator('.collab-chat').count(), 0);assert.equal(await page.evaluate(() => collabChatLinks.size), 0);await context.close();
+  });
+  await check('Collab failed management reads disable mutation while public teams remain available', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true });await page.click('#t4');await page.waitForFunction(() => collabAdminReady);
+    await page.evaluate(() => { window.__db.failRpc = true;window.__db.failRpcName = 'get_collab_team_admin'; });await page.click('#collab-reset');
+    await page.waitForFunction(() => !collabAdminReady && !!collabAdminError);assert(await page.locator('#collab-team-add').isDisabled());assert(await page.locator('#collab-save').isDisabled());
+    await page.click('#t2');assert.equal(await page.locator('#teamgrid .tsun').count(), 5);
+    await page.evaluate(() => { window.__db.failRpc = false; });await page.click('#t4');await page.click('#collab-reset');await page.waitForFunction(() => collabAdminReady);assert(await page.locator('#collab-team-add').isEnabled());
+    await context.close();
+  });
+  await check('Collab retired team proposals can be reopened and other interview selections saved and applied without changing assignments', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true });const interviewId = await uploadInterview(page);await analyzeInterview(page);
+    const before = await page.evaluate(() => JSON.stringify(window.__db.collabMemberships));
+    await page.evaluate(() => { const review = window.__db.reviews[0];review.extracted.suggestions.push({ key: 'team', value: ['퇴역 팀 이름'], reason: '과거 분석', evidence: '', confidence: 'medium', basis: 'inferred', sources: review.source_interview_ids });review.public_patch.team = '퇴역 팀 이름'; });
+    await reloadInterviewReview(page, interviewId);assert.equal(await page.locator('#interview-review [data-field="team"]').count(), 0);
+    await page.locator('#interview-review [data-field="customers"] .interview-check').check();await saveInterviewReview(page);
+    const draft = await page.evaluate(() => window.__db.log.filter(item => item.name === 'save_member_interview_review').at(-1).value.draft_patch);
+    assert(!Object.hasOwn(draft.public_patch, 'team'));assert(!draft.extracted.suggestions.some(item => item.key === 'team'));
+    await page.check('#interview-confirm');await page.click('#interview-apply');await page.waitForFunction(() => !interviewBusy && window.__db.reviews[0].status === 'applied');
+    assert.equal(await page.evaluate(() => JSON.stringify(window.__db.collabMemberships)), before);assert.equal(await page.evaluate(() => window.__db.members[0].team), '미정');
+    assert(await page.evaluate(() => window.__db.members[0].customers.includes('지역 소상공인')));await context.close();
+  });
+  await check('Collab management matrix scrolls inside its panel on desktop and mobile without page overflow', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true });await page.click('#t4');await page.waitForFunction(() => collabAdminReady);
+    for (const width of [1440, 400]) {
+      await page.setViewportSize({ width, height: 1000 });
+      const sizes = await page.evaluate(() => { const wrap = document.querySelector('.collab-matrix-wrap');return { page: document.documentElement.scrollWidth, width: innerWidth, wrap: wrap.clientWidth, content: wrap.scrollWidth }; });
+      assert(sizes.page <= sizes.width, JSON.stringify(sizes));if (width === 400) assert(sizes.content > sizes.wrap);
+      const targets = await page.locator('.collab-membership').evaluateAll(inputs => inputs.map(input => { const rect = input.closest('label').getBoundingClientRect();return { width: rect.width, height: rect.height }; }));
+      assert(targets.every(target => target.width >= 44 && target.height >= 44), 'Membership toggles need accessible touch targets.');
+    }
     await context.close();
   });
   await check('Every page slug opens and reloads directly with matching metadata at root and project paths', async () => {
@@ -611,7 +817,7 @@ try {
     await newPage.waitForLoadState('domcontentloaded');
     await assertRoute(newPage, routes[1], baseUrl);
     assert.equal(page.url(), baseUrl);
-    assert.equal(newPage.url(), new URL('power-teams/', baseUrl).href);
+    assert.equal(newPage.url(), new URL('collab-teams/', baseUrl).href);
     await newPage.close();
     for (const [tab, key, route] of [['#t3', 'Enter', routes[2]], ['#t4', 'Space', routes[3]]]) {
       await page.focus(tab);
@@ -620,7 +826,7 @@ try {
       assert.equal(page.url(), new URL(`${route.slug}/`, baseUrl).href);
       assert.equal(await page.locator(tab).evaluate(link => document.activeElement === link), true);
     }
-    assert.deepEqual(documentRequests, ['/bni-pioneer-sunshine/', '/bni-pioneer-sunshine/power-teams/']);
+    assert.deepEqual(documentRequests, ['/bni-pioneer-sunshine/', '/bni-pioneer-sunshine/collab-teams/']);
     await context.close();
   });
   await check('Signup, confirmation-resend and password-reset emails return to the app root from nested pages', async () => {
@@ -667,9 +873,9 @@ try {
     await expired.context.close();
   });
   await check('Anonymous online readers see persisted members and cannot mutate', async () => {
-    const records = [...seed, { ...seed[0], id: '00000000-0000-4000-8000-999999999999', name: '공유된 멤버', sort_order: 31 }];
+    const records = [...seed, { ...seed[0], id: '00000000-0000-4000-8000-999999999999', name: '공유된 멤버', sort_order: 33 }];
     const { page, context } = await pageFor({ online: true, records });
-    assert.equal(await page.evaluate(() => M.length), 32);
+    assert.equal(await page.evaluate(() => M.length), 34);
     await page.locator('#connection-badge').waitFor({ state: 'hidden' });
     assert(await page.locator('#connection-detail').isHidden(), 'Routine successful connection status should not occupy the header.');
     await page.click('#t4');
@@ -680,7 +886,7 @@ try {
   });
   await check('A failed database read falls back to seed data and disables authenticated writes', async () => {
     const { page, context } = await pageFor({ online: true, auth: true, failReads: true });
-    assert.equal(await page.evaluate(() => M.length), 31);
+    assert.equal(await page.evaluate(() => M.length), 33);
     assert.match(await page.locator('#connection-badge').innerText(), /오프라인.*읽기 전용/);
     assert(await page.locator('#connection-badge').isVisible(), 'Connection failures must retain a visible offline warning.');
     assert(await page.locator('#connection-detail').isVisible());
@@ -951,7 +1157,7 @@ try {
   await check('Viewers read all members, remain read-only, and can request their own member link', async () => {
     const { page, context } = await pageFor({ online: true, auth: true, role: 'viewer' });
     await page.click('#t4');
-    assert.equal(await page.evaluate(() => M.length), 31);
+    assert.equal(await page.evaluate(() => M.length), 33);
     assert(await page.locator('#admintable input').evaluateAll(inputs => inputs.every(input => input.readOnly)));
     for (const selector of ['#newrow', '#bulkb', '#importb']) assert(await page.locator(selector).isDisabled(), selector);
     assert(await page.locator('#admintable .del').evaluateAll(buttons => buttons.every(button => button.disabled)));
@@ -968,7 +1174,7 @@ try {
     const { page, context } = await pageFor({ online: true, auth: true, role: 'member' });
     await page.click('#t4');
     const rows = page.locator('#admintable tbody tr');
-    assert(await rows.first().locator('input').evaluateAll(inputs => inputs.every(input => !input.readOnly)));
+    assert(await rows.first().locator('input').evaluateAll(inputs => inputs.every(input => input.dataset.k === 'role' ? input.readOnly : !input.readOnly)));
     assert(await rows.nth(1).locator('input').evaluateAll(inputs => inputs.every(input => input.readOnly)));
     await page.click('#own-memberb');
     const ownPosition = await page.evaluate(() => {
@@ -1348,11 +1554,11 @@ try {
     await page.evaluate(() => { window.__db.holdWrites = true; });
     await page.click('#newrow');
     await page.waitForFunction(() => window.__db.pending.length === 1);
-    assert.equal(await page.evaluate(() => M.length), 31);
+    assert.equal(await page.evaluate(() => M.length), 33);
     await page.evaluate(() => window.__db.release());
-    await page.waitForFunction(() => M.length === 32);
+    await page.waitForFunction(() => M.length === 34);
     await page.locator('#admintable tbody tr:last-child .del').click();
-    await page.waitForFunction(() => M.length === 31);
+    await page.waitForFunction(() => M.length === 33);
     await page.evaluate(() => { window.__db.members[0].company = '실시간 변경 회사'; window.__db.realtime(); });
     await page.waitForFunction(() => M[0].co === '실시간 변경 회사');
     await context.close();
@@ -1361,18 +1567,56 @@ try {
     const { page, context } = await pageFor({ online: true, auth: true });
     await page.click('#t4');
     const name = seed[0].name;
-    await page.fill('#bulk', `${name}, 일괄회사, 일괄분야, 미정\n새일괄멤버, 새회사, 새분야, 미정`);
+    await page.fill('#bulk', `${name}, 일괄분야, 성장코디, 일괄회사\n새일괄멤버, "기업행사, MC", , 새회사`);
     await page.click('#bulkb');
+    assert.equal(await page.evaluate(() => window.__db.log.filter(x=>x.action!=='select'&&!x.readOnly).length),0,'Preview must not write data.');
+    assert(await page.locator('#bulk-preview').isVisible());
+    assert(await page.locator('#bulk-apply').isDisabled());
+    await page.check('#bulk-confirm');await page.click('#bulk-apply');
     await page.waitForFunction(() => M.some(m => m.n === '새일괄멤버'));
     assert.equal(await page.evaluate(name => M.find(m => m.n === name).co, name), '일괄회사');
+    assert.equal(await page.evaluate(() => M.find(m=>m.n==='새일괄멤버').f),'기업행사, MC');
+    assert.equal(await page.evaluate(name=>M.find(m=>m.n===name).role,name),'성장코디');
     assert.deepEqual(await page.evaluate(() => [...new Set(window.__db.log.filter(x => x.action !== 'select' && !x.readOnly).map(x => x.action))].sort()), ['insert', 'update']);
     await page.evaluate(name => { window.__db.members.push({ ...window.__db.members.find(m => m.name === name), id: crypto.randomUUID() }); window.__db.realtime(); }, name);
-    await page.waitForFunction(() => M.length === 33);
+    await page.waitForFunction(() => M.length === 35);
     const count = await page.evaluate(() => window.__db.log.filter(x => x.action !== 'select' && !x.readOnly).length);
-    await page.fill('#bulk', `${name}, 모호한수정, 분야, 미정`);
+    await page.fill('#bulk', `${name}, 분야, , 모호한수정`);
     await page.click('#bulkb');
+    if(await page.locator('#bulk-confirm').isVisible()){await page.check('#bulk-confirm');await page.click('#bulk-apply');}
     await page.waitForFunction(() => /동명이인|중복|같은 이름/.test(document.getElementById('bulkmsg').textContent));
     assert.equal(await page.evaluate(() => window.__db.log.filter(x => x.action !== 'select' && !x.readOnly).length), count);
+    await context.close();
+  });
+  await check('Collab chapter-role cells are administrator-only while members can still edit their own company', async () => {
+    for (const role of ['member', 'admin']) {
+      const { page, context } = await pageFor({ online: true, auth: true, role });await page.click('#t4');
+      const row = page.locator('#admintable tbody tr').first(), cell = row.locator('[data-k="role"]');
+      assert.equal(await cell.evaluate(input => input.readOnly), role !== 'admin');assert.equal(await row.locator('[data-k="co"]').evaluate(input => input.readOnly), false);
+      if (role === 'member') {
+        await cell.evaluate(input => { input.value = '의장';input.dispatchEvent(new Event('change', { bubbles: true })); });
+        assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.table === 'members' && Object.hasOwn(item.value || {}, 'chapter_role')).length), 0);
+      } else {
+        await cell.fill('운영 역할 검증');await cell.press('Tab');
+        await page.waitForFunction(() => window.__db.members[0].chapter_role === '운영 역할 검증');
+      }
+      await context.close();
+    }
+  });
+  await check('Collab bulk preview accepts quoted CSV and tab fields and requires fresh confirmation after edits', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true });await page.click('#t4');
+    await page.fill('#bulk', '미리보기 검증,"행사, MC",ST,"검증, 회사"');await page.click('#bulkb');
+    assert.deepEqual(await page.locator('#bulk-preview-table tbody td').allTextContents(), ['미리보기 검증', '행사, MC', 'ST', '검증, 회사']);
+    await page.check('#bulk-confirm');assert(await page.locator('#bulk-apply').isEnabled());
+    await page.fill('#bulk', '탭 검증\t기업행사, MC\t\t탭 회사');
+    assert(await page.locator('#bulk-apply').isDisabled());assert(!await page.locator('#bulk-confirm').isChecked());
+    assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.table === 'members' && item.action !== 'select').length), 0);
+    await page.click('#bulkb');assert.deepEqual(await page.locator('#bulk-preview-table tbody td').allTextContents(), ['탭 검증', '기업행사, MC', '역할 없음', '탭 회사']);
+    await page.check('#bulk-confirm');await page.click('#bulk-apply');
+    await page.waitForFunction(() => window.__db.members.some(member => member.name === '탭 검증'));
+    const added = await page.evaluate(() => window.__db.members.find(member => member.name === '탭 검증'));
+    assert.equal(added.field, '기업행사, MC');assert.equal(added.company, '탭 회사');assert.equal(added.chapter_role, null);assert.equal(added.team, '미정');
+    assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.table === 'members' && item.action !== 'select').some(item => Object.hasOwn(item.value || {}, 'team'))), false);
     await context.close();
   });
   await check('JSON import rejects invalid fields and maps valid existing/new members without deleting others', async () => {
@@ -1383,15 +1627,15 @@ try {
     await page.waitForFunction(() => document.getElementById('iomsg').classList.contains('error'));
     assert.equal(await page.evaluate(() => window.__db.log.filter(x => x.action !== 'select' && !x.readOnly).length), 0);
     const imported = { n: seed[0].name, co: 'JSON 회사', c: ['JSON 고객'], s: ['JSON 직군'], w: 'JSON 비지터', nw: true, real: true };
-    await page.fill('#io', JSON.stringify([imported, { n: 'JSON 새 멤버', co: '새 회사', f: '새 전문분야', g: '미정', c: [], s: [] }]));
+    await page.fill('#io', JSON.stringify([imported, { n: 'JSON 새 멤버', co: '새 회사', f: '새 전문분야', chapter_role: null, c: [], s: [] }]));
     await page.click('#importb');
     await page.waitForFunction(() => M.some(m => m.n === 'JSON 새 멤버'));
-    assert.equal(await page.evaluate(() => M.length), 32);
+    assert.equal(await page.evaluate(() => M.length), 34);
     const persisted = await page.evaluate(name => window.__db.members.find(m => m.name === name), seed[0].name);
     assert.deepEqual([persisted.company, persisted.customers, persisted.synergies, persisted.wants, persisted.is_new, persisted.is_real], ['JSON 회사', ['JSON 고객'], ['JSON 직군'], 'JSON 비지터', true, true]);
     assert(!Object.hasOwn(persisted, 'good_referral') && !Object.hasOwn(persisted, 'triggers'), 'Public imports must not contain private referral details.');
     assert.equal(persisted.field, seed[0].field, 'Omitted fields remain unchanged on existing members.');
-    assert.equal(await page.evaluate(() => window.__db.members.filter(m => m.id.startsWith('00000000-0000-4000-8000-')).length), 31);
+    assert.equal(await page.evaluate(() => window.__db.members.filter(m => m.id.startsWith('00000000-0000-4000-8000-')).length), 33);
     await context.close();
   });
   await check('A delayed background refresh cannot discard a draft typed after the read started', async () => {
@@ -1417,11 +1661,13 @@ try {
     const priorReads = await page.evaluate(() => window.__db.completedReads);
     await page.evaluate(() => {
       Object.assign(window.__db.members[0], { customers: ['constructor', '__proto__', 'toString'], synergies: ['toString', 'constructor', '__proto__'], field: 'constructor', team: '__proto__' });
+      window.__db.collabTeams[0].name = '__proto__';
       window.__db.realtime();
     });
     await page.waitForFunction(priorReads => window.__db.completedReads > priorReads, priorReads);
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
-    assert.equal(await page.evaluate(() => M[0].g), '__proto__');
+    assert.equal(await page.evaluate(() => collabTeams[0].name), '__proto__');
+    assert.equal(await page.evaluate(() => M[0].g), undefined, 'Legacy team values must not be used for current memberships.');
     assert.deepEqual(await page.evaluate(() => M[0].c), ['constructor', '__proto__', 'toString']);
     assert(!/오프라인/.test(await page.locator('#connection-badge').innerText()));
     await page.click('#t3');
@@ -2020,12 +2266,12 @@ try {
     await row.locator('.link-save').click();
     await page.waitForFunction(() => window.__db.pending.length > 0);
     assert.equal(await page.evaluate(() => connectedMembers(M[0], M[0].s[0]).length), 0);
-    assert.equal(await page.evaluate(() => teams()['기업'].gaps['홈페이지 제작']), 1);
+    assert.equal(await page.evaluate(() => Object.values(teams()).find(team=>team.members.some(member=>member.id===M[0].id)).gaps['홈페이지 제작']), 1);
     assert.equal(await page.evaluate(() => window.__db.links.length), 0);
     await page.evaluate(() => window.__db.release());
     await page.waitForFunction(() => !busy && connectedMembers(M[0], M[0].s[0]).length === 1);
     assert.deepEqual(await page.evaluate(() => connectedMembers(M[0], M[0].s[0]).map(member => member.id)), [records[1].id]);
-    assert.equal(await page.evaluate(() => teams()['기업'].gaps['홈페이지 제작'] ?? 0), 0);
+    assert.equal(await page.evaluate(() => Object.values(teams()).find(team=>team.members.some(member=>member.id===M[0].id)).gaps['홈페이지 제작'] ?? 0), 0);
     assert(!await page.evaluate(() => eureka().some(item => item.f === '홈페이지 제작')));
     const saved = await page.evaluate(() => window.__db.log.find(item => item.name === 'set_member_synergy_link').value);
     assert.deepEqual(saved, { source_member_id: records[0].id, synergy: '홈페이지 제작', target_member_id: records[1].id, expected_member_updated_at: records[0].updated_at, expected_link_updated_at: null });
@@ -2034,7 +2280,7 @@ try {
     await row.locator('.link-clear').click();
     await page.waitForFunction(() => !busy && synergyLinks.length === 0);
     assert.equal(await page.evaluate(() => connectedMembers(M[0], M[0].s[0]).length), 0);
-    assert.equal(await page.evaluate(() => teams()['기업'].gaps['홈페이지 제작']), 1);
+    assert.equal(await page.evaluate(() => Object.values(teams()).find(team=>team.members.some(member=>member.id===M[0].id)).gaps['홈페이지 제작']), 1);
     assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.name === 'set_member_synergy_link').at(-1).value.expected_link_updated_at), stamp);
     assert.deepEqual(await page.evaluate(() => window.__db.members[0].synergies), records[0].synergies);
     await context.close();
@@ -2077,7 +2323,7 @@ try {
       assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.name === 'set_member_synergy_link').length), 0);
       await page.evaluate(() => { window.__db.links = [{ source_member_id: M[0].id, synergy: M[0].s[0], target_member_id: M[1].id, updated_at: '2026-09-21T02:00:00.000Z' }]; window.__db.realtime(); });
       await page.waitForFunction(() => connectedMembers(M[0], M[0].s[0])[0]?.id === M[1].id);
-      assert.equal(await page.evaluate(() => teams()['기업'].gaps['홈페이지 제작'] ?? 0), 0);
+      assert.equal(await page.evaluate(() => Object.values(teams()).find(team=>team.members.some(member=>member.id===M[0].id)).gaps['홈페이지 제작'] ?? 0), 0);
       await page.click('#t1'); assert.match(await page.locator('#stage').innerText(), /연결 대상/);
       await context.close();
     }
@@ -2153,18 +2399,18 @@ try {
     await page.waitForFunction(() => window.__db.pending.length > 0);
     assert.equal(await page.inputValue('#admin-member-select'), original);
     await page.evaluate(() => window.__db.release());
-    await page.waitForFunction(() => !busy && M.length === window.__db.members.length && M.length === 32);
+    await page.waitForFunction(() => !busy && M.length === window.__db.members.length && M.length === 34);
     const added = await page.evaluate(() => window.__db.members.at(-1).id);
     await page.waitForFunction(id => document.getElementById('admin-member-select').value === id, added);
     await page.locator('#admintable tbody tr:visible .del').click();
-    await page.waitForFunction(() => !busy && M.length === 31);
+    await page.waitForFunction(() => !busy && M.length === 33);
     assert.notEqual(await page.inputValue('#admin-member-select'), added); assert.equal(await page.locator('#admintable tbody tr:visible').count(), 1);
     await context.close();
     const member = await pageFor({ online: true, auth: true, role: 'member' });
     await member.page.click('#t4'); await member.page.fill('#admin-member-search', '없는 이름'); await member.page.click('#own-memberb');
     assert.equal(await member.page.inputValue('#admin-member-search'), ''); assert.equal(await member.page.inputValue('#admin-member-select'), seed[0].id);
     assert.equal(await member.page.locator('#admintable tbody tr:visible').count(), 1);
-    assert(await member.page.locator('#admintable tbody tr:visible input').evaluateAll(inputs => inputs.every(input => !input.readOnly)));
+    assert(await member.page.locator('#admintable tbody tr:visible input').evaluateAll(inputs => inputs.every(input => input.dataset.k === 'role' ? input.readOnly : !input.readOnly)));
     await member.context.close();
   });
   await check('Losing administrator access clears private review state and discards late AI responses', async () => {
@@ -2291,6 +2537,22 @@ try {
   });
   assert.deepEqual(failures, [], 'No browser runtime errors');
   console.log('All browser checks passed. No external authentication or data writes were performed.');
+  if (process.argv.includes('--collab-screenshots') || process.argv.includes('--screenshots')) {
+    const directory = fileURLToPath(new URL('../output/9th-collab', import.meta.url));await mkdir(directory, { recursive: true });
+    const { page, context } = await pageFor({ online: true, auth: true });await page.waitForFunction(() => collabAdminReady);
+    for (const width of [1440, 400]) {
+      await page.setViewportSize({ width, height: width === 400 ? 1000 : 1100 });
+      await page.click('#t2');await page.evaluate(() => scrollTo(0, 0));
+      await page.screenshot({ path: path.join(directory, `collab-teams-${width}.png`), fullPage: true, animations: 'disabled' });
+      await page.click('#t4');
+      for (const [label, selector] of [['admin', '#collab-admin-panel'], ['matrix', '.collab-matrix-wrap']]) {
+        await page.locator(selector).evaluate(element => scrollTo(0, scrollY + element.getBoundingClientRect().top - document.querySelector('nav').getBoundingClientRect().height - 16));
+        await page.screenshot({ path: path.join(directory, `collab-${label}-${width}.png`), animations: 'disabled' });
+      }
+      console.log(`SCREENSHOT output/9th-collab: teams, admin, matrix at ${width}px`);
+    }
+    await context.close();
+  }
   if (process.argv.includes('--interview-screenshots')) {
     const directory = fileURLToPath(new URL('../diagnostics-output/interview-integration', import.meta.url));
     await mkdir(directory, { recursive: true });
