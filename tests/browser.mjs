@@ -121,7 +121,7 @@ function makeMock(initial, options) {
     constructor(name, value) { this.name = name; this.value = value; }
     abortSignal() { return this; }
     async execute() {
-      const readOnly = ['list_member_accounts', 'get_member_details', 'list_member_interviews', 'get_member_interview', 'list_member_interview_reviews', 'get_member_interview_review'].includes(this.name);
+      const readOnly = ['list_member_accounts', 'get_member_details', 'get_member_referrals', 'list_member_interviews', 'get_member_interview', 'list_member_interview_reviews', 'get_member_interview_review'].includes(this.name);
       state.log.push({ action: 'rpc', name: this.name, value: clone(this.value), readOnly });
       if (readOnly) {
         const reader = clone(currentAccount() || null);
@@ -133,6 +133,9 @@ function makeMock(initial, options) {
         } else if (this.name === 'get_member_details') {
           if (!reader || reader.role === 'viewer') return { data: [], error: null };
           data = clone(state.details.filter(row => (reader.role === 'admin' || row.member_id === reader.member_id) && (!this.value?.target_member_id || row.member_id === this.value.target_member_id)));
+        } else if (this.name === 'get_member_referrals') {
+          if (!reader || !['admin', 'member'].includes(reader.role)) return permissionError();
+          data = clone(state.details.filter(row => !this.value?.target_member_id || row.member_id === this.value.target_member_id).map(({ member_id, good_referral, triggers }) => ({ member_id, good_referral, triggers })));
         } else {
           if (reader?.role !== 'admin') return permissionError();
           data = this.name === 'list_member_interview_reviews'
@@ -1425,19 +1428,140 @@ try {
     assert.match(await page.locator('#custtable').innerText(), /constructor/);
     await context.close();
   });
-  await check('Private member details stay permission-scoped and never enter public exports', async () => {
+  await check('Shared referrals reach approved members while private details and public exports stay permission-scoped', async () => {
     for (const role of ['anonymous', 'viewer', 'member', 'admin']) {
       const { page, context } = await pageFor({ online: true, auth: role !== 'anonymous', role: role === 'anonymous' ? 'viewer' : role });
       await page.click('#t4');
-      if (role === 'member' || role === 'admin') await page.waitForFunction(() => window.__db.log.some(row => row.name === 'get_member_details'));
+      if (role === 'member' || role === 'admin') await page.waitForFunction(() => privateReady && memberReferralsReady);
       await assertPublicExportPrivate(page);
       if (role === 'anonymous' || role === 'viewer') {
         const exposure = await page.evaluate(() => /PRIVATE_|INTERVIEW_PRIVATE_/.test(document.body.innerText + Array.from(document.querySelectorAll('input,textarea')).map(input => input.value).join(' ')));
         assert.equal(exposure, false, `${role} must not receive private member details.`);
-      } else if (role === 'member') {
+        assert.equal(await page.evaluate(() => window.__db.log.filter(row => row.name === 'get_member_referrals').length), 0, `${role} must not request member-shared referrals.`);
+      } else {
         const other = await page.locator('#admintable tbody tr:nth-child(2) input').evaluateAll(inputs => inputs.map(input => input.value).join(' '));
-        assert(!other.includes('PRIVATE_'), 'A member must not see another member’s referral details.');
+        assert(other.includes(`PRIVATE_REFERRAL_${seed[1].id}`) && other.includes(`PRIVATE_TRIGGER_${seed[1].id}`), `${role} must see other members' shared referral information.`);
+        const shared = await page.evaluate(() => [...memberReferrals.values()]);
+        assert.equal(shared.length, seed.length);
+        assert(shared.every(row => Object.keys(row).sort().join(',') === 'good_referral,member_id,triggers'), 'Shared referral records must not contain customer companies or private metadata.');
+        await page.click('#t1');
+        await selectSunshine(page, seed[1]);
+        const details = await page.locator('#wantbox').innerText();
+        assert(details.includes(`PRIVATE_REFERRAL_${seed[1].id}`) && details.includes(`PRIVATE_TRIGGER_${seed[1].id}`));
+        assert.match(details, /멤버 (전체 )?공유/);
+        assert(!/PRIVATE_COMPANY_|관리자와 본인/.test(details), 'Member-visible referral cards must have accurate labels and exclude private companies.');
+        if (role === 'member') {
+          assert.equal(await page.evaluate(id => privateFor(M.find(member => member.id === id)), seed[1].id), null, 'Other members must still have no access to private details.');
+          assert.deepEqual(await page.evaluate(() => [...privateDetails.keys()]), [seed[0].id]);
+          await page.click('#t4');
+          const row = page.locator('#admintable tbody tr:nth-child(2)');
+          assert(await row.locator('input[data-k="v"],input[data-k="tg"]').evaluateAll(inputs => inputs.every(input => input.readOnly)));
+          await row.locator('input[data-k="v"]').evaluate(input => { input.value = '다른 멤버 리퍼럴 변조 시도'; input.dispatchEvent(new Event('change', { bubbles: true })); });
+          await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+          assert.equal(await page.evaluate(() => window.__db.log.filter(row => row.name === 'update_member_details').length), 0, 'Read access must not grant write access to another member.');
+        }
       }
+      await context.close();
+    }
+  });
+  await check('Shared referrals clear after logout, role revocation, or account switch including late reads', async () => {
+    for (const loss of ['logout', 'role', 'account']) {
+      const { page, context } = await pageFor({ online: true, auth: true, role: 'member' });
+      await page.waitForFunction(() => privateReady && memberReferralsReady);
+      await page.evaluate(() => { window.__db.holdPrivateReads = true; window.__db.realtime(); });
+      await page.waitForFunction(() => window.__db.pendingPrivateReads.length >= 2);
+      await page.evaluate(loss => {
+        if (loss === 'logout') window.__db.setSession(null);
+        else if (loss === 'account') window.__db.setSession({ user: { id: 'second-user', email: 'second-user@example.test' } });
+        else { window.__db.accounts.find(row => row.user_id === 'test-user').role = 'viewer'; window.__db.setSession(window.__db.session, 'TOKEN_REFRESHED'); }
+      }, loss);
+      await page.waitForFunction(() => memberReferrals.size === 0 && privateDetails.size === 0 && !memberReferralsReady);
+      await page.evaluate(async () => { window.__db.releasePrivateReads(); await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); });
+      assert.deepEqual(await page.evaluate(() => ({ shared: memberReferrals.size, private: privateDetails.size, ready: memberReferralsReady })), { shared: 0, private: 0, ready: false });
+      const exposure = await page.evaluate(() => /PRIVATE_REFERRAL_|PRIVATE_TRIGGER_|PRIVATE_COMPANY_/.test(document.body.innerText + Array.from(document.querySelectorAll('input,textarea')).map(input => input.value).join(' ')));
+      assert.equal(exposure, false, `${loss}: loaded or late referral data must not remain visible after access changes.`);
+      await context.close();
+    }
+  });
+  await check('Shared referral changes preserve public synergy matching and connection counts', async () => {
+    const records = connectionFixtures(), { page, context } = await pageFor({ online: true, auth: true, role: 'member', records });
+    await page.waitForFunction(() => memberReferralsReady);
+    const matching = () => page.evaluate(() => ({ matches: M.map(member => syn(member).map(field => connectedMembers(member, field).map(target => target.id))), teams: teams() }));
+    const before = await matching();
+    await page.evaluate(() => { window.__db.details.forEach(row => { row.good_referral = '모든 직군을 임의 연결하지 않아야 함'; row.triggers = ['다른 멤버와 이야기하고 싶다']; }); window.__db.realtime(); });
+    await page.waitForFunction(() => [...memberReferrals.values()].every(row => row.good_referral === '모든 직군을 임의 연결하지 않아야 함'));
+    assert.deepEqual(await matching(), before, 'Synergy matching depends on the public member fields and approved links, regardless of shared referral wording.');
+    await context.close();
+  });
+  await check('Shared referrals refresh after a member updates their own referral without changing private companies', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true, role: 'member' });
+    await page.waitForFunction(() => privateReady && memberReferralsReady);
+    await page.click('#t4');
+    const own = page.locator('#admintable tbody tr:first-child input[data-k="v"]');
+    await own.fill('멤버 전체에 전달할 새로운 리퍼럴');
+    await own.dispatchEvent('change');
+    await page.waitForFunction(id => !busy && memberReferrals.get(id)?.good_referral === '멤버 전체에 전달할 새로운 리퍼럴', seed[0].id);
+    const writes = await page.evaluate(() => window.__db.log.filter(row => row.name === 'update_member_details'));
+    assert.equal(writes.length, 1);
+    assert.deepEqual(writes[0].value.details_patch, { good_referral: '멤버 전체에 전달할 새로운 리퍼럴' });
+    assert.deepEqual(await page.evaluate(id => window.__db.details.find(row => row.member_id === id).customer_companies, seed[0].id), [`PRIVATE_COMPANY_${seed[0].id}`]);
+    await page.click('#t1');
+    await selectSunshine(page, seed[0]);
+    assert.match(await page.locator('#wantbox').innerText(), /멤버 전체에 전달할 새로운 리퍼럴/);
+    await assertPublicExportPrivate(page);
+    await context.close();
+  });
+  await check('Shared referral edits retain their displayed revision and reject stale drafts after a background refresh', async () => {
+    for (const role of ['member', 'admin']) {
+      const { page, context } = await pageFor({ online: true, auth: true, role });
+      await page.waitForFunction(() => privateReady && memberReferralsReady);
+      await page.click('#t4');
+      const input = page.locator('#admintable tbody tr:first-child input[data-k="v"]');
+      await input.fill('이전 내용을 바탕으로 편집 중인 리퍼럴');
+      await page.evaluate(id => {
+        const detail = window.__db.details.find(row => row.member_id === id);
+        detail.good_referral = '다른 관리자가 먼저 저장한 최신 리퍼럴';
+        detail.revision++;
+        window.__db.realtime();
+      }, seed[0].id);
+      await page.waitForFunction(id => privateDetails.get(id)?.revision === 2 && memberReferrals.get(id)?.good_referral === '다른 관리자가 먼저 저장한 최신 리퍼럴', seed[0].id);
+      assert.equal(await input.inputValue(), '이전 내용을 바탕으로 편집 중인 리퍼럴', 'A background refresh must preserve the active draft.');
+      await input.dispatchEvent('change');
+      await page.waitForFunction(() => !busy && document.getElementById('adminmsg').classList.contains('error'));
+      const writes = await page.evaluate(() => window.__db.log.filter(row => row.name === 'update_member_details'));
+      assert.equal(writes.length, 1);
+      assert.equal(writes[0].value.expected_revision, 1, 'Saving must use the revision shown when editing began, not the refreshed revision.');
+      assert.equal(await page.evaluate(id => window.__db.details.find(row => row.member_id === id).good_referral, seed[0].id), '다른 관리자가 먼저 저장한 최신 리퍼럴', 'An old draft must not overwrite the newer saved referral.');
+      assert.equal(await page.evaluate(id => window.__db.details.find(row => row.member_id === id).revision, seed[0].id), 2);
+      await context.close();
+    }
+  });
+  await check('Shared referral read failure has a retry and stays independent of private detail read failure', async () => {
+    for (const rpc of ['get_member_referrals', 'get_member_details']) {
+      const { page, context } = await pageFor({ online: true, auth: true, role: 'member' });
+      await page.waitForFunction(() => privateReady && memberReferralsReady);
+      await page.evaluate(rpc => { window.__db.failRpc = true; window.__db.failRpcName = rpc; window.__db.realtime(); }, rpc);
+      await page.waitForFunction(rpc => rpc === 'get_member_referrals' ? !memberReferralsReady && privateReady : memberReferralsReady && !privateReady, rpc);
+      assert.equal(await page.evaluate(() => online), true, 'A referral/private detail failure must not disconnect the public roster.');
+      assert.equal(await page.evaluate(() => M.length), seed.length);
+      if (rpc === 'get_member_referrals') {
+        assert.equal(await page.evaluate(() => memberReferrals.size), 0, 'Do not present stale referrals as current data after a failed refresh.');
+        assert(!/PRIVATE_REFERRAL_|PRIVATE_TRIGGER_/.test(await page.locator('#wantbox').innerText()));
+        assert(await page.locator('#member-referrals-status').isVisible());
+        assert(await page.locator('#member-referrals-retry').isEnabled());
+        await page.evaluate(() => { window.__db.failRpc = false; });
+        await page.click('#member-referrals-retry');
+        await page.waitForFunction(() => memberReferralsReady);
+        assert.equal(await page.locator('#member-referrals-status').count(), 0);
+        assert.match(await page.locator('#wantbox').innerText(), /PRIVATE_REFERRAL_/);
+        assert(!/멤버 공유 정보를 불러오지 못했습니다/.test(await page.locator('#adminmsg').textContent()), 'Successful retry must remove the earlier shared-read error from the management page too.');
+      } else {
+        await selectSunshine(page, seed[1]);
+        assert((await page.locator('#wantbox').innerText()).includes(`PRIVATE_REFERRAL_${seed[1].id}`), 'Shared referral reading remains available when private revision data cannot load.');
+        await page.click('#t4');
+        assert(await page.locator('#admintable tbody tr:first-child input[data-k="v"],#admintable tbody tr:first-child input[data-k="tg"]').evaluateAll(inputs => inputs.every(input => input.readOnly)), 'Without a private revision, referral editing must wait for recovery.');
+      }
+      await assertPublicExportPrivate(page);
       await context.close();
     }
   });

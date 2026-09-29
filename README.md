@@ -25,8 +25,8 @@ Supabase `public.members`가 명단의 단일 원본입니다. 데이터는 `sor
 | 구분 | 읽기 | 수정 |
 |---|---|---|
 | 비로그인·읽기 전용 계정 (`viewer`) | 공개 명단 전체 | 불가 |
-| 승인된 멤버 (`member`) | 공개 명단 전체 | 연결된 본인 멤버의 정보만 |
-| 전체 관리자 (`admin`) | 공개 명단 전체·가입 계정 | 전체 멤버 추가·수정·삭제, 일괄 반영·불러오기, 계정 권한 승인·변경 |
+| 승인된 멤버 (`member`) | 공개 명단 전체·모든 멤버의 좋은 리퍼럴과 연결 트리거·본인 고객사 명단 | 연결된 본인 멤버의 정보만 |
+| 전체 관리자 (`admin`) | 공개 명단 전체·가입 계정·모든 멤버의 리퍼럴과 고객사 명단·인터뷰 자료 | 전체 멤버 추가·수정·삭제, 일괄 반영·불러오기, 계정 권한 승인·변경 |
 
 처음에는 **처음 가입 → 이름·이메일·비밀번호 입력 → 가입 확인 메일의 링크 누르기**로 가입합니다. 이름은 가입할 때 필수이며 앞뒤 공백과 연속 공백을 정리해 최대 80자로 받습니다. 다음부터는 **이메일과 비밀번호로 로그인**합니다. 같은 브라우저에서는 로그인 상태가 유지됩니다. 비밀번호를 잊었거나 이전에 이메일 링크로만 가입했다면 로그인 창의 비밀번호 설정·재설정 기능으로 메일을 받아 새 비밀번호를 정합니다. 이미 로그인한 사용자는 비밀번호 설정 버튼으로 설정할 수 있습니다.
 
@@ -42,7 +42,7 @@ Supabase `public.members`가 명단의 단일 원본입니다. 데이터는 `sor
 
 계정 이메일과 멤버 연결은 `public.member_accounts`에 저장하며, 본인 계정과 관리자에게만 읽기를 허용합니다. 감사용 `members.updated_by` 이메일도 공개 조회에서 제외합니다. 브라우저가 역할·이메일·연결 UUID를 직접 수정할 수 없습니다. 신청과 승인은 인증된 사용자에게만 열린 제한된 RPC를 사용하고, 실제 멤버 쓰기는 DB의 RLS로 다시 검사합니다. 일반 멤버는 본인의 내용만 수정하며 명단 순서와 신입·실데이터 관리 표시는 관리자가 변경합니다.
 
-인터뷰 원본 파일·추출 원문·AI 제안·검토 기록은 **관리자만** 읽고 저장합니다. `private` 스키마와 비공개 Storage 버킷 `member-interviews`에 보관하며, 공개 Realtime·JSON 내보내기·오프라인 시드에는 포함하지 않습니다. 좋은 리퍼럴·리퍼럴 트리거·실제 고객사명은 `private.member_details`로 분리되어 관리자와 승인된 해당 멤버만 열람할 수 있습니다. 공개 `customers`에는 실제 고객사 실명 대신 고객 유형을 기록합니다.
+인터뷰 원본 파일·추출 원문·AI 제안·검토 기록은 **관리자만** 읽고 저장합니다. `private` 스키마와 비공개 Storage 버킷 `member-interviews`에 보관하며, 공개 Realtime·JSON 내보내기·오프라인 시드에는 포함하지 않습니다. 반영된 **좋은 리퍼럴·이 말이 들리면 연결**은 서로 소개할 기회를 찾도록 관리자와 승인된 로그인 멤버 모두에게 공유합니다. 저장소는 `private.member_details`를 유지하며 `get_member_referrals` RPC가 멤버 ID와 이 두 항목만 반환합니다. 이메일 인증과 본인 멤버 연결까지 승인된 계정이 다른 멤버의 리퍼럴을 조회할 수 있으며, 비로그인·읽기 전용 계정에는 반환하지 않습니다. 실제 고객사명은 관리자와 승인된 해당 멤버만 열람합니다. 공개 `customers`에는 실제 고객사 실명 대신 고객 유형을 기록합니다.
 
 ## 멤버 단위 통합 분석으로 선샤인 업데이트하기
 
@@ -56,7 +56,7 @@ Supabase `public.members`가 명단의 단일 원본입니다. 데이터는 `sor
 
 ### AI 서버 연결 — 최초 한 번
 
-1. 기존 역할 설정 후 [`supabase/interviews.sql`](supabase/interviews.sql), [`supabase/interview-reviews.sql`](supabase/interview-reviews.sql) 순으로 적용합니다. 이미 인터뷰 기능을 사용 중인 서버는 새 `interview-reviews.sql`만 적용하면 됩니다. 기존 공개 리퍼럴·트리거는 비공개 테이블로 옮기고 공개 복사본을 비웁니다. 재실행은 가능하지만 공개·비공개 값이 충돌하면 중단합니다. 기본 설정을 재실행할 때도 항상 `interview-reviews.sql`을 마지막에 실행해야 통합 분석 RPC가 유지됩니다.
+1. 기존 역할 설정 후 [`supabase/interviews.sql`](supabase/interviews.sql), [`supabase/interview-reviews.sql`](supabase/interview-reviews.sql), [`supabase/member-referrals.sql`](supabase/member-referrals.sql) 순으로 적용합니다. 이미 통합 분석 기능을 사용 중인 서버는 새 `member-referrals.sql`만 적용하면 멤버 간 리퍼럴 공유를 사용할 수 있습니다. 기존 공개 리퍼럴·트리거는 `private.member_details`로 옮겨 보관하며, 멤버 공유 조회는 별도 RPC를 사용합니다. 재실행은 가능하지만 공개·비공개 값이 충돌하면 중단합니다. 기본 설정을 재실행할 때도 `interview-reviews.sql` 다음에 `member-referrals.sql`을 마지막으로 적용해야 통합 분석과 공유 조회 권한이 유지됩니다.
 2. [`supabase/functions/analyze-interview/index.ts`](supabase/functions/analyze-interview/index.ts)를 `analyze-interview` Edge Function으로 배포하고 JWT 검증을 켭니다. 함수는 Auth의 실제 사용자와 DB의 관리자 역할을 다시 확인합니다. 데이터베이스 관리자 키는 사용하지 않습니다.
 3. Supabase **Edge Functions → Secrets**에 `OPENAI_API_KEY`를 등록합니다. API 키는 채팅, HTML, 저장소에 넣지 않습니다. 기본 `SUPABASE_URL`·`SUPABASE_ANON_KEY`는 Edge Function 서버 환경에서 읽습니다. 개발용 Origin이 필요하면 `ALLOWED_ORIGINS`에 허용할 출처를 쉼표로 명시합니다. 기본값은 `https://woolim0109.github.io,https://sunshine.bni-pioneer.com`이며, `ALLOWED_ORIGINS`를 지정하면 기본 목록을 대체하므로 운영에 필요한 출처를 모두 포함하세요.
 4. OpenAI API 프로젝트의 결제·사용 한도를 확인하고 페이지를 새로고침합니다. ChatGPT 구독과 API 사용료는 별도입니다. 현재 분석 모델은 `gpt-5.4-mini-2026-03-17`이며 최대 출력 6,000토큰, 멤버별 중복 분석 방지와 100초 요청 제한을 적용합니다. API 응답 보관 옵션은 `store:false`입니다. 공급자의 별도 데이터 처리 정책은 [OpenAI API 데이터 안내](https://developers.openai.com/api/docs/guides/your-data)를 확인하세요.
@@ -110,7 +110,7 @@ try {
 
 ## 연결 검토와 모바일 관리
 
-기존 역할 설정 이후 [`supabase/connections.sql`](supabase/connections.sql)을 실행합니다. `member_synergy_links`는 관리자 확정 결과만 보관하며 누구나 읽을 수 있습니다. 직접 쓰기는 허용하지 않고, 실제 관리자 권한과 멤버·연결의 수정 시각을 확인하는 RPC로만 확정·해제합니다. 인터뷰 원문과 비공개 리퍼럴은 이 테이블에 저장하지 않습니다.
+기존 역할 설정 이후 [`supabase/connections.sql`](supabase/connections.sql)을 실행합니다. `member_synergy_links`는 관리자 확정 결과만 보관하며 누구나 읽을 수 있습니다. 직접 쓰기는 허용하지 않고, 실제 관리자 권한과 멤버·연결의 수정 시각을 확인하는 RPC로만 확정·해제합니다. 인터뷰 원문과 멤버 공유 리퍼럴은 이 테이블에 저장하지 않습니다. 상생직군 연결은 공개 명단의 전문분야·상생직군과 확정 연결을 사용하며, 리퍼럴 공유는 멤버가 서로 소개할 기회를 구체적으로 확인하는 데 사용합니다.
 
 - **멤버 관리 → 상생직군 연결 검토**를 펼치고 멤버를 선택합니다. 관련 업종은 후보이며 자동 확정되지 않습니다. 실제 제공 서비스를 확인하고 대상 멤버를 선택해 **연결 확정**을 누릅니다. 원래 상생직군 문구를 유지하며, 확정 결과는 나의 선샤인·파워팀·챕터 지도에 함께 반영됩니다. **확정 해제**로 관리자 지정 연결만 제거할 수 있습니다.
 - 공백·기호만 다른 같은 업종은 동일하게 찾으며, 같은 업종의 멤버가 여러 명이면 모두 표시합니다. 유사 표현 후보 검색에는 별도 AI 호출이나 사용료가 없습니다.
@@ -159,6 +159,8 @@ psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/roles.sql
 
 `node --experimental-strip-types tests/interview-edge.mjs`는 실제 API 호출 없이 다중 문서 요청·근거 ID·AI 출력·오류 처리를 검사합니다. `node tests/interview-extraction.mjs`는 PDF/DOCX/TXT 판독과 단계 추정을 확인합니다. 로컬 `121자료집`의 네 PDF도 단계 추정 검증에 사용하며, 이 비공개 원본은 저장소나 공개 배포물에 넣지 않습니다.
 
-## 비공개 데이터 유지
+`tests/member-referrals.sql`은 공유 설정까지 적용한 테스트 DB에서 승인 멤버 간 조회, 원본·고객사 범위, 타인 수정 차단, 통합 검토 반영 후 공유를 검사하고 테스트 데이터를 롤백합니다. `node tests/browser.mjs --filter="Shared referral"`은 화면 노출, 로그아웃·권한 변경, 조회 실패·재시도와 편집 충돌을 검증합니다.
 
-리퍼럴 트리거·좋은 리퍼럴·고객사 명단은 `supabase/interviews.sql`의 비공개 테이블에 분리되어 있으며 관리자와 승인된 해당 멤버만 전용 RPC로 조회할 수 있습니다. 인터뷰 원문·분석 제안·검토 이력은 관리자만 조회합니다. 공개 명단, 연결 매핑, HTML 오프라인 시드, 내보내기에 비공개 내용을 복사하지 마세요.
+## 멤버 공유와 비공개 데이터
+
+좋은 리퍼럴과 연결 트리거는 `supabase/member-referrals.sql`의 `get_member_referrals` RPC로 관리자와 승인된 로그인 멤버 모두에게 공유합니다. 이 RPC는 `member_id`, `good_referral`, `triggers`만 반환합니다. 실제 고객사 명단은 관리자와 승인된 해당 멤버만, 인터뷰 원문·분석 제안·검토 이력은 관리자만 조회합니다. 이 항목들은 `private` 스키마에 계속 보관하며 공개 명단, 연결 매핑, HTML 오프라인 시드, JSON 내보내기에 복사하지 않습니다. 리퍼럴 공유가 다른 멤버의 수정 권한을 부여하지는 않습니다.

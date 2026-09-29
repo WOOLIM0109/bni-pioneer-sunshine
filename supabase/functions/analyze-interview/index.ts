@@ -14,7 +14,7 @@ export const DOCUMENT_LIMITS={count:20,fileBytes:20*1024*1024,totalFileBytes:40*
 const STAGE_LABELS:Record<string,string>={profile:'신상명세표',visibility:'아는 단계',credibility:'신뢰 단계',profitability:'수익 단계'};
 const KEYS=['field','team','customers','synergies','wants','good_referral','triggers','customer_companies'];
 const SINGLE=new Set(['field','team','wants','good_referral']);
-const PUBLIC=new Set(['field','team','customers','synergies','wants']);
+const SHARED=new Set(['field','team','customers','synergies','wants','good_referral','triggers']);
 export const ANALYSIS_LIMITS={summary:5000,name:200,warnings:30,warning:1500,suggestions:8,values:30,value:1000,reason:1000,evidence:1500};
 const LABELS:Record<string,string>={field:'전문분야',team:'파워팀',customers:'핵심고객',synergies:'상생직군',wants:'원하는 비지터',good_referral:'좋은 리퍼럴',triggers:'리퍼럴 트리거',customer_companies:'실제 고객사'};
 const INVALID_ANALYSIS_MESSAGE='AI 결과를 검토안으로 읽지 못했습니다. 원문은 보관되어 있습니다. 반복 분석 대신 관리자에게 오류 코드 invalid_analysis를 알려 주세요.';
@@ -46,7 +46,7 @@ const INSTRUCTIONS=`당신은 BNI 파이오니아 선샤인의 관리자 검토�
 원문에서 명시한 사실은 basis=stated, 짧은 원문 발췌(또는 PDF 페이지+그 문구)를 evidence에 담으세요. 합리적인 제안은 basis=inferred로 표시하고 근거와 불확실성을 설명하세요. 근거 없는 회사·사람·직업·성공사례를 만들지 마세요. 긴 근거는 reason ${ANALYSIS_LIMITS.reason}자, evidence ${ANALYSIS_LIMITS.evidence}자 이내로 간단하게.
 기존 멤버 목록은 업종 명칭 통일·상생직군/파워팀 추천에만 참고하세요. 다른 멤버의 고객·답변을 이 멤버의 사실로 옮기지 마세요. 파워팀을 추정하면 반드시 inferred로 표시하세요.
 상생직군이 실제 챕터 멤버의 전문분야와 의미가 같으면 해당 멤버의 field 문자열을 띄어쓰기·기호까지 그대로 사용하세요. 연결 가능한 사람을 만들려고 다른 업종을 억지로 같은 것으로 보지 마세요. 챕터에 없는 직군도 필요성이 명확하면 초대 대상으로 제안할 수 있습니다. 고객 유형 역시 기존 customers와 의미가 같을 때는 기존 표현을 사용하여 파워팀의 공통 고객 집계가 가능하게 하세요. team은 현재 팀 이름 중 가장 적합한 것을 우선 검토하고, 현재 배치보다 나은 이유가 없으면 변경 제안을 생략하세요.
-공개 가능 항목 field/team/customers/synergies/wants에는 실제 고객사 실명, 개인 이름, 전화번호, 이메일, 상세 주소, 금융·건강 등 민감정보를 넣지 마세요. customers는 '제조업 대표', '예비창업자'처럼 고객 유형이어야 합니다. 실제 고객사 이름은 customer_companies에만 기록하세요. good_referral/triggers/customer_companies는 비공개 검토 항목입니다. 민감한 연락처는 어느 제안에도 복사하지 말고 제외 사실을 warnings에 요약하세요.
+공개 가능 항목 field/team/customers/synergies/wants와 승인된 로그인 멤버 전체에게 공유하는 good_referral/triggers에는 실제 고객사 실명, 개인 이름, 전화번호, 이메일, 상세 주소, 금융·건강 등 민감정보를 넣지 마세요. customers는 '제조업 대표', '예비창업자'처럼 고객 유형이어야 합니다. good_referral은 서로 소개할 수 있는 고객 상황, triggers는 연결 기회를 알아볼 수 있는 말로 정리하세요. 실제 고객사 이름은 관리자와 승인된 본인만 보는 customer_companies에만 기록하세요. 분석 초안과 원문은 관리자 검토용이며 good_referral/triggers는 반영 후 멤버 공유 항목입니다. 민감한 연락처는 어느 제안에도 복사하지 말고 제외 사실을 warnings에 요약하세요.
 PDF의 시각 자료와 글자가 다르거나 질문과 답의 연결이 불분명하면 추측하지 말고 warnings에 적으세요. 문서의 이름과 선택된 멤버의 이름이 다르면 detected_name에 문서의 이름을 기록하고 warnings에서 알리세요. summary는 인터뷰 요약이며 공개 여부·승인·저장 완료를 주장하지 마세요.
 모든 제안은 관리자 확인 전 초안입니다. 최대 ${ANALYSIS_LIMITS.suggestions}개 항목만 제안하고 이유와 근거를 간결하게 작성하세요. summary는 ${ANALYSIS_LIMITS.summary}자, detected_name은 ${ANALYSIS_LIMITS.name}자 이내입니다. warnings는 최대 ${ANALYSIS_LIMITS.warnings}개이며 각 ${ANALYSIS_LIMITS.warning}자 이내입니다.`;
 function rpcError(data:any,status:number):HttpError{
@@ -127,7 +127,7 @@ export function validateAnalysis(value:any,memberName:string,sourceInterviewIds:
   });
   if(value.suggestions.length>ANALYSIS_LIMITS.suggestions)warn('제안 항목 수가 제한을 넘어 중복과 충돌을 확인했습니다. 아래 남은 항목만 검토해 주세요.','too_many_suggestions','$.suggestions',value.suggestions);
   // Collect names from ALL customer-company entries, including duplicates and over-limit tails.
-  // Otherwise normalization could remove the very names needed by the public-data guard.
+  // Otherwise normalization could remove the names needed by the public/member-sharing guard.
   const companies:string[]=value.suggestions.filter((s:Json)=>s.key==='customer_companies').flatMap((s:Json)=>s.value.map((v:string)=>v.trim())).filter(Boolean);
   const counts=new Map<string,number>();for(const s of value.suggestions)counts.set(s.key,(counts.get(s.key)||0)+1);
   const duplicateWarnings=new Set<string>();
@@ -136,7 +136,7 @@ export function validateAnalysis(value:any,memberName:string,sourceInterviewIds:
     const path='$.suggestions['+index+']',label=LABELS[raw.key];
     // Scan complete raw values before length limits, deduplication, or scalar merging.
     if(raw.value.some((v:string)=>privateContact.test(v))){warn(label+' 제안에 연락처 또는 민감 식별정보가 포함되어 해당 제안을 제외했습니다. 원문에서 직접 검토해 주세요.','private_contact',path+'.value',raw.value);return;}
-    if(PUBLIC.has(raw.key)&&companies.some(company=>company.length>=2&&raw.value.some((v:string)=>v.toLocaleLowerCase().includes(company.toLocaleLowerCase())))){warn(label+' 제안에 실제 고객사 이름이 포함되어 공개 제안을 제외했습니다. 고객 유형으로 직접 수정해 주세요.','private_company',path+'.value',raw.value);return;}
+    if(SHARED.has(raw.key)&&companies.some(company=>company.length>=2&&raw.value.some((v:string)=>v.toLocaleLowerCase().includes(company.toLocaleLowerCase())))){warn(label+' 제안에 실제 고객사 이름이 포함되어 공유 제안을 제외했습니다. 고객 유형으로 직접 수정해 주세요.','private_company',path+'.value',raw.value);return;}
     if((counts.get(raw.key)||0)>1){if(!duplicateWarnings.has(raw.key)){warn(label+' 제안이 중복되어 해당 항목을 제외했습니다. 원문을 보고 한 가지 내용으로 직접 정리해 주세요.','duplicate_key',path+'.key',raw.key);duplicateWarnings.add(raw.key);}return;}
     if(textLength(raw.reason)>ANALYSIS_LIMITS.reason||textLength(raw.evidence)>ANALYSIS_LIMITS.evidence){
       const field=textLength(raw.reason)>ANALYSIS_LIMITS.reason?'reason':'evidence';

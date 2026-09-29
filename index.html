@@ -487,7 +487,7 @@ select{font:inherit;min-height:48px;border:1px solid var(--line-2);border-radius
         <p class="note">체크한 항목만 반영합니다. 목록은 기본적으로 기존 내용에 추가됩니다. 전체를 바꾸려면 해당 행에서 ‘전체 교체’를 선택하세요.</p>
         <div id="interview-review"></div>
         <label class="interview-confirm"><input type="checkbox" id="interview-real"> 핵심고객·상생직군을 인터뷰와 대조했으며, 검토 완료로 표시합니다.</label>
-        <label class="interview-confirm"><input type="checkbox" id="interview-confirm"> 대상 멤버가 맞고, 공개할 내용에 고객사 실명·연락처 등 비공개 정보가 없는지 확인했습니다.</label>
+        <label class="interview-confirm"><input type="checkbox" id="interview-confirm"> 대상 멤버가 맞고, 공개하거나 멤버에게 공유할 내용에 고객사 실명·연락처 등 비공개 정보가 없는지 확인했습니다.</label>
         <div class="interview-actions"><button class="btn ghost" id="interview-save">검토 내용 보관</button><button class="btn primary" id="interview-apply">선택한 내용 반영</button></div>
       </div>
     </div>
@@ -514,7 +514,7 @@ select{font:inherit;min-height:48px;border:1px solid var(--line-2);border-radius
     </div>
     <div class="panel panel-pad">
       <div class="ptitle">내보내기 · 불러오기</div>
-      <p class="note" style="margin:0 0 9px">내보내기로 공개 명단을 복사합니다. 인터뷰 원문과 비공개 항목은 포함되지 않습니다. JSON을 붙여넣고 불러오면 성함을 기준으로 갱신하거나 추가합니다. 기존 멤버를 삭제하지 않으며, 동명이인이 있으면 반영을 멈춥니다.</p>
+      <p class="note" style="margin:0 0 9px">내보내기로 공개 명단을 복사합니다. 로그인 멤버끼리 공유하는 리퍼럴·트리거와 인터뷰 원문·비공개 항목은 포함되지 않습니다. JSON을 붙여넣고 불러오면 성함을 기준으로 갱신하거나 추가합니다. 기존 멤버를 삭제하지 않으며, 동명이인이 있으면 반영을 멈춥니다.</p>
       <textarea class="io" id="io" placeholder="여기에 JSON이 표시되거나, 받은 JSON을 붙여넣습니다"></textarea>
       <div style="margin-top:9px;display:flex;gap:8px"><button class="btn" id="exportb">내보내기</button><button class="btn ghost" id="importb" disabled>불러오기</button></div>
       <div class="msg" id="iomsg"></div>
@@ -761,15 +761,17 @@ function renderSun(){
   }
   document.fonts?.ready.then(checkFit);
   const gaps=list.filter(f=>!connected(f).length);
-  const details=privateFor(m),referral=details?.good_referral,triggers=details?.triggers;
+  const details=referralFor(m),referral=details?.good_referral,triggers=details?.triggers;
   document.getElementById('wantbox').innerHTML=
     `<div class="want"><div class="want-heading"><h3 class="want-title">${esc(m.n)} 대표</h3><span class="want-team">${esc(m.g)} 파워팀</span></div><p class="want-summary">상생직군 <b>${list.length}개</b> 중 <b>${list.length-gaps.length}개</b>는 챕터 안에서 바로 연결할 수 있습니다.<br>남은 <b>${gaps.length}개</b> 직군은 초대로 채울 수 있습니다.</p>`
     + ((m.w||referral||triggers?.length)?'<dl class="want-details">'
       +(m.w?`<div class="want-detail"><dt>원하는 비지터</dt><dd>${esc(m.w)}</dd></div>`:'')
-      +(referral?`<div class="want-detail"><dt>좋은 리퍼럴<br><small>비공개 · 관리자와 본인</small></dt><dd>${esc(referral)}</dd></div>`:'')
-      +(triggers?.length?`<div class="want-detail"><dt>이 말이 들리면 연결<br><small>비공개 · 관리자와 본인</small></dt><dd><ul class="want-triggers">${triggers.map(t=>'<li>'+esc(t)+'</li>').join('')}</ul></dd></div>`:'')+'</dl>':'')
+      +(referral?`<div class="want-detail"><dt>좋은 리퍼럴<br><small>멤버 전체 공유</small></dt><dd>${esc(referral)}</dd></div>`:'')
+      +(triggers?.length?`<div class="want-detail"><dt>이 말이 들리면 연결<br><small>멤버 전체 공유</small></dt><dd><ul class="want-triggers">${triggers.map(t=>'<li>'+esc(t)+'</li>').join('')}</ul></dd></div>`:'')+'</dl>':'')
+    + (canReadMemberReferrals()&&memberReferralsError?'<p id="member-referrals-status" class="note" role="status">멤버 공유 정보를 불러오지 못했습니다. <button type="button" class="btn ghost" id="member-referrals-retry">다시 불러오기</button></p>':'')
     + (m.real?'':'<p class="want-estimate">※ 핵심고객·상생직군은 추정치입니다. 신상명세표·C단계 질문지가 들어오면 교체됩니다.</p>')
     + `</div>`;
+  const retry=el('member-referrals-retry');if(retry)retry.onclick=()=>loadPrivateDetails();
 }
 /* ---------- 집계 ---------- */
 function teams(){
@@ -922,7 +924,7 @@ function permissions(){
   el('guide-login').disabled=authBusy;el('admin-login').disabled=authBusy;
   el('loginb').disabled=authBusy;el('logoutb').disabled=authBusy||busy;
   el('admin-note').textContent=!email?'수정하려면 로그인하세요':!online?'오프라인 · 읽기 전용입니다. 서버 연결을 복구한 뒤 수정하세요.':accessError?accessError:!accessReady?'수정 권한을 확인하고 있습니다.':busy?'서버에 저장하고 있습니다. 완료될 때까지 기다려 주세요.':isAdmin()?'관리자 · 전체 멤버와 가입자 권한을 관리할 수 있습니다. 수정 내용은 저장 성공 후 공유됩니다.':account?.role==='member'?'본인 정보 수정 · 노란색으로 표시된 내 정보만 수정할 수 있습니다. 입력 후 다른 칸을 누르면 저장됩니다.':'읽기 권한 · 아래에서 본인 확인을 요청하세요. 관리자 승인 후 내 정보를 수정할 수 있습니다.';
-  el('admintable').querySelectorAll('input').forEach(input=>{const member=M[+input.closest('tr').dataset.i];input.readOnly=!canEdit(member)||(['v','tg'].includes(input.dataset.k)&&!privateReady);});
+  el('admintable').querySelectorAll('input').forEach(input=>{const member=M[+input.closest('tr').dataset.i];input.readOnly=!canEdit(member)||(['v','tg'].includes(input.dataset.k)&&(!privateReady||!memberReferralsReady));});
   el('admintable').querySelectorAll('tbody tr').forEach(row=>{const own=account?.role==='member'&&M[+row.dataset.i]?.id===account.member_id;row.classList.toggle('own-row',own);const marker=row.querySelector('.own-marker');if(marker)marker.hidden=!own;});
   el('admintable').querySelectorAll('.del').forEach(button=>button.disabled=!admin);
   ['newrow','bulkb','importb'].forEach(id=>el(id).disabled=!admin);
@@ -1220,7 +1222,7 @@ el('logoutb').onclick=async()=>{
 };
 
 /* ---------- 4. 멤버 관리: 서버 응답 후에만 반영 ---------- */
-const FIELDS=[['n','성함',110],['co','회사명',150],['f','전문분야',160],['g','파워팀',120],['c','핵심고객',200],['s','상생직군',260],['w','원하는 비지터',220],['v','좋은 리퍼럴 · 비공개',220],['tg','리퍼럴 트리거 · 비공개',260]];
+const FIELDS=[['n','성함',110],['co','회사명',150],['f','전문분야',160],['g','파워팀',120],['c','핵심고객',200],['s','상생직군',260],['w','원하는 비지터',220],['v','좋은 리퍼럴 · 멤버 공유',220],['tg','리퍼럴 트리거 · 멤버 공유',260]];
 let adminSelectedKey='',adminSelectionReady=false;
 const adminMemberKey=(member,index)=>member.id||'seed:'+index;
 function renderAdminMemberPicker(){
@@ -1342,20 +1344,24 @@ function renderAdmin(){
   const box=el('admintable');
   box.innerHTML=`<thead><tr>${FIELDS.map(([,label,width])=>`<th style="min-width:${width}px">${label}</th>`).join('')}<th>관리</th></tr></thead>`
     +`<tbody>${M.map((m,i)=>`<tr data-i="${i}" data-member-key="${esc(adminMemberKey(m,i))}">`+FIELDS.map(([key,label])=>{
-      const raw=key==='v'?privateFor(m)?.good_referral:key==='tg'?privateFor(m)?.triggers:m[key];
+      const details=memberReferralsReady?(privateFor(m)||referralFor(m)):null;
+      const raw=key==='v'?details?.good_referral:key==='tg'?details?.triggers:m[key];
       const value=Array.isArray(raw)?raw.join(', '):(raw||'');
       return `<td data-label="${label}"><input class="cell" data-k="${key}" aria-label="${esc(m.n+' '+label)}" value="${esc(value)}" readonly></td>`;
     }).join('')+`<td data-label="관리"><span class="own-marker" hidden>내 정보</span><button class="mini del" aria-label="${esc(m.n)} 삭제" disabled>삭제</button></td></tr>`).join('')}</tbody>`;
   box.querySelectorAll('input.cell').forEach(input=>{
+    const renderedDetails=privateFor(M[+input.closest('tr').dataset.i]);
+    const detailsRevision=renderedDetails?.revision||0;
+    const renderedValue=input.dataset.k==='v'?renderedDetails?.good_referral:input.dataset.k==='tg'?renderedDetails?.triggers:undefined;
     input.onchange=()=>{
       const member=M[+input.closest('tr').dataset.i],key=input.dataset.k,value=input.value.trim();
       const parsed=['c','s','tg'].includes(key)?value.split(',').map(x=>x.trim()).filter(Boolean):value;
       if(key==='n'&&!value){message('adminmsg','성함은 비워 둘 수 없습니다. 성함을 입력하세요.',true);renderAdmin();return;}
       if(['v','tg'].includes(key)){
-        if(!privateReady||!canEdit(member)){renderAdmin();return;}
-        const details=privateFor(member),column=key==='v'?'good_referral':'triggers';
-        if(JSON.stringify(details?.[column]||'')===JSON.stringify(parsed))return;
-        write(async()=>{await request(db.rpc('update_member_details',{target_member_id:member.id,expected_revision:details?.revision||0,details_patch:{[column]:parsed}}));return '비공개 정보를 저장했습니다.';},'adminmsg',member);return;
+        if(!privateReady||!memberReferralsReady||!canEdit(member)){renderAdmin();return;}
+        const column=key==='v'?'good_referral':'triggers';
+        if(JSON.stringify(renderedValue||'')===JSON.stringify(parsed))return;
+        write(async()=>{await request(db.rpc('update_member_details',{target_member_id:member.id,expected_revision:detailsRevision,details_patch:{[column]:parsed}}));return '멤버 공유 정보를 저장했습니다.';},'adminmsg',member);return;
       }
       if(JSON.stringify(member[key]||'')===JSON.stringify(parsed))return;
       write(()=>updateMember(member,{[COLUMN_MAP[key]]:key==='g'?(value||'미정'):parsed}),'adminmsg',member);
@@ -1383,7 +1389,7 @@ function validateImport(value){
   if(!Array.isArray(value)||!value.length)throw new Error('한 명 이상 들어 있는 JSON 배열을 붙여 넣으세요.');
   return value.map((m,index)=>{
     if(!m||typeof m!=='object'||Array.isArray(m)||typeof m.n!=='string'||!m.n.trim())throw new Error((index+1)+'번째 항목의 성함(n)을 확인하세요.');
-    if((m.v&&String(m.v).trim())||(Array.isArray(m.tg)&&m.tg.length))throw new Error('좋은 리퍼럴·트리거는 공개 명단으로 불러올 수 없습니다. 비공개 항목에서 따로 수정하세요.');
+    if((m.v&&String(m.v).trim())||(Array.isArray(m.tg)&&m.tg.length))throw new Error('좋은 리퍼럴·트리거는 공개 명단으로 불러올 수 없습니다. 멤버 공유 항목에서 따로 수정하세요.');
     const output={n:m.n.trim()};
     for(const key of Object.keys(COLUMN_MAP)){
       if(key==='n'||!Object.hasOwn(m,key))continue;
@@ -1597,6 +1603,8 @@ function interviewStageLabel(stages){return (stages||[]).filter(stage=>INTERVIEW
 function interviewUsageLabel(doc){return ({unanalyzed:'미분석',analyzed:'분석에 포함됨',applied:'반영에 사용됨'})[doc.usage_status]||(doc.status==='applied'?'반영에 사용됨':doc.extracted?.suggestions?.length?'분석에 포함됨':'미분석');}
 function interviewDate(value){const date=new Date(value);return Number.isFinite(date.getTime())?date.toLocaleDateString('ko-KR'):'';}
 let privateDetails=new Map(),privateReady=false,privateRead=0,privateScope='';
+let memberReferrals=new Map(),memberReferralsReady=false,memberReferralsError=false;
+let memberDetailsReadMessage='';
 let interviewDoc=null,interviewReview=null,interviewDocuments=[],interviewReviews=[],interviewSelected=new Set(),interviewSelectionMember='';
 let interviewBusy=false,interviewGeneration=0,interviewDirty=false,interviewBaseline=null,interviewConfigured=null,interviewController=null,interviewListRead=0;
 function clearInterview(){
@@ -1608,26 +1616,38 @@ function clearInterview(){
 function syncPrivateScope(){
   const scope=signedIn()&&accessReady?[session.user.id,account.role,account.member_id||''].join(':'):'';
   if(scope===privateScope)return;
-  privateScope=scope;++privateRead;privateDetails.clear();privateReady=false;clearInterview();interviewConfigured=null;
+  if(memberDetailsReadMessage&&el('adminmsg').textContent===memberDetailsReadMessage)message('adminmsg','');memberDetailsReadMessage='';
+  privateScope=scope;++privateRead;privateDetails.clear();privateReady=false;memberReferrals.clear();memberReferralsReady=false;memberReferralsError=false;clearInterview();interviewConfigured=null;
   el('interview-member').value='';el('interview-ai-status').textContent='';
   el('admintable').querySelectorAll('input[data-k="v"],input[data-k="tg"]').forEach(input=>input.value='');
   if(el('wantbox'))renderSun();
 }
 function privateFor(member){return online&&allowedMember(member)?privateDetails.get(member.id):null;}
+function canReadMemberReferrals(){return Boolean(online&&signedIn()&&accessReady&&account?.user_id===session?.user?.id&&(isAdmin()||(account.role==='member'&&account.member_id)));}
+function referralFor(member){return canReadMemberReferrals()&&memberReferralsReady?memberReferrals.get(member.id):null;}
 async function loadPrivateDetails(){
   const generation=++privateRead,scope=privateScope;
-  if(!signedIn()||!accessReady||!['admin','member'].includes(account.role))return;
-  try{
-    const rows=await request(db.rpc('get_member_details',{target_member_id:null}));
-    if(generation!==privateRead||scope!==privateScope)return;
-    privateDetails=new Map((rows||[]).map(row=>[row.member_id,row]));privateReady=true;
-    if(!editingAdmin())renderAdmin();renderSun();permissions();
-  }catch(error){
-    if(generation!==privateRead||scope!==privateScope)return;
-    privateDetails.clear();privateReady=false;
-    el('admintable').querySelectorAll('input[data-k="v"],input[data-k="tg"]').forEach(input=>input.value='');renderSun();permissions();
-    message('adminmsg','비공개 항목을 불러오지 못했습니다. '+explain(error),true);
+  if(!canReadMemberReferrals())return;
+  const retry=el('member-referrals-retry');if(retry)retry.disabled=true;
+  const [details,referrals]=await Promise.allSettled([
+    request(db.rpc('get_member_details',{target_member_id:null})),
+    request(db.rpc('get_member_referrals',{target_member_id:null}))
+  ]);
+  if(generation!==privateRead||scope!==privateScope||!canReadMemberReferrals())return;
+  privateReady=details.status==='fulfilled';
+  privateDetails=new Map((privateReady?details.value||[]:[]).map(row=>[row.member_id,row]));
+  memberReferralsReady=referrals.status==='fulfilled';memberReferralsError=!memberReferralsReady;
+  memberReferrals=new Map((memberReferralsReady?referrals.value||[]:[]).map(row=>[row.member_id,{member_id:row.member_id,good_referral:row.good_referral,triggers:row.triggers}]));
+  if(!editingAdmin())renderAdmin();
+  else if(!memberReferralsReady)el('admintable').querySelectorAll('input[data-k="v"],input[data-k="tg"]').forEach(input=>input.value='');
+  renderSun();permissions();
+  if(memberDetailsReadMessage&&el('adminmsg').textContent===memberDetailsReadMessage)message('adminmsg','');memberDetailsReadMessage='';
+  if(!privateReady){
+    memberDetailsReadMessage='본인·관리자용 정보를 불러오지 못해 공유 항목을 수정할 수 없습니다. '+explain(details.reason);
+  }else if(memberReferralsError){
+    memberDetailsReadMessage='멤버 공유 정보를 불러오지 못했습니다. 선샤인에서 다시 불러오기를 눌러 주세요.';
   }
+  if(memberDetailsReadMessage)message('adminmsg',memberDetailsReadMessage,true);
 }
 function renderInterviewControls(){
   const visible=isAdmin();el('interview-panel').hidden=!visible;if(!visible)return;
@@ -1726,8 +1746,9 @@ function showInterviewReview(review){
     const suggestion=suggestions.find(item=>item.key===key);if(!suggestion)return '';
     const patch=secret?review.private_patch||{}:review.public_patch||{},checked=Object.hasOwn(patch,key),proposed=checked?patch[key]:suggestion.value;
     const value=Array.isArray(proposed)?proposed.join('\n'):String(proposed??'');
+    const audience=['good_referral','triggers'].includes(key)?'멤버 전체 공유':secret?'비공개 · 관리자와 본인':'공개 · 선샤인에 표시';
     const sources=[...new Set(suggestion.sources||[])].map(id=>{const doc=interviewDocuments.find(row=>row.id===id);return doc?`<button type="button" class="interview-source-badge" data-source-id="${esc(id)}" title="${esc(doc.original_name)}" aria-label="근거 원문 보기: ${esc(doc.original_name)}">${esc(interviewStageLabel(doc.stages))} · ${esc(doc.original_name)}</button>`:'';}).join('');
-    return `<div class="interview-review-row${checked?' selected':''}" data-field="${key}"><div class="interview-field-title"><label><input type="checkbox" class="interview-check"${checked?' checked':''}>${esc(label)}</label><span>${secret?'비공개 · 관리자와 본인':'공개 · 선샤인에 표시'} · ${suggestion.basis==='stated'?'문서에 기재':'AI 제안'}</span></div><div class="interview-sources" aria-label="근거 문서">${sources}</div><div class="interview-compare"><div><small>현재 내용</small><p class="interview-current">${esc(currentInterviewValue(key,member)||'등록된 내용 없음')}</p></div><div><small>검토할 내용${array?' · 한 줄에 하나':''}</small><textarea class="interview-value" aria-label="${esc(label)} 검토할 내용">${esc(value)}</textarea></div></div>${array?`<label class="interview-mode-label">목록 반영 방식<select class="interview-list-mode" aria-label="${esc(label)} 반영 방식"><option value="append"${review.list_modes?.[key]!=='replace'?' selected':''}>기존에 추가</option><option value="replace"${review.list_modes?.[key]==='replace'?' selected':''}>전체 교체</option></select></label>`:''}<p class="interview-reason">${esc(suggestion.reason||'근거를 원문과 대조해 주세요.')}</p>${suggestion.evidence?'<p class="interview-evidence">문서 근거: '+esc(suggestion.evidence)+'</p>':''}</div>`;
+    return `<div class="interview-review-row${checked?' selected':''}" data-field="${key}"><div class="interview-field-title"><label><input type="checkbox" class="interview-check"${checked?' checked':''}>${esc(label)}</label><span>${audience} · ${suggestion.basis==='stated'?'문서에 기재':'AI 제안'}</span></div><div class="interview-sources" aria-label="근거 문서">${sources}</div><div class="interview-compare"><div><small>현재 내용</small><p class="interview-current">${esc(currentInterviewValue(key,member)||'등록된 내용 없음')}</p></div><div><small>검토할 내용${array?' · 한 줄에 하나':''}</small><textarea class="interview-value" aria-label="${esc(label)} 검토할 내용">${esc(value)}</textarea></div></div>${array?`<label class="interview-mode-label">목록 반영 방식<select class="interview-list-mode" aria-label="${esc(label)} 반영 방식"><option value="append"${review.list_modes?.[key]!=='replace'?' selected':''}>기존에 추가</option><option value="replace"${review.list_modes?.[key]==='replace'?' selected':''}>전체 교체</option></select></label>`:''}<p class="interview-reason">${esc(suggestion.reason||'근거를 원문과 대조해 주세요.')}</p>${suggestion.evidence?'<p class="interview-evidence">문서 근거: '+esc(suggestion.evidence)+'</p>':''}</div>`;
   }).join('');
   renderInterviewControls();
 }
