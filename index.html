@@ -207,6 +207,17 @@ input.cell:focus{outline:none; border-color:var(--red); background:var(--surface
 .mini{border:1px solid var(--line-2); background:var(--surface); color:var(--ink-2); border-radius:8px;min-height:48px; padding:9px 12px; font:inherit; font-size:15px; cursor:pointer}
 .mini:hover{border-color:var(--red); color:var(--red)}
 #admintable td{padding:5px 4px; vertical-align:middle}
+.admin-table-hint{font-size:14px;color:var(--ink-2);margin:0 0 12px}
+.admin-table-scroll:focus-visible{outline:2px solid var(--red);outline-offset:3px}
+@media(min-width:601px){
+  .admin-table-scroll{max-height:clamp(240px,calc(100dvh - 180px),680px);overflow:auto;scroll-padding:64px 12px 12px 130px;scroll-margin-top:100px;isolation:isolate;border:1px solid var(--line);border-radius:8px}
+  #admintable{border-collapse:separate;border-spacing:0}
+  #admintable thead th{position:sticky;top:0;z-index:2;background:var(--surface-2);box-shadow:0 1px 0 var(--line-2)}
+  #admintable th:first-child,#admintable td:first-child{position:sticky;left:0;box-shadow:1px 0 0 var(--line-2)}
+  #admintable thead th:first-child{z-index:3;box-shadow:1px 1px 0 var(--line-2)}
+  #admintable tbody td:first-child{z-index:1;background:var(--surface)}
+  #admintable .own-row td:first-child{background:var(--sun-soft)}
+}
 .admin-member-picker{display:none}
 textarea.io{width:100%; min-height:140px; border:1px solid var(--line-2); background:var(--surface-2); color:var(--ink); border-radius:9px; padding:12px; font:inherit; font-size:16px; line-height:1.6; resize:vertical}
 textarea.io:focus{outline:2px solid var(--red); outline-offset:1px}
@@ -282,6 +293,7 @@ select{font:inherit;min-height:48px;border:1px solid var(--line-2);border-radius
   dialog{padding:22px}dialog h2{font-size:26px}.dialog-actions .btn{width:100%}
   #admintable,#admintable tbody,#admintable tr,#admintable td{display:block;width:100%}
   #admintable thead{display:none}
+  .admin-table-hint{display:none}
   .admin-member-picker{display:block;margin-bottom:18px;min-width:0}
   .admin-member-picker label{display:block;font-size:17px;font-weight:600;line-height:1.5;margin:14px 0 7px}
   .admin-member-picker input,.admin-member-picker select{display:block;width:100%;min-width:0;min-height:48px;font-size:17px}
@@ -429,7 +441,8 @@ select{font:inherit;min-height:48px;border:1px solid var(--line-2);border-radius
       <select id="admin-member-select" aria-controls="admintable" aria-describedby="admin-member-status"><option value="">멤버를 선택하세요</option></select>
       <p class="note" id="admin-member-status" role="status" aria-live="polite">선택한 멤버의 정보를 아래에서 확인하세요.</p>
     </div>
-    <div class="scrollx"><table id="admintable"></table></div>
+    <p class="admin-table-hint" id="admin-table-hint">열 제목과 성함은 고정됩니다. 표 안에서 상하·좌우로 스크롤하세요.</p>
+    <div class="scrollx admin-table-scroll" tabindex="0" role="region" aria-label="멤버 정보 입력 표"><table id="admintable" aria-label="멤버 정보"></table></div>
   </div>
 
   <section class="panel panel-pad collab-admin" id="collab-admin-panel" hidden aria-labelledby="collab-admin-title">
@@ -1885,7 +1898,11 @@ function openAdminMember(memberId){
   const index=M.findIndex(member=>member.id===memberId);if(index<0)return;
   adminSelectedKey=adminMemberKey(M[index],index);el('admin-member-search').value='';renderAdminMemberPicker();
   const row=Array.from(el('admintable').querySelectorAll('tbody tr')).find(item=>item.dataset.memberKey===adminSelectedKey);
-  row?.scrollIntoView({block:'start'});row?.querySelector('input')?.focus({preventScroll:true});
+  if(row&&matchMedia('(min-width:601px)').matches){
+    const scroller=row.closest('.admin-table-scroll');
+    scroller.scrollLeft=0;scroller.scrollIntoView({block:'start'});row.scrollIntoView({block:'nearest',inline:'nearest'});
+  }else row?.scrollIntoView({block:'start'});
+  row?.querySelector('input')?.focus({preventScroll:true});
 }
 el('admin-member-search').oninput=renderAdminMemberPicker;
 el('admin-member-select').onchange=()=>{adminSelectedKey=el('admin-member-select').value;if(adminSelectedKey)el('admin-member-search').value='';renderAdminMemberPicker();};
@@ -2096,7 +2113,7 @@ async function updateMember(member,patch){
 }
 function renderAdmin(){
   const box=el('admintable');
-  box.innerHTML=`<thead><tr>${FIELDS.map(([,label,width])=>`<th style="min-width:${width}px">${label}</th>`).join('')}<th>관리</th></tr></thead>`
+  box.innerHTML=`<thead><tr>${FIELDS.map(([,label,width])=>`<th scope="col" style="min-width:${width}px">${label}</th>`).join('')}<th scope="col">관리</th></tr></thead>`
     +`<tbody>${M.map((m,i)=>`<tr data-i="${i}" data-member-key="${esc(adminMemberKey(m,i))}">`+FIELDS.map(([key,label])=>{
       const details=memberReferralsReady?(privateFor(m)||referralFor(m)):null;
       const raw=key==='v'?details?.good_referral:key==='tg'?details?.triggers:m[key];
