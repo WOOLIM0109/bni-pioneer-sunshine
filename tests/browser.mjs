@@ -22,6 +22,7 @@ async function getPlaywright() {
 
 function makeMock(initial, options) {
   const clone = value => JSON.parse(JSON.stringify(value));
+  const userMetadata = clone(options.userMetadata || {});
   const collabRoster = [
     ['라이프 이벤트 협업팀', '마루이', '윤민수', '이화춘', '심학봉'],
     ['부동산&공간 협업팀', '박선영', '권두현', '이상호', '정명수', '박진성', '김지현', '조은영', '오예준', '조진성', '박병준'],
@@ -45,7 +46,8 @@ function makeMock(initial, options) {
     details: initial.map(row => ({ member_id: row.id, good_referral: `PRIVATE_REFERRAL_${row.id}`, triggers: [`PRIVATE_TRIGGER_${row.id}`], customer_companies: [`PRIVATE_COMPANY_${row.id}`], revision: 1 })),
     failReads: options.failReads, failWrites: false, failAccess: options.failAccess, failRpc: false, failRpcName: null, holdRpcName: null, failAccountList: false, failAccountListAfterSave: false, authError: null, callbacks: [],
     accounts: [account('test-user', options.role || 'admin', options.role === 'member' ? initial[0]?.id : null), account('second-user', 'viewer'), { ...account('pending-user', 'viewer'), requested_member_id: initial[1]?.id, request_status: 'pending' }, { ...account('reject-user', 'viewer'), requested_member_id: initial[2]?.id, request_status: 'pending' }],
-    session: options.auth ? { user: { id: 'test-user', email: 'member@example.test' } } : null,
+    userMetadata, failProfilePreferenceReads: false, failProfilePreferenceWrites: false,
+    session: options.auth ? { user: { id: 'test-user', email: 'member@example.test', user_metadata: clone(userMetadata['test-user'] || {}) } } : null,
     release() { this.holdWrites = false; this.pending.splice(0).forEach(resolve => resolve()); },
     releaseReads() { this.holdReads = false; this.pendingReads.splice(0).forEach(resolve => resolve()); },
     releaseAccessReads() { this.holdAccessReads = false; this.pendingAccessReads.splice(0).forEach(resolve => resolve()); },
@@ -53,7 +55,7 @@ function makeMock(initial, options) {
     releasePrivateReads() { this.holdPrivateReads = false; this.pendingPrivateReads.splice(0).forEach(resolve => resolve()); },
     releaseAnalysis() { this.holdAnalysis = false; this.pendingAnalysis.splice(0).forEach(resolve => resolve()); },
     realtime() { this.callbacks.forEach(callback => callback({ eventType: 'UPDATE' })); },
-    setSession(session, event = session ? 'SIGNED_IN' : 'SIGNED_OUT') { this.session = session; this.authCallback?.(event, session); }
+    setSession(session, event = session ? 'SIGNED_IN' : 'SIGNED_OUT') { this.session = session ? { ...session, user: { ...session.user, user_metadata: clone(this.userMetadata[session.user.id] || session.user.user_metadata || {}) } } : null; this.authCallback?.(event, this.session); }
   };
   const permissionError = () => ({ data: null, error: { message: 'row-level security policy denied access', code: '42501' } });
   const currentAccount = () => state.accounts.find(row => row.user_id === state.session?.user.id);
@@ -346,7 +348,7 @@ function makeMock(initial, options) {
     } },
     auth: {
       getSession: async () => ({ data: { session: state.session }, error: null }),
-      getUser: async () => ({ data: { user: state.session?.user ?? null }, error: null }),
+      getUser: async () => state.failProfilePreferenceReads ? {data:{user:null},error:{message:'Preference read failed'}} : ({ data: { user: state.session ? {...state.session.user,user_metadata:clone(state.userMetadata[state.session.user.id]||{})} : null }, error: null }),
       onAuthStateChange: callback => { state.authCallback = callback; return { data: { subscription: { unsubscribe() {} } } }; },
       signInWithOtp: async () => { throw new Error('Password authentication must not call signInWithOtp.'); },
       signInWithPassword: async value => {
@@ -359,9 +361,14 @@ function makeMock(initial, options) {
       resend: async value => { state.log.push({ action: 'confirmation-resend', value }); return { data: {}, error: clone(state.authError) }; },
       resetPasswordForEmail: async (email, options) => { state.log.push({ action: 'password-reset', value: { email, options } }); return { data: {}, error: clone(state.authError) }; },
       updateUser: async value => {
-        state.log.push({ action: 'password-update', value });
+        state.log.push({ action: value.data ? 'metadata-update' : 'password-update', value });
         if (state.authError) return { data: {}, error: clone(state.authError) };
         if (!state.session) return { data: {}, error: { message: 'Auth session missing!', code: 'session_not_found' } };
+        if (value.data) {
+          if(state.failProfilePreferenceWrites)return {data:{},error:{message:'Preference write failed'}};
+          state.userMetadata[state.session.user.id]={...state.userMetadata[state.session.user.id],...clone(value.data)};
+          await window.__persistAuthMetadata?.(clone(state.userMetadata));
+        }
         state.setSession(state.session, 'USER_UPDATED');
         return { data: { user: state.session.user }, error: null };
       },
@@ -392,12 +399,17 @@ const failures = [];
 const testPattern = process.argv.find(arg => arg.startsWith('--filter='))?.slice('--filter='.length);
 const testFilter = testPattern ? new RegExp(testPattern, 'i') : null;
 let seed;
-async function pageFor({ online = false, auth = false, records = seed, links = [], failLinkReads = false, failReads = false, role = 'admin', failAccess = false, failCollabReads = false, collabTeams, collabMemberships, collabPending, basePath = '/', routePath = '', query = '', hash = '' } = {}) {
+async function pageFor({ online = false, auth = false, records = seed, links = [], failLinkReads = false, failReads = false, role = 'admin', failAccess = false, failCollabReads = false, collabTeams, collabMemberships, collabPending, basePath = '/', routePath = '', query = '', hash = '', onboarding = false, userMetadata } = {}) {
   if (records?.[0]?.name === '연결 요청자' && !collabTeams) {
     collabTeams = [{id:'c0000000-0000-4000-8000-000000000001',name:'기업 협업팀',sort_order:0,leader_member_id:records[0].id,note:'',chat_link:'',created_at:'2026-09-29T00:00:00Z',updated_at:'2026-09-29T00:00:00Z'}];
     collabMemberships = records.map(row=>({team_id:collabTeams[0].id,member_id:row.id,created_at:'2026-09-29T00:00:00Z'}));
   }
   const context = await browser.newContext({ viewport: { width: 400, height: 900 }, colorScheme: 'light', serviceWorkers: 'block' });
+  // Existing regression scenarios represent returning users. Dedicated onboarding
+  // cases below exercise the first-visit experience, including persistence.
+  const campaign=html.match(/const PROFILE_GUIDE_CAMPAIGN='([^']+)'/)[1];
+  let persistedAuthMetadata=userMetadata||{'test-user':onboarding?{}:{sunshine_profile_guide:{campaign,seen:true}}};
+  await context.exposeFunction('__persistAuthMetadata',next=>{persistedAuthMetadata=next;});
   context.on('page', page => {
     page.on('pageerror', error => failures.push(error.message));
     page.on('dialog', dialog => dialog.accept());
@@ -418,7 +430,7 @@ async function pageFor({ online = false, auth = false, records = seed, links = [
       return route.fulfill({ status: routePage || isHome ? 200 : 404, contentType: 'text/html', body: routePage || isHome ? renderPage(document, routePage || null, { baseUrl }) : '<h1>Not found</h1>' });
     }
     if (url.includes('/@supabase/supabase-js@')) return online
-      ? route.fulfill({ status: 200, contentType: 'application/javascript', body: `(${makeMock.toString()})(${JSON.stringify(records)}, ${JSON.stringify({ auth, failReads, role, failAccess, links, failLinkReads, failCollabReads, collabTeams, collabMemberships, collabPending })});` })
+      ? route.fulfill({ status: 200, contentType: 'application/javascript', body: `(${makeMock.toString()})(${JSON.stringify(records)}, ${JSON.stringify({ auth, failReads, role, failAccess, links, failLinkReads, failCollabReads, collabTeams, collabMemberships, collabPending, userMetadata:persistedAuthMetadata })});` })
       : route.abort();
     return route.abort();
   });
@@ -595,6 +607,125 @@ try {
     await page.click('#exportb');
     assert.equal(JSON.parse(await page.inputValue('#io')).length, 33);
     await context.close();
+  });
+  await check('Onboarding appears after password login closes and preserves a draft while offline', async () => {
+    const {page,context}=await pageFor({online:true,role:'member',onboarding:true});
+    await page.click('#loginb');await page.fill('#login-email','member@example.test');await page.fill('#login-password','Example123!');await page.click('#login-submit');
+    await page.waitForSelector('#welcome-dialog[open]');assert.equal(await page.locator('#login-dialog[open]').count(),0);
+    await page.click('#welcome-start');await page.fill('#profile-wants','연결 복구 후 저장할 비지터');
+    await page.evaluate(()=>{online=false;permissions();});
+    assert(await page.locator('#profile-save').isDisabled());assert.equal(await page.inputValue('#profile-wants'),'연결 복구 후 저장할 비지터');
+    await page.evaluate(()=>{online=true;permissions();});assert(await page.locator('#profile-save').isEnabled());
+    await page.click('#profile-save');await page.waitForSelector('#profile-success:not([hidden])');
+    await context.close();
+  });
+  await check('Onboarding first login skips once and resumes from the sunshine card', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true, role: 'member', onboarding: true });
+    await page.waitForSelector('#welcome-dialog[open]');
+    assert(await page.locator('#v1').isVisible());
+    await page.click('#welcome-skip');
+    assert(await page.locator('#v1').isVisible());assert(await page.locator('#profile-guide-card').isVisible());
+    await page.waitForFunction(()=>profileGuideState()==='seen');
+    await page.reload();await page.waitForFunction(() => online && accessReady && !connecting && profilePreferencesReady);
+    assert.equal(await page.evaluate(() => profileGuideState('profile')), 'seen');
+    assert.equal(await page.locator('#welcome-dialog[open]').count(), 0);
+    await page.click('#profile-guide-start');await page.waitForSelector('#profile-editor[open]');
+    assert.equal(new URL(page.url()).pathname, '/members/');
+    assert.equal(await page.locator('#admintable .own-row').count(), 1);
+    assert.equal(await page.locator('#admintable .own-row').getAttribute('data-member-key'), seed[0].id);
+    await page.click('#profile-editor-later');assert(await page.locator('#profile-location').isVisible());
+    await context.close();
+  });
+  await check('Onboarding saves only the signed-in member and reflects changes in sunshine', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true, role: 'member', onboarding: true });
+    await page.waitForSelector('#welcome-dialog[open]');await page.click('#welcome-start');
+    const before = await page.evaluate(() => structuredClone(window.__db.members));
+    await page.fill('#profile-customers', '초등학생 학부모\n맞벌이 가족, 초등학생 학부모');
+    await page.fill('#profile-synergies', '사진관\n아동심리상담');
+    await page.fill('#profile-wants', '부산에서 초등 미술학원을 운영하는 원장님');
+    await page.click('#profile-save');await page.waitForSelector('#profile-success:not([hidden])');
+    const after = await page.evaluate(() => window.__db.members);
+    assert.deepEqual(after[0].customers, ['초등학생 학부모', '맞벌이 가족']);
+    assert.deepEqual(after[0].synergies, ['사진관', '아동심리상담']);
+    assert.equal(after[0].wants, '부산에서 초등 미술학원을 운영하는 원장님');
+    assert.deepEqual(after.slice(1), before.slice(1));assert.equal(after[0].chapter_role, before[0].chapter_role);
+    await page.click('#profile-view-sunshine');assert(await page.locator('#v1').isVisible());
+    assert.equal(await page.evaluate(() => M[sel].id), seed[0].id);
+    assert.equal(await page.evaluate(() => profileGuideState('profile')), 'completed');
+    assert.equal(await page.locator('#profile-editor[open]').count(), 0);
+    await context.close();
+  });
+  await check('Onboarding unapproved members request access before editing and resume from the card after approval', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true, role: 'viewer', onboarding: true });
+    await page.waitForSelector('#welcome-dialog[open]');assert.match(await page.locator('#welcome-start').innerText(), /내 이름 연결/);
+    await page.click('#welcome-start');assert(await page.locator('#member-access-panel').isVisible());
+    assert.equal(await page.locator('#profile-editor[open]').count(), 0);
+    await page.selectOption('#request-member', seed[1].id);await page.click('#request-access');
+    await page.waitForFunction(() => !busy && account.request_status === 'pending');
+    await page.click('#t1');assert.match(await page.locator('#profile-guide-title').innerText(), /기다리고/);
+    await page.evaluate(id => { Object.assign(window.__db.accounts[0], {role:'member',member_id:id,request_status:'approved'});window.__db.realtime(); }, seed[1].id);
+    await page.waitForFunction(()=>account.role==='member'&&document.getElementById('profile-guide-start').textContent.includes('내 정보 작성'));
+    assert.equal(await page.locator('#welcome-dialog[open]').count(),0);
+    await page.click('#profile-guide-start');assert.match(await page.locator('#profile-person').innerText(), new RegExp(seed[1].name));
+    await context.close();
+  });
+  await check('Onboarding failed saves retain input and revoked access clears the editor', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true, role: 'member', onboarding: true });
+    await page.waitForSelector('#welcome-dialog[open]');await page.click('#welcome-start');
+    await page.fill('#profile-wants', '저장 실패 후에도 남아야 하는 입력');
+    await page.evaluate(() => {window.__db.failWrites=true;});await page.click('#profile-save');
+    await page.waitForFunction(() => !busy && document.getElementById('profile-editor-message').classList.contains('error'));
+    assert.equal(await page.inputValue('#profile-wants'), '저장 실패 후에도 남아야 하는 입력');
+    assert.equal(await page.locator('#profile-success:not([hidden])').count(), 0);
+    await page.evaluate(() => {window.__db.accounts[0].role='viewer';window.__db.accounts[0].member_id=null;window.__db.realtime();});
+    await page.waitForFunction(() => account.role === 'viewer');
+    assert.equal(await page.locator('#profile-editor[open]').count(), 0);assert.equal(await page.inputValue('#profile-wants'), '');
+    await context.close();
+  });
+  await check('Onboarding welcome and editor fit mobile and desktop and include administrators', async () => {
+    const { page, context } = await pageFor({ online: true, auth: true, role: 'member', onboarding: true });
+    await page.waitForSelector('#welcome-dialog[open]');
+    for (const width of [375, 1440]) {
+      await page.setViewportSize({width,height:900});
+      assert(await page.locator('#welcome-dialog').evaluate(node=>node.scrollWidth<=node.clientWidth));
+    }
+    await page.click('#welcome-start');
+    for (const width of [375, 1440]) {
+      await page.setViewportSize({width,height:900});
+      assert(await page.locator('#profile-editor').evaluate(node=>node.scrollWidth<=node.clientWidth));
+    }
+    await page.evaluate(() => {window.__db.setSession(null);});await page.waitForFunction(() => !session);
+    assert.equal(await page.locator('#profile-editor[open]').count(),0);assert(await page.locator('#profile-guide-card').isHidden());
+    await context.close();
+    const admin = await pageFor({online:true,auth:true,role:'admin',onboarding:true});
+    await admin.page.waitForSelector('#welcome-dialog[open]');assert.match(await admin.page.locator('#welcome-start').innerText(),/멤버 관리로 이동/);
+    await admin.page.click('#welcome-start');assert(await admin.page.locator('#v4').isVisible());assert.equal(await admin.page.locator('#profile-editor[open]').count(),0);await admin.context.close();
+  });
+  await check('Onboarding rollout reaches existing sessions on nested pages despite older guide completion', async () => {
+    const userMetadata={'test-user':{full_name:'기존 회원',sunshine_profile_guide:{campaign:'old-guide',seen:true,completed:true}}};
+    const {page,context}=await pageFor({online:true,auth:true,role:'member',onboarding:true,routePath:'collab-teams/',userMetadata});
+    await page.waitForSelector('#welcome-dialog[open]');assert(await page.locator('#v2').isVisible());
+    await page.waitForFunction(()=>profilePreferences.campaign===PROFILE_GUIDE_CAMPAIGN);
+    assert.equal(await page.evaluate(()=>window.__db.userMetadata['test-user'].full_name),'기존 회원');
+    const persisted=await page.evaluate(()=>window.__db.userMetadata);await context.close();
+    const another=await pageFor({online:true,auth:true,role:'member',onboarding:true,userMetadata:persisted});
+    await another.page.waitForFunction(()=>profilePreferencesReady);assert.equal(await another.page.locator('#welcome-dialog[open]').count(),0);
+    assert.equal(await another.page.evaluate(()=>localStorage.length),0);await another.context.close();
+  });
+  await check('Onboarding never-show preference persists per account across fresh browsers with retry on failure', async () => {
+    const {page,context}=await pageFor({online:true,auth:true,role:'member',onboarding:true});
+    await page.waitForSelector('#welcome-dialog[open]');await page.waitForFunction(()=>profileGuideState()==='seen');
+    await page.evaluate(()=>{window.__db.failProfilePreferenceWrites=true;});await page.click('#welcome-never');
+    await page.waitForFunction(()=>document.getElementById('welcome-message').classList.contains('error'));
+    assert.equal(await page.locator('#welcome-dialog[open]').count(),1);assert.equal(await page.evaluate(()=>profilePreferences.disabled),false);
+    await page.evaluate(()=>{window.__db.failProfilePreferenceWrites=false;});await page.click('#welcome-never');
+    await page.waitForFunction(()=>!document.getElementById('welcome-dialog').open&&profilePreferences.disabled);
+    assert(await page.locator('#profile-guide-card').isVisible());const persisted=await page.evaluate(()=>window.__db.userMetadata);await context.close();
+    const another=await pageFor({online:true,auth:true,role:'member',onboarding:true,userMetadata:persisted});
+    await another.page.waitForFunction(()=>profilePreferencesReady);assert.equal(await another.page.locator('#welcome-dialog[open]').count(),0);
+    await another.page.evaluate(()=>window.__db.setSession({user:{id:'second-user',email:'second@example.test'}}));
+    await another.page.waitForSelector('#welcome-dialog[open]');assert.equal(await another.page.evaluate(()=>profilePreferences.disabled),false);
+    await another.context.close();
   });
   await check('Collab ninth-term roster renders five complete teams with corrected member fields and operational roles', async () => {
     const { page, context } = await pageFor({ online: true });

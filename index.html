@@ -348,6 +348,18 @@ select{font:inherit;min-height:48px;border:1px solid var(--line-2);border-radius
 @media(max-width:760px){.collab-admin-fields{grid-template-columns:minmax(0,1fr)}.collab-admin{padding:18px 14px}.collab-admin-team{padding:14px}.collab-admin-toolbar{align-items:stretch}.collab-team-members li{font-size:15px}}
 @media(max-width:600px){.link-review{padding:20px 16px}.link-row{padding:15px}.link-actions{display:grid;grid-template-columns:minmax(0,1fr)}.link-actions select,.link-actions .btn{width:100%;min-width:0}}
 </style>
+<style>
+.profile-guide-card{display:flex;align-items:center;gap:22px;padding:24px 28px;margin-bottom:28px;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--red);border-radius:10px;box-shadow:var(--shadow)}
+.profile-guide-symbol,.profile-welcome-symbol{display:grid;place-items:center;width:64px;height:64px;flex:none;border-radius:50%;background:var(--red-soft);color:var(--red);font-size:38px;line-height:1}
+.profile-guide-copy{flex:1;min-width:0}.profile-eyebrow{display:block;color:var(--red);font-size:13px;letter-spacing:.04em;font-weight:700;margin:0 0 6px}.profile-guide-card h2{font-size:22px;line-height:1.4;margin:0 0 6px}.profile-guide-card p{font-size:16px;color:var(--ink-2);margin:0 0 7px}.profile-guide-card small{font-size:13px;color:var(--ink-3)}.profile-guide-card small b{color:var(--ink-2);font-weight:500}.profile-guide-card .btn{flex:none}
+.profile-welcome{width:min(500px,calc(100% - 32px));padding:34px;border-top:0}.profile-close{position:absolute;right:16px;top:12px;display:grid;place-items:center;width:40px;height:40px;font:inherit;font-size:28px;border:0;background:transparent;color:var(--ink-3);cursor:pointer;border-radius:8px}.profile-close:hover{background:var(--surface-2);color:var(--ink)}.profile-welcome-symbol{margin:0 0 22px}.profile-welcome h2{font-size:32px;line-height:1.35;letter-spacing:-.04em;margin:0 0 14px}.profile-welcome .dialog-intro{margin-bottom:22px;line-height:1.7}.profile-prompts{list-style:none;padding:0;margin:0 0 20px;border-top:1px solid var(--line)}.profile-prompts li{display:flex;align-items:center;gap:16px;padding:12px 0;border-bottom:1px solid var(--line)}.profile-prompts li>span{font-size:13px;font-weight:700;color:var(--red);font-variant-numeric:tabular-nums}.profile-prompts strong{font-size:16px}.profile-prompts small{display:block;font-size:14px;color:var(--ink-2)}.profile-route-note{font-size:13px;color:var(--ink-2);margin:0 0 18px;word-break:keep-all}.profile-wide{width:100%;justify-content:center}.profile-skip{display:block;border:0;background:none;color:var(--ink-2);font:inherit;font-size:14px;padding:12px;width:100%;cursor:pointer;text-decoration:underline;text-underline-offset:4px}.profile-skip:hover{color:var(--red)}
+.profile-location{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:20px 24px;margin:0 0 20px;border:1px solid var(--red);border-radius:8px;background:var(--red-soft)}.profile-location h3{font-size:20px;line-height:1.5;margin:0}.profile-location p{margin:4px 0 0;color:var(--ink-2);font-size:15px}.profile-location .btn{flex:none}
+#admintable .own-row{background:var(--red-soft)}#admintable .own-row td{border-top:2px solid var(--red);border-bottom:2px solid var(--red)}#admintable .own-row td:first-child{background:var(--red-soft);border-left:2px solid var(--red)}#admintable .own-row td:last-child{border-right:2px solid var(--red)}#admintable .own-row input:not([readonly]){background:var(--surface);border-color:var(--line)}
+.profile-editor{width:min(620px,calc(100% - 32px));padding:30px}.profile-editor h2{font-size:27px;line-height:1.4;margin:0 28px 8px 0}.profile-person{font-size:15px;font-weight:600;color:var(--red);margin:0 0 12px}.profile-editor .dialog-intro{font-size:15px;margin-bottom:24px}.profile-editor label{font-size:17px;margin:18px 0 8px}.profile-editor label small{display:inline-block;font-size:13px;font-weight:400;color:var(--ink-2);margin-left:7px}.profile-editor textarea{display:block;width:100%;min-height:78px;resize:vertical;font:inherit;font-size:16px;line-height:1.6;color:var(--ink);background:var(--surface);padding:12px 14px;border:1px solid var(--line-2);border-radius:8px}.profile-editor textarea:focus{outline:2px solid var(--red);outline-offset:2px}.profile-editor textarea::placeholder{color:var(--ink-3)}.profile-field-help{font-size:13px;color:var(--ink-2);margin:6px 0 0}.profile-editor .dialog-actions{padding-top:16px;border-top:1px solid var(--line)}.profile-success{padding:18px 0 0}.profile-success p{color:var(--ink-2);margin:12px 0 26px}.profile-editor button:focus-visible,.profile-welcome button:focus-visible{outline:2px solid var(--red);outline-offset:3px}
+.welcome-dismiss-actions{display:flex;justify-content:center;gap:12px;margin-top:4px}.welcome-dismiss-actions .profile-skip{width:auto;flex:1;font-size:13px;padding:12px 4px}.welcome-dismiss-actions .profile-skip:disabled{cursor:wait;opacity:.55}.welcome-dismiss-actions .profile-skip:last-child{color:var(--ink-3)}#welcome-message:empty{display:none}
+@media(max-width:700px){.profile-guide-card{flex-wrap:wrap;gap:14px;padding:20px}.profile-guide-symbol{width:46px;height:46px;font-size:30px}.profile-guide-copy{flex-basis:calc(100% - 60px)}.profile-guide-card h2{font-size:20px}.profile-guide-card .btn{width:100%}.profile-location{align-items:flex-start;flex-direction:column;padding:18px}.profile-location .btn{width:100%}.profile-welcome{padding:28px 24px}.profile-welcome h2{font-size:28px}.profile-editor{padding:26px 20px}.profile-editor label small{display:block;margin-left:0}.profile-editor .dialog-actions{flex-direction:column-reverse}.profile-editor .dialog-actions .btn{width:100%}.profile-editor h2{font-size:24px}.profile-welcome-symbol{width:52px;height:52px;font-size:32px;margin-bottom:18px}}
+@media(max-width:600px){#admintable tr.own-row{border:2px solid var(--red);background:var(--red-soft)}#admintable .own-row td{border:0!important}#admintable .own-row td:first-child{background:transparent}}
+</style>
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 
 </head>
@@ -391,6 +403,11 @@ select{font:inherit;min-height:48px;border:1px solid var(--line-2);border-radius
 <div class="link-read-warning" id="collab-read-warning" hidden><span id="collab-read-detail" role="status"></span><button class="btn ghost" id="collab-retry">협업팀 다시 불러오기</button></div>
 
 <section id="v1">
+  <section class="profile-guide-card" id="profile-guide-card" aria-labelledby="profile-guide-title" hidden>
+    <span class="profile-guide-symbol" aria-hidden="true">☀</span>
+    <div class="profile-guide-copy"><span class="profile-eyebrow" id="profile-guide-label">나의 첫 연결</span><h2 id="profile-guide-title"></h2><p id="profile-guide-description"></p><small>수정 위치 <b>멤버 관리 → 내 정보</b></small></div>
+    <button class="btn primary" id="profile-guide-start" type="button">내 정보 작성하기 <span aria-hidden="true">→</span></button>
+  </section>
   <div class="view-heading"><div><h2>나의 선샤인</h2><p>멤버를 선택하면 함께할 상생직군을 볼 수 있어요.</p></div></div>
   <div class="cols">
     <div class="panel panel-pad">
@@ -422,6 +439,7 @@ select{font:inherit;min-height:48px;border:1px solid var(--line-2);border-radius
 <section id="v4" hidden>
   <div class="view-heading"><div><h2>멤버 관리</h2><p>멤버는 본인 정보를, 관리자는 전체 명단을 수정할 수 있어요.</p></div></div>
   <div class="admin-access"><div class="warnbox" id="admin-note">수정하려면 로그인하세요</div><button class="btn primary" id="admin-login">로그인 · 회원가입</button><button class="btn primary" id="own-memberb" hidden>내 정보로 이동</button></div>
+  <section class="profile-location" id="profile-location" hidden aria-labelledby="profile-location-title"><div><span class="profile-eyebrow">내 정보 수정 위치</span><h3 id="profile-location-title">빨간 테두리가 있는 행이 내 정보예요.</h3><p>핵심고객 · 상생직군 · 원하는 비지터를 작성해 보세요.</p></div><button class="btn primary" id="profile-location-edit" type="button">내 소개 정보 수정</button></section>
   <section class="panel panel-pad access-panel" id="member-access-panel" hidden aria-labelledby="member-access-title">
     <h3 id="member-access-title">본인 정보 수정 권한 받기</h3>
     <p class="note" id="member-access-note">본인 이름과 회사를 선택해 요청하세요. 관리자가 확인하면 본인 정보만 수정할 수 있습니다.</p>
@@ -519,6 +537,32 @@ select{font:inherit;min-height:48px;border:1px solid var(--line-2);border-radius
 </section>
 </main>
 
+<dialog id="welcome-dialog" class="profile-welcome" aria-labelledby="welcome-title" aria-describedby="welcome-description">
+  <button class="profile-close" id="welcome-close" type="button" aria-label="안내 닫기">×</button>
+  <span class="profile-welcome-symbol" aria-hidden="true">☀</span>
+  <p class="profile-eyebrow">선샤인 회원 안내</p>
+  <h2 id="welcome-title">어떤 고객을<br>소개받고 싶으세요?</h2>
+  <p class="dialog-intro" id="welcome-description">멤버들이 나를 더 잘 소개할 수 있도록<br>세 가지만 알려주세요.</p>
+  <ol class="profile-prompts" id="welcome-prompts"><li><span>01</span><div><strong>핵심고객</strong><small>내 서비스가 필요한 사람</small></div></li><li><span>02</span><div><strong>상생직군</strong><small>함께 고객을 소개할 업종</small></div></li><li><span>03</span><div><strong>원하는 비지터</strong><small>챕터에 초대해 만나고 싶은 분</small></div></li></ol>
+  <p class="profile-route-note">언제든 <b>멤버 관리 → 내 정보</b>에서 수정할 수 있어요.</p>
+  <button class="btn primary profile-wide" id="welcome-start" type="button">내 정보 작성하러 가기 <span aria-hidden="true">→</span></button>
+  <div class="welcome-dismiss-actions"><button class="profile-skip" id="welcome-skip" type="button">나중에 할게요</button><button class="profile-skip" id="welcome-never" type="button">앞으로 보지 않기</button></div>
+  <p class="msg" id="welcome-message" role="status" aria-live="polite"></p>
+</dialog>
+<dialog id="profile-editor" class="profile-editor" aria-labelledby="profile-editor-title">
+  <button class="profile-close" id="profile-editor-close" type="button" aria-label="내 정보 수정 닫기">×</button>
+  <div id="profile-editor-fields"><p class="profile-eyebrow">멤버 관리 / 내 정보</p><h2 id="profile-editor-title">나를 소개하는 세 가지</h2><p class="profile-person" id="profile-person"></p>
+    <p class="dialog-intro">어떤 분을 만나고 싶은지 구체적으로 적어주세요.<br>작성한 내용은 선샤인과 멤버 목록에 함께 반영돼요.</p>
+    <form id="profile-form">
+      <label for="profile-customers">핵심고객 <small>내 서비스가 필요한 사람</small></label><textarea id="profile-customers" rows="2" maxlength="3000" placeholder="예: 초등학생 자녀를 둔 학부모" aria-describedby="profile-customers-help"></textarea><p class="profile-field-help" id="profile-customers-help">여러 유형은 쉼표 또는 줄바꿈으로 나눠주세요.</p>
+      <label for="profile-synergies">상생직군 <small>함께 고객을 소개할 업종</small></label><textarea id="profile-synergies" rows="2" maxlength="3000" placeholder="예: 사진관, 학원, 아동심리상담" aria-describedby="profile-synergies-help"></textarea><p class="profile-field-help" id="profile-synergies-help">고객층이 비슷하거나 함께 협업할 수 있는 업종을 적어주세요.</p>
+      <label for="profile-wants">원하는 비지터 <small>챕터에 초대해 만나고 싶은 분</small></label><textarea id="profile-wants" rows="2" maxlength="3000" placeholder="예: 부산에서 초등 미술학원을 운영하는 원장님"></textarea>
+      <p class="profile-field-help">지금 떠오르는 항목부터 작성해도 괜찮아요.</p><div class="msg" id="profile-editor-message" role="status" aria-live="polite"></div>
+      <div class="dialog-actions"><button class="btn ghost" id="profile-editor-later" type="button">나중에 할게요</button><button class="btn primary" id="profile-save" type="submit">내 소개 정보 저장</button></div>
+    </form>
+  </div>
+  <div class="profile-success" id="profile-success" hidden><span class="profile-welcome-symbol" aria-hidden="true">✓</span><h2>내 소개를 저장했어요.</h2><p>멤버들이 나를 소개할 때 참고할 수 있어요.<br>원하는 연결이 달라지면 언제든 수정해 주세요.</p><button class="btn primary profile-wide" id="profile-view-sunshine" type="button">나의 선샤인에서 보기 →</button><button class="profile-skip" id="profile-return-members" type="button">멤버 목록에서 확인하기</button></div>
+</dialog>
 <dialog id="login-dialog" aria-labelledby="login-title">
   <form id="login-form">
     <h2 id="login-title">로그인</h2>
@@ -1311,6 +1355,7 @@ function renderRoute(){
     ['meta[property="og:description"]',description],['meta[property="og:url"]',url],
     ['meta[name="twitter:title"]',title],['meta[name="twitter:description"]',description]
   ])document.querySelector(selector).content=value;
+  window.dispatchEvent(new Event('sunshine:routechange'));
 }
 document.querySelectorAll('.step').forEach(link=>{
   const route=PAGE_ROUTES.find(page=>page.view===link.dataset.v);
@@ -1569,7 +1614,7 @@ function permissions(){
   el('own-memberb').hidden=!accessReady||account?.role!=='member';el('own-memberb').disabled=!online||!M.some(m=>m.id===account?.member_id);
   el('guide-login').disabled=authBusy;el('admin-login').disabled=authBusy;
   el('loginb').disabled=authBusy;el('logoutb').disabled=authBusy||busy;
-  el('admin-note').textContent=!email?'수정하려면 로그인하세요':!online?'오프라인 · 읽기 전용입니다. 서버 연결을 복구한 뒤 수정하세요.':accessError?accessError:!accessReady?'수정 권한을 확인하고 있습니다.':busy?'서버에 저장하고 있습니다. 완료될 때까지 기다려 주세요.':isAdmin()?'관리자 · 전체 멤버와 가입자 권한을 관리할 수 있습니다. 수정 내용은 저장 성공 후 공유됩니다.':account?.role==='member'?'본인 정보 수정 · 노란색으로 표시된 내 정보만 수정할 수 있습니다. 입력 후 다른 칸을 누르면 저장됩니다.':'읽기 권한 · 아래에서 본인 확인을 요청하세요. 관리자 승인 후 내 정보를 수정할 수 있습니다.';
+  el('admin-note').textContent=!email?'수정하려면 로그인하세요':!online?'오프라인 · 읽기 전용입니다. 서버 연결을 복구한 뒤 수정하세요.':accessError?accessError:!accessReady?'수정 권한을 확인하고 있습니다.':busy?'서버에 저장하고 있습니다. 완료될 때까지 기다려 주세요.':isAdmin()?'관리자 · 전체 멤버와 가입자 권한을 관리할 수 있습니다. 수정 내용은 저장 성공 후 공유됩니다.':account?.role==='member'?'본인 정보 수정 · 빨간 테두리가 있는 내 정보만 수정할 수 있습니다. 표에서는 입력 후 다른 칸을 누르면 저장됩니다.':'읽기 권한 · 아래에서 본인 확인을 요청하세요. 관리자 승인 후 내 정보를 수정할 수 있습니다.';
   el('admintable').querySelectorAll('input').forEach(input=>{const member=M[+input.closest('tr').dataset.i];input.readOnly=!canEdit(member)||(input.dataset.k==='role'&&!canManage())||(['v','tg'].includes(input.dataset.k)&&(!privateReady||!memberReferralsReady));});
   el('admintable').querySelectorAll('tbody tr').forEach(row=>{const own=account?.role==='member'&&M[+row.dataset.i]?.id===account.member_id;row.classList.toggle('own-row',own);const marker=row.querySelector('.own-marker');if(marker)marker.hidden=!own;});
   el('admintable').querySelectorAll('.del').forEach(button=>button.disabled=!admin);
@@ -1595,6 +1640,7 @@ function permissions(){
   connectionReviewPermissions();
   collabPermissions();
   renderInterviewControls();
+  renderProfileGuide();
 }
 async function loadAccess(background=false){
   const userId=session?.user?.id,version=++accessVersion;
@@ -2665,6 +2711,151 @@ el('interview-apply').onclick=()=>interviewTask(async current=>{
 });
 window.addEventListener('beforeunload',event=>{if(interviewDirty||interviewBusy||collabDirty){event.preventDefault();event.returnValue='';}});
 
+
+/* ---------- 첫 로그인 안내 · 본인 소개 작성 ---------- */
+// A new account-level campaign intentionally ignores the earlier browser-only guide.
+// This user-editable metadata controls presentation only, never authorization.
+const PROFILE_GUIDE_CAMPAIGN='profile-introduction-2026-10-v2';
+const PROFILE_GUIDE_METADATA='sunshine_profile_guide';
+const profileGuideShown=new Set();
+let profilePreferenceOwner='',profilePreferences={},profilePreferencesReady=false,profilePreferencesLoading=false,profilePreferenceRetryAt=0;
+let profilePreferenceQueue=Promise.resolve();
+let profileWelcomeTimer=null,profileWelcomeOwner='',profileEditorMember=null,profileEditorOwner='',profileEditorDirty=false;
+function normalizeProfilePreferences(value){return value&&typeof value==='object'&&!Array.isArray(value)?{campaign:typeof value.campaign==='string'?value.campaign:'',seen:value.seen===true,disabled:value.disabled===true,completed:value.completed===true}:{};}
+function profileGuideState(){return profilePreferencesReady&&profilePreferenceOwner===session?.user?.id&&profilePreferences.campaign===PROFILE_GUIDE_CAMPAIGN?(profilePreferences.completed?'completed':profilePreferences.seen?'seen':''):'';}
+function profileGuideAlreadySeen(){return profilePreferences.disabled||profileGuideState()||profileGuideShown.has(session?.user?.id+':'+PROFILE_GUIDE_CAMPAIGN);}
+function loadProfilePreferences(){
+  const owner=signedIn()?session.user.id:'';
+  if(profilePreferenceOwner!==owner){profilePreferenceOwner=owner;profilePreferences={};profilePreferencesReady=false;profilePreferencesLoading=false;profilePreferenceRetryAt=0;}
+  if(!owner||!db||!online||profilePreferencesReady||profilePreferencesLoading||Date.now()<profilePreferenceRetryAt)return;
+  profilePreferencesLoading=true;
+  // Auth SDK calls must run outside onAuthStateChange's synchronous callback.
+  setTimeout(async()=>{
+    try{
+      const {data,error}=await timed(db.auth.getUser());if(error)throw error;
+      if(profilePreferenceOwner!==owner||session?.user?.id!==owner)return;
+      if(data.user?.id!==owner)throw new Error('안내 설정의 계정을 확인하지 못했습니다.');
+      profilePreferences=normalizeProfilePreferences(data.user.user_metadata?.[PROFILE_GUIDE_METADATA]);profilePreferencesReady=true;
+    }catch{if(profilePreferenceOwner===owner)profilePreferenceRetryAt=Date.now()+30000;}
+    finally{if(profilePreferenceOwner===owner){profilePreferencesLoading=false;renderProfileGuide();}}
+  },0);
+}
+function saveProfilePreferences(patch){
+  const owner=session?.user?.id;
+  const save=profilePreferenceQueue.then(async()=>{
+    if(!owner||!signedIn()||session.user.id!==owner||profilePreferenceOwner!==owner)return false;
+    const {data:fresh,error:readError}=await timed(db.auth.getUser());if(readError)throw readError;
+    if(session?.user?.id!==owner||fresh.user?.id!==owner)return false;
+    const current=normalizeProfilePreferences(fresh.user.user_metadata?.[PROFILE_GUIDE_METADATA]);
+    const next={...current,...patch,campaign:PROFILE_GUIDE_CAMPAIGN,seen:true,disabled:current.disabled===true||profilePreferences.disabled===true||patch.disabled===true,completed:current.completed===true||profilePreferences.completed===true||patch.completed===true};
+    const {data,error}=await timed(db.auth.updateUser({data:{[PROFILE_GUIDE_METADATA]:next}}));if(error)throw error;
+    if(session?.user?.id!==owner||profilePreferenceOwner!==owner||data.user?.id!==owner)return false;
+    profilePreferences=normalizeProfilePreferences(data.user.user_metadata?.[PROFILE_GUIDE_METADATA]);profilePreferencesReady=true;renderProfileGuide();return true;
+  }).catch(()=>false);
+  profilePreferenceQueue=save;return save;
+}
+function rememberProfileGuide(phase,value){return saveProfilePreferences(value==='completed'?{completed:true}:{});}
+function ownProfile(){return signedIn()&&accessReady&&account?.user_id===session.user.id&&account.role==='member'?M.find(member=>member.id===account.member_id):null;}
+function profileGuidePhase(){return !signedIn()||!online||!accessReady||account?.user_id!==session.user.id?'':isAdmin()?'manage':ownProfile()?'profile':account?.role==='viewer'?'claim':'';}
+function resetProfileEditor(){profileEditorMember=null;profileEditorOwner='';profileEditorDirty=false;el('profile-form').reset();message('profile-editor-message','');el('profile-person').textContent='';}
+function renderProfileGuide(){
+  loadProfilePreferences();
+  const phase=profileGuidePhase(),member=ownProfile(),pending=account?.request_status==='pending';
+  el('profile-guide-card').hidden=!phase||phase==='manage';
+  el('profile-location').hidden=!member;
+  el('profile-location-edit').disabled=!member||!canEdit(member);
+  if(profileEditorOwner&&(profileEditorOwner!==session?.user?.id||!member||member.id!==profileEditorMember?.id)){
+    el('profile-editor').close();resetProfileEditor();
+  }
+  if(el('welcome-dialog').open&&(!phase||profileWelcomeOwner!==session?.user?.id)){el('welcome-dialog').close();}
+  if(!phase){
+    clearTimeout(profileWelcomeTimer);profileWelcomeTimer=null;
+    if(el('profile-editor').open){el('profile-save').disabled=true;el('profile-form').querySelectorAll('textarea').forEach(field=>field.disabled=true);message('profile-editor-message','연결을 복구한 뒤 다시 저장해 주세요. 입력한 내용은 유지됩니다.',true);}
+    return;
+  }
+  const complete=phase==='profile'&&profileGuideState()==='completed';
+  const remaining=member?[!member.c?.length&&'핵심고객',!member.s?.length&&'상생직군',!member.w?.trim()&&'원하는 비지터'].filter(Boolean):[];
+  el('profile-guide-label').textContent=phase==='claim'?'내 정보 연결':complete?'나의 소개 정보':'나의 첫 연결';
+  el('profile-guide-title').textContent=phase==='manage'?'멤버 소개 정보를 확인해 보세요.':phase==='claim'?(pending?'본인 확인을 기다리고 있어요.':'내 이름을 연결하고, 소개를 시작하세요.'):`${member.n}님, ${complete?'소개받고 싶은 고객이 달라졌나요?':'어떤 고객을 소개받고 싶으세요?'}`;
+  el('profile-guide-description').textContent=phase==='claim'?(pending?'관리자가 승인하면 내 소개 정보를 작성할 수 있어요. 요청 상태를 확인해 보세요.':'본인 이름과 회사를 선택해 요청하면, 관리자 승인 후 내 정보를 수정할 수 있어요.'):remaining.length?'아직 작성하지 않은 '+remaining.join(' · ')+'을 알려주세요. 멤버들이 나를 소개하기 쉬워져요.':'핵심고객 · 상생직군 · 원하는 비지터를 확인하고, 지금 만나고 싶은 분을 알려주세요.';
+  el('profile-guide-start').textContent=phase==='claim'?(pending?'요청 상태 확인하기 →':'내 이름 연결하러 가기 →'):complete?'내 소개 정보 수정 →':'내 정보 작성하기 →';
+  el('profile-guide-start').disabled=!canWrite();
+  if(el('profile-editor').open){
+    el('profile-save').disabled=!canEdit(member);el('profile-save').textContent=busy?'저장하고 있어요…':'내 소개 정보 저장';
+    el('profile-form').querySelectorAll('textarea').forEach(field=>field.disabled=busy||authBusy||!canEdit(member));
+    el('profile-editor-close').disabled=busy;el('profile-editor-later').disabled=busy;
+  }
+  if(!profileWelcomeTimer&&profilePreferencesReady&&!profileGuideAlreadySeen()&&!busy&&!authBusy&&!recoveryUserId&&!recoveryAwaitingSession){
+    profileWelcomeTimer=setTimeout(()=>{
+      profileWelcomeTimer=null;
+      if(profileGuidePhase()!==phase||busy||authBusy||recoveryUserId||recoveryAwaitingSession||document.querySelector('dialog[open]')||!profilePreferencesReady||profileGuideAlreadySeen())return;
+      el('welcome-title').innerHTML=phase==='claim'?'내 이름을 연결하고<br>소개를 시작하세요.':'어떤 고객을<br>소개받고 싶으세요?';
+      el('welcome-description').textContent=phase==='manage'?'멤버 관리에서 내 이름을 찾아 소개 정보를 확인해 보세요. 관리자는 전체 멤버의 정보를 수정할 수 있어요.':phase==='profile'?'멤버들이 나를 더 잘 소개할 수 있도록 세 가지만 알려주세요.':pending?'본인 확인 요청이 접수됐어요. 관리자가 승인하면 아래 소개 정보를 작성할 수 있어요.':'먼저 명단에서 내 이름과 회사를 선택해 본인 확인을 요청하세요. 관리자 승인 후 아래 소개 정보를 작성할 수 있어요.';
+      el('welcome-start').textContent=phase==='manage'?'멤버 관리로 이동하기 →':phase==='profile'?'내 정보 작성하러 가기 →':pending?'요청 상태 확인하기 →':'내 이름 연결하러 가기 →';
+      message('welcome-message','');el('welcome-never').disabled=false;el('welcome-never').textContent='앞으로 보지 않기';
+      profileWelcomeOwner=session.user.id;el('welcome-dialog').showModal();profileGuideShown.add(session.user.id+':'+PROFILE_GUIDE_CAMPAIGN);saveProfilePreferences({});el('welcome-start').focus();
+    },250);
+  }
+}
+function goToOwnProfile(){
+  const phase=profileGuidePhase();if(!phase||!canWrite())return;
+  el('welcome-dialog').close();el('t4').click();
+  const member=ownProfile();
+  if(member){openAdminMember(member.id);openProfileEditor();}
+  else if(phase==='manage'){el('admin-note').scrollIntoView({block:'center'});el('admin-note').tabIndex=-1;el('admin-note').focus({preventScroll:true});}
+  else{el('member-access-panel').scrollIntoView({block:'center'});el('request-member').focus({preventScroll:true});}
+}
+function openProfileEditor(){
+  const member=ownProfile();if(!member||!canEdit(member))return;
+  profileEditorMember=structuredClone(member);profileEditorOwner=session.user.id;profileEditorDirty=false;
+  el('profile-person').textContent=[member.n,member.co,member.f].filter(Boolean).join(' · ');
+  el('profile-customers').value=(member.c||[]).join('\n');el('profile-synergies').value=(member.s||[]).join('\n');el('profile-wants').value=member.w||'';
+  el('profile-editor-fields').hidden=false;el('profile-success').hidden=true;
+  el('profile-editor').setAttribute('aria-labelledby','profile-editor-title');message('profile-editor-message','');
+  if(!el('profile-editor').open)el('profile-editor').showModal();renderProfileGuide();
+  el(!member.c?.length?'profile-customers':!member.s?.length?'profile-synergies':!member.w?.trim()?'profile-wants':'profile-customers').focus({preventScroll:true});
+}
+function closeProfileEditor(){
+  if(busy||authBusy)return false;
+  if(profileEditorDirty&&!confirm('아직 저장하지 않은 내용이 있어요. 닫을까요?'))return false;
+  el('profile-editor').close();resetProfileEditor();return true;
+}
+el('profile-guide-start').onclick=goToOwnProfile;el('welcome-start').onclick=goToOwnProfile;
+for(const id of ['welcome-close','welcome-skip'])el(id).onclick=()=>el('welcome-dialog').close();
+el('welcome-never').onclick=async()=>{
+  const owner=session?.user?.id;el('welcome-never').disabled=true;el('welcome-never').textContent='저장하고 있어요…';message('welcome-message','');
+  const saved=await saveProfilePreferences({disabled:true});
+  if(session?.user?.id!==owner||profileWelcomeOwner!==owner)return;
+  el('welcome-never').disabled=false;el('welcome-never').textContent='앞으로 보지 않기';
+  if(saved)el('welcome-dialog').close();else message('welcome-message','안내 설정을 저장하지 못했어요. 잠시 후 ‘앞으로 보지 않기’를 다시 눌러 주세요.',true);
+};
+// If another dialog (such as password recovery) was open at initial access,
+// resume the one-time guide only after it is closed.
+el('login-dialog').addEventListener('close',renderProfileGuide);
+el('profile-location-edit').onclick=()=>{openAdminMember(account?.member_id);openProfileEditor();};
+el('profile-form').addEventListener('input',()=>{profileEditorDirty=true;});
+for(const id of ['profile-editor-close','profile-editor-later'])el(id).onclick=closeProfileEditor;
+el('profile-editor').addEventListener('cancel',event=>{event.preventDefault();closeProfileEditor();});
+el('profile-form').onsubmit=async event=>{
+  event.preventDefault();
+  const member=profileEditorMember,owner=profileEditorOwner;
+  if(!member||owner!==session?.user?.id||!canEdit(member))return;
+  const split=value=>[...new Set(value.split(/[,\n]/).map(item=>item.trim()).filter(Boolean))];
+  const next={customers:split(el('profile-customers').value),synergies:split(el('profile-synergies').value),wants:el('profile-wants').value.trim()};
+  const previous={customers:member.c||[],synergies:member.s||[],wants:member.w||''};
+  const patch=Object.fromEntries(Object.entries(next).filter(([key,value])=>JSON.stringify(value)!==JSON.stringify(previous[key])));
+  if(!Object.keys(patch).length){message('profile-editor-message','변경한 내용이 없어요. 원하는 항목을 수정한 뒤 저장해 주세요.');return;}
+  const saved=await write(()=>updateMember(member,patch),'profile-editor-message',member);
+  if(owner!==session?.user?.id||!el('profile-editor').open)return;
+  if(!saved)return;
+  profileEditorDirty=false;profilePreferences.completed=true;rememberProfileGuide('profile','completed');
+  el('profile-editor-fields').hidden=true;el('profile-success').hidden=false;el('profile-success').querySelector('h2').id='profile-success-title';el('profile-editor').setAttribute('aria-labelledby','profile-success-title');
+  renderProfileGuide();el('profile-view-sunshine').focus();
+};
+el('profile-view-sunshine').onclick=()=>{const id=profileEditorMember?.id;if(!closeProfileEditor())return;sel=Math.max(0,M.findIndex(member=>member.id===id));renderList();renderSun();el('t1').click();el('profile-guide-card').scrollIntoView({block:'start'});};
+el('profile-return-members').onclick=()=>{const id=profileEditorMember?.id;if(closeProfileEditor())openAdminMember(id);};
+window.addEventListener('sunshine:routechange',renderProfileGuide);
+window.addEventListener('beforeunload',event=>{if(profileEditorDirty){event.preventDefault();event.returnValue='';}});
 
 function renderAll(){ reindex(); renderList(); renderSun(); renderTeams(); renderAdmin(); renderConnectionReview(); renderCollabAdmin(); }
 sel=Math.max(0,M.findIndex(m=>m.n==='박미성'));renderAll();
