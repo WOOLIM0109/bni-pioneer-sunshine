@@ -72,7 +72,9 @@ export function renderPage(source, route, { baseUrl = canonicalFromHtml(source) 
   html = replaceMeta(html, 'property', 'og:url', pageUrl);
   if (route) {
     const title = `${route.title} | ${siteName}`;
-    html = replaceOne(html, /<title>[\s\S]*?<\/title>/gi, () => `<title>${escapeHtml(title)}</title>`, 'document title');
+    // Inline SVGs may contain their own <title>, including in script templates.
+    html = replaceOne(html, /(<head\b[^>]*>)([\s\S]*?)(<\/head>)/gi, (_match, start, head, end) =>
+      start + replaceOne(head, /<title>[\s\S]*?<\/title>/gi, () => `<title>${escapeHtml(title)}</title>`, 'document title') + end, 'document head');
     for (const [kind, key, value] of [['property', 'og:title', title], ['name', 'twitter:title', title], ['property', 'og:description', route.description], ['name', 'twitter:description', route.description], ['name', 'description', route.description]]) {
       html = replaceMeta(html, kind, key, value);
     }
@@ -152,10 +154,10 @@ export async function buildSite({ baseUrl } = {}) {
   }
   await writeFile(path.join(output, '.nojekyll'), '', 'utf8');
   await writeFile(path.join(output, '404.html'), notFoundPage(base, routes), 'utf8');
-  return { output, pages: pages.length, baseUrl: base.href };
+  return { output, pages: pages.length, routes: routes.map(route => route.slug), baseUrl: base.href };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const result = await buildSite({ baseUrl: process.env.PAGES_BASE_URL });
-  console.log(`Built ${result.pages} pages in ${result.output} for ${result.baseUrl}`);
+  console.log(`Built ${result.pages} pages (${result.routes.join(', ')}) in ${result.output} for ${result.baseUrl}`);
 }

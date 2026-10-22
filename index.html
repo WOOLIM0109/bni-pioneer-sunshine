@@ -306,6 +306,45 @@ select{font:inherit;min-height:48px;border:1px solid var(--line-2);border-radius
   #admintable .del{justify-self:start}
   #accountstable,#accountstable tbody,#accountstable tr,#accountstable td{display:block;width:100%;max-width:none;min-width:0}#accountstable thead{display:none}#accountstable tr{padding:14px 12px;border:1px solid var(--line-2);border-radius:12px;margin-bottom:14px}#accountstable td{border:0;padding:6px 0}#accountstable td::before{content:attr(data-label);display:block;font-size:14px;color:var(--ink-2);margin-bottom:4px}.access-controls{display:block}.access-controls select,.access-controls .btn{width:100%;margin-top:8px}
 }
+/* Customer network: colors derive from the existing theme tokens. */
+.customer-map-layout{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:22px;align-items:start}
+.customer-map-figure{margin:0;min-width:0;padding:22px 14px 16px}
+.customer-map-topline{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 10px;flex-wrap:wrap}
+.customer-map-topline strong{font-size:17px}.customer-map-topline span{font-size:14px;color:var(--ink-3)}
+.customer-map-svg{display:block;width:100%;height:auto;touch-action:pan-x pan-y pinch-zoom}
+.customer-map-orbit{fill:none;stroke:var(--line);stroke-width:1.5}
+.customer-map-link{stroke:var(--ink-3);stroke-width:1;stroke-dasharray:3 6;opacity:.18;pointer-events:none}
+.customer-map-link.is-active{stroke:var(--red);stroke-width:1.8;opacity:.65}
+.customer-map-link.is-muted{opacity:.035}
+.customer-map-node{cursor:pointer;outline:none;transition:opacity .15s;pointer-events:bounding-box}
+.customer-map-node.is-muted{opacity:.22}
+.customer-map-node:focus-visible{outline:none;opacity:1}
+.customer-map-node .focus-ring{fill:none;stroke:transparent;stroke-width:3}
+.customer-map-node:focus-visible .focus-ring{stroke:var(--red);stroke-dasharray:4 3}
+.customer-map-member .member-dot{fill:var(--team-color);stroke:var(--surface);stroke-width:2}
+.customer-map-member text{fill:var(--ink-2);font-size:16px;font-weight:500}
+.customer-map-member.is-active .member-dot{fill:var(--red);stroke:var(--red-soft);stroke-width:5}
+.customer-map-member.is-active text{fill:var(--red);font-weight:750}
+.customer-map-bubble{fill:var(--surface-2);stroke:var(--line-2);stroke-width:1.5}
+.customer-map-group text{fill:var(--ink-2);font-size:12px;font-weight:600;pointer-events:none}
+.customer-map-group .customer-map-count{fill:var(--ink);font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+.customer-map-group.is-active .customer-map-bubble{fill:var(--red-soft);stroke:var(--red);stroke-width:2}
+.customer-map-group.is-active text{fill:var(--red)}
+.customer-map-legend{display:flex;justify-content:center;gap:8px 18px;flex-wrap:wrap;padding:0 12px;margin:6px 0 12px;list-style:none;font-size:13px;color:var(--ink-2)}
+.customer-map-legend li{display:flex;align-items:center;gap:7px}.customer-map-legend i{width:9px;height:9px;border-radius:50%;background:var(--team-color);flex:none}
+.customer-map-caption{font-size:13px;color:var(--ink-3);text-align:center;margin:10px 12px 0}
+.customer-map-detail{padding:22px;min-width:0;max-height:840px;overflow:auto;scrollbar-width:thin}
+.customer-map-detail h3{font-size:23px;line-height:1.45}.customer-map-detail h4{font-size:17px;margin:0 0 8px}.customer-map-detail p{font-size:15px;color:var(--ink-2);margin:10px 0 18px;word-break:keep-all}
+.customer-map-detail .profile-eyebrow{margin-bottom:10px}.customer-map-detail-group{border-top:1px solid var(--line);padding-top:16px;margin-top:18px}
+.customer-map-peers{display:grid;gap:7px}.customer-map-peer{display:block;width:100%;border:1px solid var(--line);border-radius:7px;padding:10px 12px;background:var(--surface);color:var(--ink);text-align:left;font:inherit;font-size:15px;cursor:pointer;overflow-wrap:anywhere}
+.customer-map-peer:hover{border-color:var(--red);background:var(--red-soft)}.customer-map-peer:focus-visible{outline:2px solid var(--red);outline-offset:2px}.customer-map-peer small{display:block;color:var(--ink-3);font-size:12px;margin-top:3px}.customer-map-peer[aria-pressed="true"]{border-color:var(--red);color:var(--red)}
+.customer-map-group-button{font:inherit;font-weight:650;font-size:16px;color:var(--red);background:none;border:0;padding:0;text-align:left;cursor:pointer;overflow-wrap:anywhere}.customer-map-group-button:focus-visible{outline:2px solid var(--red);outline-offset:3px}
+.customer-map-list{margin-top:24px;padding:22px}.customer-map-list h3{font-size:21px;margin-bottom:4px}.customer-map-list>p{font-size:14px;color:var(--ink-3);margin:0 0 16px}.customer-map-accordion-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 24px;align-items:start}
+.customer-map-accordion{border-top:1px solid var(--line);padding:0;min-width:0}.customer-map-accordion summary{cursor:pointer;min-height:50px;padding:12px 2px;font-size:16px;font-weight:600;overflow-wrap:anywhere}.customer-map-accordion summary span{font-size:13px;color:var(--ink-3);font-weight:400;margin-left:8px}.customer-map-accordion .customer-map-peers{padding-bottom:16px}
+.customer-map-unclassified{margin:20px 0}.customer-map-unclassified h3{font-size:19px}.customer-map-unclassified p,.customer-map-unclassified li{font-size:15px;overflow-wrap:anywhere}
+@media(max-width:1000px){.customer-map-layout{grid-template-columns:minmax(0,1fr)}.customer-map-detail{max-height:none}.customer-map-detail .customer-map-peers{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.customer-map-figure{padding:16px 0 12px}.customer-map-topline{padding:0 16px}.customer-map-topline span{font-size:12px}.customer-map-legend{justify-content:flex-start;gap:7px 14px;font-size:12px}.customer-map-detail,.customer-map-list{padding:18px}.customer-map-accordion-grid,.customer-map-detail .customer-map-peers{grid-template-columns:minmax(0,1fr)}.customer-map-detail h3{font-size:21px}}
+@media(prefers-reduced-motion:reduce){.customer-map-node{transition:none}}
 </style>
 <style>
 /* 인터뷰 문서 · 관리자 검토 */
@@ -397,6 +436,7 @@ select{font:inherit;min-height:48px;border:1px solid var(--line-2);border-radius
 <nav role="tablist" aria-label="단계">
   <a class="step" role="tab" id="t1" aria-selected="true" aria-current="page" aria-controls="v1" data-v="v1" href="sunshine/"><span class="idx">1</span>나의 선샤인</a>
   <a class="step" role="tab" id="t2" aria-selected="false" aria-controls="v2" data-v="v2" href="collab-teams/"><span class="idx">2</span>협업팀</a>
+  <a class="step" role="tab" id="t3" aria-selected="false" aria-controls="v3" data-v="v3" href="customer-map/"><span class="idx">3</span>고객 지도</a>
   <a class="step" role="tab" id="t4" aria-selected="false" aria-controls="v4" data-v="v4" href="members/"><span class="idx">＋</span>멤버 관리</a>
 </nav>
 <div class="link-read-warning" id="link-read-warning" hidden><span id="link-read-detail" role="status"></span><button class="btn ghost" id="link-retry">연결 정보 다시 불러오기</button></div>
@@ -436,6 +476,20 @@ select{font:inherit;min-height:48px;border:1px solid var(--line-2);border-radius
   <div class="grid g3" id="teamgrid"></div>
 </section>
 
+<section id="v3" hidden>
+  <div class="view-heading"><div><h2>고객 지도</h2><p>같은 고객을 만나는 멤버끼리 연결해 보세요. 이름이나 고객 묶음을 누르면 연결된 대상이 강조됩니다.</p></div><button class="btn ghost" id="customer-map-clear" type="button" disabled>선택 해제</button></div>
+  <div class="customer-map-layout">
+    <figure class="panel customer-map-figure" aria-labelledby="customer-map-title">
+      <div class="customer-map-topline"><strong id="customer-map-title">우리의 고객 연결</strong><span id="customer-map-stats"></span></div>
+      <svg class="customer-map-svg" id="customer-map-svg" viewBox="0 0 1000 1000" role="group" aria-labelledby="customer-map-title" aria-describedby="customer-map-caption"></svg>
+      <ul class="customer-map-legend" id="customer-map-legend" aria-label="협업팀 색상 범례"></ul>
+      <figcaption class="customer-map-caption" id="customer-map-caption">버블이 클수록 함께 만나는 멤버가 많아요. 두 손가락으로 확대해 볼 수 있습니다.</figcaption>
+    </figure>
+    <aside class="panel customer-map-detail" id="customer-map-detail" aria-label="선택한 고객 연결" aria-live="polite" aria-atomic="true"></aside>
+  </div>
+  <section class="panel customer-map-list" aria-labelledby="customer-map-list-title"><h3 id="customer-map-list-title">목록 보기</h3><p>고객 묶음을 펼쳐 같은 고객을 만나는 멤버를 찾아보세요.</p><div class="customer-map-accordion-grid" id="customer-map-list"></div></section>
+</section>
+
 <section id="v4" hidden>
   <div class="view-heading"><div><h2>멤버 관리</h2><p>멤버는 본인 정보를, 관리자는 전체 명단을 수정할 수 있어요.</p></div></div>
   <div class="admin-access"><div class="warnbox" id="admin-note">수정하려면 로그인하세요</div><button class="btn primary" id="admin-login">로그인 · 회원가입</button><button class="btn primary" id="own-memberb" hidden>내 정보로 이동</button></div>
@@ -447,6 +501,7 @@ select{font:inherit;min-height:48px;border:1px solid var(--line-2);border-radius
     <div class="msg" id="access-request-message" role="status"></div>
   </section>
   <div class="msg" id="adminmsg" role="status" aria-live="polite"></div>
+  <section class="panel panel-pad customer-map-unclassified" id="customer-map-unclassified" hidden aria-labelledby="customer-map-unclassified-title"><h3 id="customer-map-unclassified-title">고객 지도 미분류 표현 <span id="customer-map-unclassified-count">0</span>개</h3><p>이 표현은 고객 지도의 ‘기타’에 표시됩니다. 목록을 복사해 고객 묶음 추가를 요청할 수 있습니다.</p><ul id="customer-map-unclassified-list"></ul></section>
   <div class="panel panel-pad">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
       <div class="ptitle" style="margin:0">멤버 <span class="num" id="cnt">0</span>명</div>
@@ -1328,6 +1383,7 @@ const esc=t=>String(t==null?'':t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;',
 const PAGE_ROUTES = [
   {"view":"v1","slug":"sunshine","title":"나의 선샤인","description":"멤버별 핵심고객과 상생직군을 살펴보고 함께할 비즈니스 연결을 찾아보세요."},
   {"view":"v2","slug":"collab-teams","title":"협업팀","description":"9기 협업팀에서 깊이 있는 121을 나누고, 필요한 비지터를 함께 초대해 공동 호스팅하세요."},
+  {"view":"v3","slug":"customer-map","title":"고객 지도","description":"같은 핵심고객을 만나는 파이오니아 멤버를 고객 묶음별로 연결하고 함께 121을 나눌 대상을 찾아보세요."},
   {"view":"v4","slug":"members","title":"멤버 관리","description":"파이오니아 챕터 멤버 정보를 확인하고 승인된 본인 정보와 명단을 관리하세요."}
 ];
 // PAGE_ROUTES_END
@@ -1528,6 +1584,194 @@ function renderTeams(){
 }
 function safeCollabChatLink(value){try{const url=new URL(value);return url.protocol==='https:'&&!url.username&&!url.password?url.href:'';}catch{return '';}}
 
+/* ---------- 3. 고객 지도 · 공개 고객 유형만 사용 ---------- */
+const CUSTOMER_GROUPS={
+  '소상공인·소기업 대표':['소기업 대표','개인·소상공인','1인 창업자','팀 단위 사업자','법인 사업자','법률자문이 필요한 기업·소상공인'],
+  '숙박·병원·상가 사업주':['숙박·병원·상가 사업주','병·의원 원장','병·의원 운영·행정 책임자','개원 준비 의료인','요양병원','동물병원','펫 관련샵 업주'],
+  '기업 총무·인사·행사 담당':['기업 인사·총무','행사 주최자','명절 선물 구매 기업','회식 기업','직원 복지에 관심 있는 사업주','협회·단체 운영자','팀·기업'],
+  '중견기업 대표·임원':['중기업 대표','대표·임원','하이엔드 전문직'],
+  '건축주·건설사':['신축·리모델링 건축주','건설사','건설 현장소장','건물 관리 담당자','상가 임대인','부동산 임대사업자'],
+  '이사·입주 가구':['이사·입주 가구','아파트 공동구매 담당자'],
+  '부모·가족':['부모·가족','중장년 가장','라이프케어 관심 가정','고령 부모 부양 50대','반려동물 가정','유아·초등 학부모','가족 외식 손님'],
+  '창업 준비자':['창업 준비자','스타트업·창업 준비자','3년 내 (예비)창업자','정책자금·정부지원사업 희망 사업자','기업인증 필요 사업자','소개자료·브랜딩 필요 기업'],
+  '제조·무역 대표':['제조·공장 대표','무역·제조업 대표'],
+  '예비부부·웨딩':['예비신랑','예비신랑·신부','신혼·웨딩'],
+  '요식업 점주':['요식업 점주'],
+  '전문직':['정장 입는 전문직'],
+  '미용 소비자':['미용 소비자'],
+  '분쟁·법률 당사자':['상속·분쟁 당사자','계약·거래 분쟁 당사자','소송 대응이 필요한 개인·사업자'],
+  '개인 부업·소득':['고소득 부업 원하는 분'],
+  '해외 거주·주재원':['해외 거주·주재원'],
+  'BNI 챕터 운영진':['BNI 챕터 운영자','BNI 챕터 의장단·디렉터']
+};
+const customerExpressionKey=value=>String(value||'').replace(/[\s·ㆍ・‧∙⋅·]+/gu,'').normalize('NFKC').replace(/\s/gu,'').toLocaleLowerCase();
+const CUSTOMER_GROUP_LOOKUP=new Map(Object.entries(CUSTOMER_GROUPS).flatMap(([name,expressions])=>[name,...expressions].map(value=>[customerExpressionKey(value),name])));
+const CUSTOMER_TEAM_COLORS=['var(--sun)','var(--ink-2)','var(--red)','color-mix(in srgb,var(--red) 65%,var(--ink))','color-mix(in srgb,var(--sun) 50%,var(--red))'];
+let customerMapSelection=null,customerMapHashSeen=null,customerMapTouched=false,customerMapAutoUser=null;
+function customerMapData(){
+  const teamOrder=orderedCollabTeams(),teamIndex=new Map(teamOrder.map((team,index)=>[team.id,index]));
+  const members=M.map((member,index)=>({member,index,key:collabMemberKey(member),teams:memberCollabTeams(member),groups:new Set()}));
+  const buckets=new Map(Object.keys(CUSTOMER_GROUPS).map(name=>[name,{name,members:[]}])),unclassified=new Map();
+  members.forEach(row=>{
+    (row.member.c||[]).forEach(value=>{
+      if(!String(value||'').trim())return;
+      const normalized=customerExpressionKey(value),group=CUSTOMER_GROUP_LOOKUP.get(normalized)||'기타';
+      row.groups.add(group);
+      if(group==='기타'){
+        if(!unclassified.has(normalized))unclassified.set(normalized,{expression:String(value).trim(),members:[]});
+        const entry=unclassified.get(normalized);if(!entry.members.includes(row.member))entry.members.push(row.member);
+      }
+    });
+    row.team=row.teams[0]||null;
+    row.color=row.groups.size&&row.team?CUSTOMER_TEAM_COLORS[teamIndex.get(row.team.id)%CUSTOMER_TEAM_COLORS.length]:'var(--gap)';
+  });
+  // A multi-team member appears once, next to their first team in display order.
+  members.sort((a,b)=>(teamIndex.get(a.team?.id)??teamOrder.length)-(teamIndex.get(b.team?.id)??teamOrder.length)||a.index-b.index);
+  members.forEach(row=>row.groups.forEach(name=>{if(!buckets.has(name))buckets.set(name,{name,members:[]});buckets.get(name).members.push(row);}));
+  return {members,groups:[...buckets.values()].filter(group=>group.members.length),unclassified:[...unclassified.values()],teams:teamOrder};
+}
+function customerBubbleLayout(groups){
+  const total=groups.reduce((sum,group)=>sum+group.members.length,0)||1;
+  const scale=Math.sqrt(.46*290*290/total);
+  const bubbles=groups.map((group,index)=>{
+    const angle=index*Math.PI*(3-Math.sqrt(5))-.8,distance=Math.sqrt((index+.5)/Math.max(1,groups.length))*210;
+    return {...group,r:Math.sqrt(group.members.length)*scale,x:500+Math.cos(angle)*distance,y:500+Math.sin(angle)*distance};
+  });
+  // Deterministic initial positions and pair order keep refreshes reproducible.
+  for(let step=0;step<500;step++){
+    let overlap=0;
+    bubbles.forEach((a,index)=>{
+      bubbles.slice(index+1).forEach(b=>{
+        const dx=b.x-a.x,dy=b.y-a.y,distance=Math.hypot(dx,dy)||.001,needed=a.r+b.r+10;
+        if(distance>=needed)return;
+        const shift=(needed-distance)/2+.001;overlap=Math.max(overlap,needed-distance);
+        const ux=distance===.001?1:dx/distance,uy=distance===.001?0:dy/distance;
+        a.x-=ux*shift;a.y-=uy*shift;b.x+=ux*shift;b.y+=uy*shift;
+      });
+    });
+    bubbles.forEach(b=>{const dx=b.x-500,dy=b.y-500,distance=Math.hypot(dx,dy),limit=305-b.r;if(distance>limit){b.x=500+dx/distance*limit;b.y=500+dy/distance*limit;}});
+    if(step>30&&overlap<.01)break;
+  }
+  return bubbles;
+}
+function customerMapReadHash(data){
+  if(currentRoute()?.view!=='v3')return;
+  const mapHash=/^#(?:member|group)=/.test(location.hash);
+  if(customerMapHashSeen===location.hash&&(customerMapSelection||!mapHash))return;
+  const first=customerMapHashSeen===null,params=new URLSearchParams(location.hash.slice(1));
+  customerMapHashSeen=location.hash;
+  if(params.has('member')){
+    const row=data.members.find(row=>row.member.n===params.get('member')&&(!params.has('memberId')||row.key===params.get('memberId')));
+    customerMapSelection=row?{type:'member',key:row.key,name:row.member.n}:null;customerMapTouched=true;
+  }else if(params.has('group')){
+    customerMapSelection=data.groups.some(group=>group.name===params.get('group'))?{type:'group',key:params.get('group')}:null;customerMapTouched=true;
+  }else if(!location.hash){customerMapSelection=null;if(!first)customerMapTouched=true;}
+}
+function customerMapWriteHash(replace=false){
+  if(currentRoute()?.view!=='v3')return;
+  const params=new URLSearchParams(location.hash.slice(1));
+  // Authentication callback fragments belong to the auth SDK until consumed.
+  if([...params.keys()].some(key=>!['member','memberId','group'].includes(key)))return;
+  let hash='';
+  if(customerMapSelection?.type==='member'){
+    const member=M.find(member=>collabMemberKey(member)===customerMapSelection.key);
+    if(member){hash='#member='+encodeURIComponent(member.n);if(M.filter(other=>other.n===member.n).length>1)hash+='&memberId='+encodeURIComponent(collabMemberKey(member));}
+  }else if(customerMapSelection)hash='#group='+encodeURIComponent(customerMapSelection.key);
+  if(location.hash!==hash)history[replace?'replaceState':'pushState'](null,'',location.pathname+location.search+hash);
+  customerMapHashSeen=location.hash;
+}
+function selectCustomerMap(type,key){
+  customerMapTouched=true;customerMapSelection=type?{type,key,name:type==='member'?M.find(member=>collabMemberKey(member)===key)?.n:undefined}:null;customerMapWriteHash();renderCustomerMap();
+}
+function customerMapPeer(row){
+  const selected=customerMapSelection?.type==='member'&&customerMapSelection.key===row.key;
+  return `<button class="customer-map-peer" type="button" data-map-member="${esc(row.key)}" aria-pressed="${selected}"><strong>${esc(row.member.n)}</strong> · ${esc(row.member.f||'전문분야 미입력')}<small>${esc(row.teams.map(team=>team.name).join(' · ')||(collabReady?'소속 협업팀 없음':'협업팀 확인 필요'))}</small></button>`;
+}
+function renderCustomerMapDetail(data){
+  const selected=customerMapSelection,member=selected?.type==='member'?data.members.find(row=>row.key===selected.key):null;
+  let content='';
+  if(member){
+    const peers=data.members.filter(row=>row!==member&&[...row.groups].some(name=>member.groups.has(name)));
+    content=`<span class="profile-eyebrow">함께할 121 찾기</span><h3>${esc(member.member.n)} 대표의 고객 묶음</h3><p>${member.groups.size}개 고객 묶음 → 같은 고객을 보는 멤버 ${peers.length}명</p>`;
+    if(!member.groups.size)content+='<p>핵심고객 미입력 · 고객 유형을 등록하면 함께 만나는 멤버를 찾을 수 있어요.</p>';
+    data.groups.filter(group=>member.groups.has(group.name)).forEach(group=>{
+      const others=group.members.filter(row=>row!==member);
+      content+=`<section class="customer-map-detail-group"><h4><button class="customer-map-group-button" type="button" data-map-group="${esc(group.name)}">${esc(group.name)} <span class="num">${group.members.length}</span></button></h4><div class="customer-map-peers">${others.map(customerMapPeer).join('')||'<p>이 고객 묶음을 등록한 다른 멤버가 아직 없습니다.</p>'}</div></section>`;
+    });
+  }else if(selected?.type==='group'){
+    const group=data.groups.find(group=>group.name===selected.key);
+    if(group)content=`<span class="profile-eyebrow">같은 고객을 만나는 멤버</span><h3>${esc(group.name)}</h3><p>연결된 멤버 ${group.members.length}명 · 이름을 누르면 그 멤버의 고객 연결로 이동합니다.</p><div class="customer-map-peers">${group.members.map(customerMapPeer).join('')}</div>`;
+  }
+  if(!content)content=`<span class="profile-eyebrow">우리의 다음 연결</span><h3>어떤 고객을<br>함께 만나고 있나요?</h3><p>바깥의 멤버 이름이나 안쪽의 고객 묶음을 눌러 보세요. 같은 고객을 만나는 멤버와 121을 시작할 수 있어요.</p><p>멤버 ${data.members.length}명 · 고객 묶음 ${data.groups.length}개</p><p>그림 아래 목록에서도 모든 연결을 확인할 수 있습니다.</p>`;
+  el('customer-map-detail').innerHTML=content;
+}
+function renderCustomerMapUnclassified(data=customerMapData()){
+  el('customer-map-unclassified').hidden=!isAdmin();
+  el('customer-map-unclassified-count').textContent=data.unclassified.length;
+  el('customer-map-unclassified-list').innerHTML=data.unclassified.map(row=>`<li>${esc(row.expression)} · ${esc(row.members.map(member=>member.n).join(', '))}</li>`).join('');
+}
+function renderCustomerMap(){
+  const data=customerMapData();customerMapReadHash(data);
+  if(customerMapSelection){
+    if(customerMapSelection.type==='member'&&!data.members.some(row=>row.key===customerMapSelection.key)){
+      const matches=data.members.filter(row=>row.member.n===customerMapSelection.name);
+      if(matches.length===1&&(!online||customerMapSelection.key===customerMapSelection.name))customerMapSelection.key=matches[0].key;
+    }
+    const exists=customerMapSelection.type==='member'?data.members.some(row=>row.key===customerMapSelection.key):data.groups.some(group=>group.name===customerMapSelection.key);
+    if(!exists){customerMapSelection=null;customerMapWriteHash(true);}
+    else if(customerMapSelection.type==='member'){
+      const member=data.members.find(row=>row.key===customerMapSelection.key).member;
+      if(customerMapSelection.name!==member.n){customerMapSelection.name=member.n;customerMapWriteHash(true);}
+    }
+  }
+  if(currentRoute()?.view==='v3'&&!customerMapTouched&&signedIn()&&accessReady&&account?.user_id===session.user.id&&account.member_id&&customerMapAutoUser!==session.user.id){
+    const own=data.members.find(row=>row.member.id===account.member_id);
+    if(own){customerMapSelection={type:'member',key:own.key,name:own.member.n};customerMapAutoUser=session.user.id;customerMapWriteHash(true);}
+  }
+  const selected=customerMapSelection,selectedMember=selected?.type==='member'?data.members.find(row=>row.key===selected.key):null;
+  const activeGroups=new Set(selectedMember?[...selectedMember.groups]:selected?.type==='group'?[selected.key]:[]);
+  const activeMembers=new Set(selectedMember?[selectedMember.key]:selected?.type==='group'?data.groups.find(group=>group.name===selected.key)?.members.map(row=>row.key):[]);
+  const bubbles=customerBubbleLayout(data.groups),bubbleByName=new Map(bubbles.map(b=>[b.name,b]));
+  const focus=document.activeElement,focusInSvg=el('customer-map-svg').contains(focus),focusMember=focus?.getAttribute('data-map-member'),focusGroup=focus?.getAttribute('data-map-group');
+  let svg='<circle class="customer-map-orbit" cx="500" cy="500" r="390" aria-hidden="true"/>';
+  data.members.forEach((row,index)=>{const angle=-Math.PI/2+(index+.35)*Math.PI*2/Math.max(1,data.members.length);row.x=500+390*Math.cos(angle);row.y=500+390*Math.sin(angle);});
+  data.members.forEach(row=>row.groups.forEach(name=>{
+    const bubble=bubbleByName.get(name),dx=row.x-bubble.x,dy=row.y-bubble.y,distance=Math.hypot(dx,dy),active=selectedMember?row.key===selectedMember.key:selected?.type==='group'&&name===selected.key;
+    svg+=`<line class="customer-map-link${selected?(active?' is-active':' is-muted'):''}" data-map-link-member="${esc(row.key)}" data-map-link-group="${esc(name)}" x1="${row.x}" y1="${row.y}" x2="${bubble.x+dx/distance*bubble.r}" y2="${bubble.y+dy/distance*bubble.r}"/>`;
+  }));
+  bubbles.forEach(bubble=>{
+    const active=activeGroups.has(bubble.name),characters=Array.from(bubble.name),lines=[];
+    let perLine=characters.length,textScale=0;
+    for(let count=Math.min(3,characters.length);count<=characters.length;count++){
+      const scale=Math.min(1,bubble.r*1.32/(count*12),bubble.r*1.32/(Math.ceil(characters.length/count)*15+26));
+      if(scale>=textScale){textScale=scale;perLine=count;}
+    }
+    while(characters.length)lines.push(characters.splice(0,perLine).join('').trim());
+    // Fit the whole label block inside a square inscribed in the bubble.
+    const labelSize=12*textScale,countSize=20*textScale,lineHeight=15*textScale;
+    const textHeight=lines.length*lineHeight+countSize+6*textScale,start=-textHeight/2+labelSize*.95;
+    svg+=`<g class="customer-map-node customer-map-group${selected?(active?' is-active':' is-muted'):''}" role="button" tabindex="0" aria-pressed="${active}" aria-label="${esc(bubble.name)} · 연결된 멤버 ${bubble.members.length}명" data-map-group="${esc(bubble.name)}" transform="translate(${bubble.x} ${bubble.y})"><title>${esc(bubble.name)} · ${bubble.members.length}명</title><circle class="focus-ring" r="${bubble.r+5}"/><circle class="customer-map-bubble" r="${bubble.r}"/><text text-anchor="middle" style="font-size:${labelSize}px">${lines.map((line,index)=>`<tspan x="0" y="${start+index*lineHeight}">${esc(line)}</tspan>`).join('')}<tspan class="customer-map-count" style="font-size:${countSize}px" x="0" y="${textHeight/2-countSize*.15}">${bubble.members.length}</tspan></text></g>`;
+  });
+  data.members.forEach(row=>{
+    const active=activeMembers.has(row.key),dx=(row.x-500)/390,dy=(row.y-500)/390,anchor=dx>.15?'start':dx<-.15?'end':'middle';
+    const labelX=row.x+dx*18,labelY=row.y+dy*18;
+    const tooltip=[row.member.n,...row.teams.map(team=>team.name),row.groups.size?'고객 묶음 '+row.groups.size+'개':'핵심고객 미입력'].join(' · ');
+    svg+=`<g class="customer-map-node customer-map-member${selected?(active?' is-active':' is-muted'):''}${row.groups.size?'':' is-empty'}" style="--team-color:${row.color}" role="button" tabindex="0" aria-pressed="${active}" aria-label="${esc(tooltip)}" data-map-member="${esc(row.key)}"><title>${esc(tooltip)}</title><circle class="focus-ring" cx="${row.x}" cy="${row.y}" r="14"/><circle fill="transparent" cx="${row.x}" cy="${row.y}" r="14"/><circle class="member-dot" cx="${row.x}" cy="${row.y}" r="7"/><text x="${labelX}" y="${labelY}" text-anchor="${anchor}" dominant-baseline="central">${esc(row.member.n)}</text></g>`;
+  });
+  el('customer-map-svg').innerHTML=svg;
+  el('customer-map-stats').textContent='멤버 '+data.members.length+'명 · 고객 묶음 '+data.groups.length+'개';
+  el('customer-map-legend').innerHTML=(collabReady?data.teams:[]).map((team,index)=>`<li style="--team-color:${CUSTOMER_TEAM_COLORS[index%CUSTOMER_TEAM_COLORS.length]}"><i aria-hidden="true"></i>${esc(team.name)}</li>`).join('')+(data.members.some(row=>!row.groups.size||!row.team)?'<li style="--team-color:var(--gap)"><i aria-hidden="true"></i>핵심고객 미입력 · 소속 미확인</li>':'');
+  el('customer-map-clear').disabled=!selected;
+  const opened=new Set([...el('customer-map-list').querySelectorAll('details[open]')].map(details=>details.dataset.mapAccordion));
+  el('customer-map-list').innerHTML=data.groups.map(group=>`<details class="customer-map-accordion" data-map-accordion="${esc(group.name)}"${opened.has(group.name)?' open':''}><summary>${esc(group.name)}<span>${group.members.length}명</span></summary><div class="customer-map-peers">${group.members.map(customerMapPeer).join('')}</div></details>`).join('')||'<p class="note">등록된 핵심고객이 없습니다. 멤버 정보를 입력하면 여기에 표시됩니다.</p>';
+  renderCustomerMapDetail(data);renderCustomerMapUnclassified(data);
+  // Replacing SVG nodes must not drop the keyboard user's place in the map.
+  if(focus&&el('v3').contains(focus)===false&&(focusMember||focusGroup)){
+    const container=focusInSvg?el('customer-map-svg'):el('v3');
+    [...container.querySelectorAll('[data-map-member],[data-map-group]')].find(node=>focusMember?node.dataset.mapMember===focusMember:node.dataset.mapGroup===focusGroup)?.focus({preventScroll:true});
+  }
+}
+
 /* ---------- Supabase 연결 · 공개 설정 ---------- */
 const SUPABASE_URL = 'https://alcvloqlzxpeqtagyffy.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFsY3Zsb3FsenhwZXF0YWd5ZmZ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk5NDI5NjgsImV4cCI6MjEwNTUxODk2OH0._YrXhnG2cZSLtZHNwe0wcJiTL8_Vqt6mGFwOksGSAeE';
@@ -1641,6 +1885,8 @@ function permissions(){
   collabPermissions();
   renderInterviewControls();
   renderProfileGuide();
+  renderCustomerMapUnclassified();
+  if(currentRoute()?.view==='v3'&&!customerMapTouched&&customerMapAutoUser!==session?.user?.id)renderCustomerMap();
 }
 async function loadAccess(background=false){
   const userId=session?.user?.id,version=++accessVersion;
@@ -2857,7 +3103,22 @@ el('profile-return-members').onclick=()=>{const id=profileEditorMember?.id;if(cl
 window.addEventListener('sunshine:routechange',renderProfileGuide);
 window.addEventListener('beforeunload',event=>{if(profileEditorDirty){event.preventDefault();event.returnValue='';}});
 
-function renderAll(){ reindex(); renderList(); renderSun(); renderTeams(); renderAdmin(); renderConnectionReview(); renderCollabAdmin(); }
+el('customer-map-clear').onclick=()=>selectCustomerMap(null);
+el('v3').addEventListener('click',event=>{
+  const target=event.target.closest('[data-map-member],[data-map-group]');
+  if(target?.dataset.mapMember)selectCustomerMap('member',target.dataset.mapMember);
+  else if(target?.dataset.mapGroup)selectCustomerMap('group',target.dataset.mapGroup);
+  else if(event.target.closest('#customer-map-svg'))selectCustomerMap(null);
+});
+el('customer-map-svg').addEventListener('keydown',event=>{
+  if(!['Enter',' '].includes(event.key))return;
+  const target=event.target.closest('[data-map-member],[data-map-group]');if(!target)return;
+  event.preventDefault();selectCustomerMap(target.dataset.mapMember?'member':'group',target.dataset.mapMember||target.dataset.mapGroup);
+});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!el('v3').hidden&&!document.querySelector('dialog[open]'))selectCustomerMap(null);});
+window.addEventListener('hashchange',()=>{if(currentRoute()?.view==='v3')renderCustomerMap();});
+window.addEventListener('sunshine:routechange',()=>{if(currentRoute()?.view==='v3')renderCustomerMap();});
+function renderAll(){ reindex(); renderList(); renderSun(); renderTeams(); renderAdmin(); renderConnectionReview(); renderCollabAdmin(); renderCustomerMap(); }
 sel=Math.max(0,M.findIndex(m=>m.n==='박미성'));renderAll();
 document.addEventListener('DOMContentLoaded',connect,{once:true});
 

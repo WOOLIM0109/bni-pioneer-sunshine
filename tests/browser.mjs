@@ -4,7 +4,7 @@
 // Use --filter="interview|document|AI proposals|Multiple member|Saving unchecked" for focused checks.
 // Optionally set PLAYWRIGHT_MODULE to a locally installed playwright/core module.
 import assert from 'node:assert/strict';
-import { readFile, readdir, mkdir } from 'node:fs/promises';
+import { readFile, readdir, mkdir, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -385,9 +385,10 @@ function makeMock(initial, options) {
 
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const routes = routesFromHtml(html);
-assert.deepEqual(routes.map(route => route.slug), ['sunshine', 'collab-teams', 'members']);
+assert.deepEqual(routes.map(route => route.slug), ['sunshine', 'collab-teams', 'customer-map', 'members']);
 const sunshineRoute = routes.find(route => route.slug === 'sunshine');
 const collabRoute = routes.find(route => route.slug === 'collab-teams');
+const customerMapRoute = routes.find(route => route.slug === 'customer-map');
 const membersRoute = routes.find(route => route.slug === 'members');
 assert(!html.includes('service_role'), 'The HTML must not mention privileged credentials.');
 assert(!html.includes('pioneer-sunshine-roster-v1') && !html.includes('pioneer-sunshine-v2'), 'Roster localStorage must be removed.');
@@ -482,6 +483,14 @@ async function check(name, run) {
   try { await run(); console.log(`PASS ${name}`); }
   catch (error) { console.error(`FAIL ${name}`); if (failures.length) console.error(JSON.stringify(failures)); throw error; }
 }
+function customerMapRecords() {
+  const records = structuredClone(seed);
+  records.find(row => row.name === '김경태').customers = ['부모·가족', '중장년 가장', '라이프케어 관심 가정', '고령 부모 부양 50대', '반려동물 가정', '고소득 부업 원하는 분', '직원 복지에 관심 있는 사업주', '요양병원', '동물병원', '펫 관련샵 업주'];
+  records.push({ ...structuredClone(seed[0]), id: '00000000-0000-4000-8000-000000000034', name: '연결검증', customers: ['병 · 의원 원장', '부모ㆍ가족'], sort_order: 33 });
+  return records;
+}
+const mapMember = (page, name) => page.locator('#customer-map-svg .customer-map-member').filter({ has: page.locator('text', { hasText: new RegExp(`^${name}$`) }) });
+const mapGroup = (page, name) => page.locator(`#customer-map-svg .customer-map-group[data-map-group="${name}"]`);
 async function assertPasswordPrivate(page, password) {
   const exposure = await page.evaluate(password => ({
     storage: [...Object.entries(localStorage), ...Object.entries(sessionStorage)].some(pair => pair.some(value => String(value).includes(password))),
@@ -607,6 +616,145 @@ try {
     await page.click('#exportb');
     assert.equal(JSON.parse(await page.inputValue('#io')).length, 33);
     await context.close();
+  });
+  await check('Customer map renders every one of 34 members once, groups neighbors by team, and packs proportional bubbles without overlap', async () => {
+    const records = customerMapRecords();
+    const { page, context } = await pageFor({ online: true, records, routePath: 'customer-map/' });
+    await page.setViewportSize({width:1440,height:1100});
+    await assertRoute(page, customerMapRoute, 'http://localhost:43127/');
+    assert.equal(await page.locator('#customer-map-svg .customer-map-member').count(), 34);
+    assert.equal(await page.locator('#customer-map-svg .customer-map-group').count(), 17);
+    const actual = await page.locator('#customer-map-svg .customer-map-member').evaluateAll(nodes => nodes.map(node => node.dataset.mapMember));
+    const expected = await page.evaluate(() => {
+      const ordered = [...window.__db.collabTeams].sort((a,b)=>a.sort_order-b.sort_order);
+      const rank = id => {const index=ordered.findIndex(team=>window.__db.collabMemberships.some(link=>link.team_id===team.id&&link.member_id===id));return index<0?ordered.length:index;};
+      return [...window.__db.members].sort((a,b)=>rank(a.id)-rank(b.id)||a.sort_order-b.sort_order).map(row=>row.id);
+    });
+    assert.deepEqual(actual, expected);assert.equal(new Set(actual).size, 34);
+    assert.equal(await page.locator('#customer-map-svg .customer-map-member.is-empty').count(), records.filter(row=>!row.customers.length).length);
+    assert(await page.locator('#customer-map-svg .customer-map-member.is-empty').evaluateAll(nodes=>nodes.every(node=>node.getAttribute('aria-label').includes('핵심고객 미입력')&&node.style.getPropertyValue('--team-color')==='var(--gap)')));
+    const geometry = await page.locator('#customer-map-svg .customer-map-group').evaluateAll(nodes=>nodes.map(node=>({name:node.dataset.mapGroup,x:node.transform.baseVal.getItem(0).matrix.e,y:node.transform.baseVal.getItem(0).matrix.f,r:Number(node.querySelector('.customer-map-bubble').getAttribute('r')),count:Number(node.querySelector('.customer-map-count').textContent)})));
+    for(const [index,bubble] of geometry.entries()){
+      assert(Math.hypot(bubble.x-500,bubble.y-500)+bubble.r<=305.01, `${bubble.name}: inside the orbit`);
+      assert(Math.abs(bubble.r*bubble.r/bubble.count-geometry[0].r**2/geometry[0].count)<.001,'Bubble area is proportional to unique member count.');
+      for(const other of geometry.slice(index+1))assert(Math.hypot(bubble.x-other.x,bubble.y-other.y)>=bubble.r+other.r+9.9, `${bubble.name} overlaps ${other.name}`);
+    }
+    const before=await page.locator('#customer-map-svg').innerHTML();await page.evaluate(()=>renderAll());
+    assert.equal(await page.locator('#customer-map-svg').innerHTML(),before,'Rerender keeps deterministic positions.');
+    assert.equal(await page.evaluate(()=>customerMapData().unclassified.length),0);
+    assert.equal(await page.locator('#customer-map-legend li').count(),6,'Five teams and the missing-data/unassigned key.');
+    await context.close();
+  });
+  await check('Customer map selects Kim, deduplicates his ten expressions into four edges, and shows exact shared member cohorts', async () => {
+    const records=customerMapRecords(),kim=records.find(row=>row.name==='김경태');
+    const {page,context}=await pageFor({online:true,records,routePath:'customer-map/'});
+    await mapMember(page,'김경태').click();
+    const selectedGroups=await page.locator('#customer-map-svg .customer-map-group.is-active').evaluateAll(nodes=>nodes.map(node=>node.dataset.mapGroup).sort());
+    assert.deepEqual(selectedGroups,['부모·가족','숙박·병원·상가 사업주','기업 총무·인사·행사 담당','개인 부업·소득'].sort());
+    assert.equal(await page.locator('#customer-map-svg .customer-map-member.is-active').count(),1);
+    assert.equal(await page.locator('#customer-map-svg .customer-map-link.is-active').count(),4);
+    assert.equal(await page.locator(`#customer-map-svg [data-map-link-member="${kim.id}"]`).count(),4);
+    assert.match(await page.locator('#customer-map-detail h3').innerText(),/김경태 대표의 고객 묶음/);
+    assert(!await page.locator('#customer-map-detail [data-map-member]').evaluateAll((nodes,id)=>nodes.some(node=>node.dataset.mapMember===id),kim.id));
+    const hospital='숙박·병원·상가 사업주';
+    const normalize=value=>value.normalize('NFKC').replace(/[\s·ㆍ・]/g,'');
+    const expressions=['숙박·병원·상가 사업주','병·의원 원장','병·의원 운영·행정 책임자','개원 준비 의료인','요양병원','동물병원','펫 관련샵 업주'].map(normalize);
+    const expected=records.filter(row=>row.customers.some(value=>expressions.includes(normalize(value)))).map(row=>row.id).sort();
+    const section=page.locator('.customer-map-detail-group').filter({has:page.locator(`[data-map-group="${hospital}"]`)});
+    assert.deepEqual((await section.locator('[data-map-member]').evaluateAll(nodes=>nodes.map(node=>node.dataset.mapMember))).sort(),expected.filter(id=>id!==kim.id));
+    await mapGroup(page,hospital).click();
+    assert.equal(Number(await mapGroup(page,hospital).locator('.customer-map-count').textContent()),expected.length);
+    assert.equal(await page.locator('#customer-map-svg .customer-map-member.is-active').count(),expected.length);
+    assert.deepEqual((await page.locator('#customer-map-detail [data-map-member]').evaluateAll(nodes=>nodes.map(node=>node.dataset.mapMember))).sort(),expected);
+    await page.locator('#customer-map-detail [data-map-member]').first().click();
+    assert.equal(await page.locator('#customer-map-svg .customer-map-member.is-active').count(),1);
+    assert.equal(await page.evaluate(()=>window.__db.log.filter(row=>row.action!=='select'&&!row.readOnly).length),0,'Exploring the map never writes data.');
+    await context.close();
+  });
+  await check('Customer map preserves deep links, navigation history and queries, and supports keyboard selection and clearing', async () => {
+    const {page,context}=await pageFor({online:true,records:customerMapRecords(),basePath:'/bni-pioneer-sunshine/',routePath:'customer-map/',query:'?from=test',hash:'#member='+encodeURIComponent('김경태')});
+    assert.match(await page.locator('#customer-map-detail h3').innerText(),/김경태/);
+    const group=mapGroup(page,'부모·가족');await group.focus();await page.keyboard.press('Enter');
+    assert.equal(await page.evaluate(()=>document.activeElement.dataset.mapGroup),'부모·가족','SVG rerender restores focus to the selected button.');
+    assert.equal(new URL(page.url()).hash,'#group='+encodeURIComponent('부모·가족'));
+    assert.equal(new URL(page.url()).search,'?from=test');
+    await page.goBack();assert.match(await page.locator('#customer-map-detail h3').innerText(),/김경태/);
+    await page.goForward();assert.equal(await page.locator('#customer-map-detail h3').innerText(),'부모·가족');
+    await page.keyboard.press('Escape');assert.equal(new URL(page.url()).hash,'');
+    assert.equal(await page.locator('#customer-map-svg .is-active').count(),0);
+    await mapMember(page,'김경태').focus();await page.keyboard.press('Tab');
+    assert(await page.evaluate(()=>document.activeElement.matches('#customer-map-svg [role=button]')));
+    await page.keyboard.press('Enter');assert.equal(await page.locator('#customer-map-svg .customer-map-member.is-active').count(),1);
+    await page.locator('#customer-map-svg').click({position:{x:2,y:2}});assert.equal(await page.locator('#customer-map-svg .is-active').count(),0);
+    await mapMember(page,'김경태').click();await page.click('#t2');await page.click('#t3');assert.match(await page.locator('#customer-map-detail h3').innerText(),/김경태/);
+    await page.reload();await page.waitForFunction(()=>online&&!connecting);assert.match(await page.locator('#customer-map-detail h3').innerText(),/김경태/);
+    await context.close();
+  });
+  await check('Customer map automatically selects the approved signed-in member once without overriding shared links or an explicit clear', async () => {
+    const own=await pageFor({online:true,auth:true,role:'member',routePath:'customer-map/'});
+    assert.equal(await own.page.locator('#customer-map-svg .customer-map-member.is-active').getAttribute('data-map-member'),seed[0].id);
+    await own.page.click('#customer-map-clear');await own.page.evaluate(async()=>{await loadAccess();renderAll();});
+    assert.equal(await own.page.locator('#customer-map-svg .customer-map-member.is-active').count(),0);
+    await own.page.click('#t1');await own.page.click('#t3');assert.equal(await own.page.locator('#customer-map-svg .customer-map-member.is-active').count(),0);
+    await own.context.close();
+    const shared=await pageFor({online:true,auth:true,role:'member',routePath:'customer-map/',hash:'#group='+encodeURIComponent('부모·가족')});
+    assert.equal(await shared.page.locator('#customer-map-detail h3').innerText(),'부모·가족');await shared.context.close();
+  });
+  await check('Customer map normalizes whitespace and middle dots, reports escaped unknown expressions to admins, and refreshes after realtime edits', async () => {
+    const {page,context}=await pageFor({online:true,auth:true,records:customerMapRecords(),routePath:'customer-map/'});
+    await page.evaluate(()=>{const member=window.__db.members.find(row=>row.name==='김경태');member.customers.push('새로운 <고객> 유형','새로운<고객>유형','부 모 ㆍ 가 족');window.__db.realtime();});
+    await page.waitForFunction(()=>document.getElementById('customer-map-unclassified-count').textContent==='1');
+    await mapGroup(page,'기타').click();assert.equal(await mapGroup(page,'기타').locator('.customer-map-count').textContent(),'1');
+    await page.click('#t4');assert(await page.locator('#customer-map-unclassified').isVisible());
+    assert.match(await page.locator('#customer-map-unclassified-list').innerText(),/새로운 <고객> 유형 · 김경태/);
+    assert.equal(await page.locator('#customer-map-unclassified-list 고객').count(),0,'Customer text is escaped.');
+    await page.evaluate(async()=>{window.__db.members.find(row=>row.name==='김경태').customers=['부모 · 가족'];await loadMembers();});
+    await page.click('#t3');assert.equal(await page.locator('#customer-map-svg [data-map-group="기타"]').count(),0);
+    assert.equal(await page.locator('#customer-map-unclassified-count').textContent(),'0');
+    await page.evaluate(async()=>{window.__db.accounts[0].role='viewer';await loadAccess();});
+    await page.click('#t4');assert(await page.locator('#customer-map-unclassified').isHidden());
+    await context.close();
+  });
+  await check('Customer map keeps every node and accordion accessible at 1440 and 400 pixels in both themes', async () => {
+    const {page,context}=await pageFor({online:true,records:customerMapRecords(),routePath:'customer-map/'});
+    for(const width of [1440,400])for(const theme of ['light','dark']){
+      await page.setViewportSize({width,height:1000});await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+      const sizes=await page.evaluate(()=>({html:document.documentElement.scrollWidth,body:document.body.scrollWidth,width:innerWidth,zoom:document.querySelector('meta[name=viewport]').content}));
+      assert(sizes.html<=width&&sizes.body<=width,`${width} ${theme}: ${JSON.stringify(sizes)}`);
+      assert(!/user-scalable=no|maximum-scale=1(?:,|$)/.test(sizes.zoom),'Pinch zoom remains available.');
+      assert(await page.locator('#customer-map-svg [role=button]').evaluateAll(nodes=>nodes.every(node=>node.getAttribute('tabindex')==='0'&&node.getAttribute('aria-label'))));
+      const clipping=await page.locator('#customer-map-svg').evaluate(svg=>{const bounds=svg.getBoundingClientRect();return [...svg.querySelectorAll('.customer-map-member text')].filter(text=>{const b=text.getBoundingClientRect();return b.left<bounds.left||b.right>bounds.right||b.top<bounds.top||b.bottom>bounds.bottom;}).map(text=>text.textContent);});
+      assert.deepEqual(clipping,[],`${width} ${theme}: member labels fit inside the drawing`);
+      const bubbleClipping=await page.locator('#customer-map-svg .customer-map-group').evaluateAll(groups=>groups.flatMap(group=>{
+        const radius=Number(group.querySelector('.customer-map-bubble').getAttribute('r'));
+        return [...group.querySelectorAll('tspan')].filter(span=>{const b=span.getBBox();return [[b.x,b.y],[b.x+b.width,b.y],[b.x,b.y+b.height],[b.x+b.width,b.y+b.height]].some(([x,y])=>Math.hypot(x,y)>radius+.5);}).map(span=>({group:group.dataset.mapGroup,text:span.textContent}));
+      }));
+      assert.deepEqual(bubbleClipping,[],`${width} ${theme}: labels and counts fit inside their bubbles`);
+    }
+    const accordion=page.locator('#customer-map-list details[data-map-accordion="부모·가족"]');
+    await accordion.locator('summary').click();assert(await accordion.locator('.customer-map-peer').first().isVisible());
+    await accordion.locator('.customer-map-peer').first().click();assert.equal(await accordion.getAttribute('open'),'');
+    assert.equal(await page.locator('#customer-map-svg .customer-map-member.is-active').count(),1);
+    assert(await page.locator('#customer-map-detail').isVisible());await context.close();
+  });
+  await check('Customer map handles empty rosters, multiple team memberships, same-name members and missing team data', async () => {
+    const records=customerMapRecords();records[1].name=records[0].name;
+    const {page,context}=await pageFor({online:true,records,routePath:'customer-map/'});
+    await page.evaluate(async()=>{window.__db.collabMemberships.push({team_id:window.__db.collabTeams[1].id,member_id:window.__db.members[0].id});await loadMembers();});
+    assert.equal(await page.locator('#customer-map-svg .customer-map-member').count(),34);
+    const second=page.locator(`#customer-map-svg .customer-map-member[data-map-member="${records[1].id}"]`);await second.click();
+    assert.equal(new URLSearchParams(new URL(page.url()).hash.slice(1)).get('memberId'),records[1].id);
+    await page.reload();await page.waitForFunction(()=>online&&!connecting);assert.equal(await page.locator('#customer-map-svg .customer-map-member.is-active').getAttribute('data-map-member'),records[1].id);
+    await page.evaluate(async id=>{window.__db.members.find(row=>row.id===id).name='이름변경';await loadMembers();},records[1].id);
+    assert.equal(new URLSearchParams(new URL(page.url()).hash.slice(1)).get('member'),'이름변경');
+    assert.equal(await page.locator('#customer-map-svg .customer-map-member.is-active').getAttribute('data-map-member'),records[1].id);
+    await context.close();
+    const failed=await pageFor({online:true,failCollabReads:true,routePath:'customer-map/'});
+    assert.equal(await failed.page.locator('#customer-map-svg .customer-map-member').count(),33);
+    assert(await failed.page.locator('#collab-read-warning').isVisible());await failed.context.close();
+    const empty=await pageFor({online:true,records:[],routePath:'customer-map/'});
+    assert.equal(await empty.page.locator('#customer-map-svg .customer-map-member').count(),0);
+    assert.match(await empty.page.locator('#customer-map-list').innerText(),/등록된 핵심고객이 없습니다/);await empty.context.close();
   });
   await check('Onboarding appears after password login closes and preserves a draft while offline', async () => {
     const {page,context}=await pageFor({online:true,role:'member',onboarding:true});
@@ -751,7 +899,9 @@ try {
     }
     assert.equal(await page.locator('#collab-operations').count(), 0);
     assert(!(await page.locator('#v2').innerText()).includes('운영진 안내'));
-    assert.equal(await page.locator('#t3, #v3').count(), 0, 'The retired chapter map must not remain in navigation or page markup.');
+    assert.equal(await page.locator('#t3, #v3').count(), 2, 'The third tab now opens the customer network map.');
+    assert.equal(await page.locator('#t3').getAttribute('href'), '/customer-map/');
+    assert(!html.includes('renderChapter'), 'The retired chapter map renderer stays removed.');
     await page.click('#t1');
     const songRow = page.locator('#mlist .mrow').filter({ has: page.getByText('송승훈', { exact: true }) });
     assert.equal(await songRow.locator('.role-badge').innerText(), '121마스터');
@@ -2122,6 +2272,9 @@ try {
     assert.notEqual(await page.evaluate(id => window.__db.reviews.find(row => row.source_interview_ids.includes(id)).status, id), 'applied');
     await page.evaluate(() => window.__db.release());
     await page.waitForFunction(() => M[0].c.includes('지역 소상공인'));
+    assert.equal(await page.locator('#customer-map-svg .customer-map-group[data-map-group="기타"] .customer-map-count').textContent(),'1','Applying the interview refreshes the customer map without a reload.');
+    assert.match(await page.locator('#customer-map-unclassified-list').textContent(),/지역 소상공인/);
+    assert(!await page.locator('#v3').textContent().then(text=>text.includes('INTERVIEW_PRIVATE_REFERRAL')),'The customer map uses public customer types only.');
     const request = await page.evaluate(() => window.__db.log.find(row => row.name === 'apply_member_interview_review').value);
     assert.deepEqual(Object.keys(request.public_patch).sort(), ['customers']);
     assert.deepEqual(Object.keys(request.private_patch).sort(), ['good_referral']);
@@ -2742,6 +2895,29 @@ try {
   });
   assert.deepEqual(failures, [], 'No browser runtime errors');
   console.log('All browser checks passed. No external authentication or data writes were performed.');
+  if (process.argv.includes('--customer-map-screenshots')) {
+    const directory=fileURLToPath(new URL('../diagnostics-output/customer-map',import.meta.url));await mkdir(directory,{recursive:true});
+    const snapshotPath=process.argv.find(arg=>arg.startsWith('--customer-map-roster='))?.slice('--customer-map-roster='.length);
+    const snapshot=snapshotPath?JSON.parse(await readFile(snapshotPath,'utf8')):{members:customerMapRecords()};
+    const {page,context}=await pageFor({online:true,records:snapshot.members,collabTeams:snapshot.collabTeams,collabMemberships:snapshot.collabMemberships,routePath:'customer-map/'});
+    const report=await page.evaluate(()=>({members:M.length,expressions:new Set(M.flatMap(member=>member.c)).size,groups:customerMapData().groups.length,unclassified:customerMapData().unclassified.map(row=>row.expression),teams:collabTeams.length}));
+    assert.deepEqual(report.unclassified,[],'The captured roster must have no unmapped initial expressions.');
+    for(const width of [1440,400]){
+      await page.setViewportSize({width,height:width===400?1000:1200});await page.evaluate(()=>scrollTo(0,0));
+      await page.screenshot({path:path.join(directory,`customer-map-${width}.png`),fullPage:true,animations:'disabled'});
+      await mapMember(page,'김경태').click();await page.locator('#v3 .view-heading').evaluate(node=>scrollTo(0,scrollY+node.getBoundingClientRect().top-document.querySelector('nav').getBoundingClientRect().height-16));
+      await page.screenshot({path:path.join(directory,`customer-map-kim-${width}.png`),fullPage:true,animations:'disabled'});
+      await mapGroup(page,'숙박·병원·상가 사업주').click();
+      await page.screenshot({path:path.join(directory,`customer-map-hospital-${width}.png`),fullPage:true,animations:'disabled'});
+      await page.evaluate(()=>document.documentElement.dataset.theme='dark');
+      await page.screenshot({path:path.join(directory,`customer-map-dark-${width}.png`),fullPage:true,animations:'disabled'});
+      await page.evaluate(()=>{document.documentElement.dataset.theme='light';selectCustomerMap(null);});
+    }
+    await writeFile(path.join(directory,'verification.json'),JSON.stringify(report,null,2));
+    console.log('CUSTOMER MAP SNAPSHOT '+JSON.stringify(report));
+    console.log('SCREENSHOT diagnostics-output/customer-map: overview, Kim, hospital and dark theme at 1440px and 400px');
+    await context.close();
+  }
   if (process.argv.includes('--collab-screenshots') || process.argv.includes('--screenshots')) {
     const directory = fileURLToPath(new URL('../output/9th-collab', import.meta.url));await mkdir(directory, { recursive: true });
     const { page, context } = await pageFor({ online: true, auth: true });await page.waitForFunction(() => collabAdminReady);

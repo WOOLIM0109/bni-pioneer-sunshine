@@ -5,7 +5,7 @@ import vm from 'node:vm';
 
 const source = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const routes = routesFromHtml(source);
-assert.deepEqual(routes.map(route => route.slug), ['sunshine', 'collab-teams', 'members']);
+assert.deepEqual(routes.map(route => route.slug), ['sunshine', 'collab-teams', 'customer-map', 'members']);
 const getAttribute = (tag, name) => tag.match(new RegExp(`\\s${name}="([^"]*)"`))?.[1];
 const meta = (html, name) => [...html.matchAll(/<meta\b[^>]*>/g)].map(match => match[0]).find(tag => getAttribute(tag, 'name') === name || getAttribute(tag, 'property') === name);
 
@@ -18,7 +18,7 @@ for (const baseUrl of ['https://woolim0109.github.io/bni-pioneer-sunshine/', 'ht
   assert(redirect.includes('noindex'));
   for (const route of [null, ...routes]) {
     const html = renderPage(source, route, { baseUrl });
-    assert.doesNotMatch(html, /(?:id|data-v|aria-controls)="[vt]3"/);
+    assert.match(html, /id="t3"[^>]*data-v="v3"/);
     assert.doesNotMatch(html, /챕터(?: 전체)? 지도|renderChapter|collab-operations/);
     const expectedUrl = new URL(route ? `${route.slug}/` : '', baseUrl).href;
     assert.equal(getAttribute(html.match(/<link\b[^>]*rel="canonical"[^>]*>/)[0], 'href'), expectedUrl);
@@ -62,7 +62,11 @@ const escapedHtml = renderPage(replaceRoutes(escapedRoutes), escapedRoutes[0]);
 assert.ok(escapedHtml.includes('<title>고객 &amp; &quot;성장&quot; &lt;모임&gt; | 파이오니아 선샤인</title>'));
 assert.equal(getAttribute(meta(escapedHtml, 'og:description'), 'content'), 'A &amp; B의 &quot;공유&quot; &lt;페이지&gt;');
 const built = await buildSite();
-assert.equal(built.pages, 4, 'Only home and the three remaining screens are built as application pages.');
+assert.equal(built.pages, 5, 'Home and all four screens, including the customer map, are built.');
+assert.deepEqual(built.routes, routes.map(route => route.slug));
+const customerMapPage = await readFile(`${built.output}/customer-map/index.html`, 'utf8');
+assert.match(customerMapPage, /<title>고객 지도 \| 파이오니아 선샤인<\/title>/);
+assert.equal(/\shidden(?:=|\s|>)/.test(customerMapPage.match(/<section\b[^>]*\sid="v3"[^>]*>/)[0]), false);
 for (const slug of ['power-teams', 'chapter-map']) {
   const redirect = await readFile(`${built.output}/${slug}/index.html`, 'utf8');
   assert.equal(redirect, renderLegacyTeamRedirect(built.baseUrl), `${slug} is emitted as a redirect, not an application page.`);
