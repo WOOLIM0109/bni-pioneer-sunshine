@@ -40,6 +40,13 @@ await test('Disallowed origins, missing JWTs, unsupported methods and arbitrary 
   }
   assert.equal((await setup().call({method:'OPTIONS'})).status,204);
 });
+await test('Browser preflight permits every header sent by the configured Supabase client without invoking AI',async()=>{
+  const s=setup(),r=await s.call({method:'OPTIONS'});
+  assert.equal(r.status,204);assert.equal(r.headers.get('Access-Control-Allow-Origin'),'https://woolim0109.github.io');
+  const allowed=new Set(r.headers.get('Access-Control-Allow-Headers').split(',').map(value=>value.trim().toLowerCase()));
+  for(const header of ['authorization','apikey','content-type','x-client-info','x-sunshine-client'])assert(allowed.has(header),header+' must pass browser preflight');
+  assert.equal(s.log.length,0);
+});
 await test('Missing secrets preserve stored customer labels without calling AI or the worker',async()=>{
   for(const key of ['OPENAI_API_KEY','SUPABASE_SERVICE_ROLE_KEY']){const s=setup({env:{[key]:''}});assert.equal((await s.call()).status,503);assert(!s.log.some(row=>row.path.includes('/rpc/')||row.path==='/v1/responses'));}
 });

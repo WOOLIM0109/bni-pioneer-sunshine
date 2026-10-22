@@ -48,7 +48,7 @@ export function validateAssignments(value:any,labels:Row[],groups:Row[]):Row[]{
 export function createHandler(runtime:Runtime){return async(request:Request):Promise<Response>=>{
   const allowed=(runtime.env('ALLOWED_ORIGINS')||'https://woolim0109.github.io,https://sunshine.bni-pioneer.com').split(',').map(value=>value.trim());
   const origin=request.headers.get('origin'),headers:Record<string,string>={'Content-Type':'application/json','Cache-Control':'no-store','Vary':'Origin'};
-  if(origin&&allowed.includes(origin)){headers['Access-Control-Allow-Origin']=origin;headers['Access-Control-Allow-Headers']='authorization, x-client-info, apikey, content-type';headers['Access-Control-Allow-Methods']='POST, OPTIONS';}
+  if(origin&&allowed.includes(origin)){headers['Access-Control-Allow-Origin']=origin;headers['Access-Control-Allow-Headers']='authorization, x-client-info, apikey, content-type, x-sunshine-client';headers['Access-Control-Allow-Methods']='POST, OPTIONS';}
   const json=(body:any,status=200)=>new Response(JSON.stringify(body),{status,headers});
   let lease:string|undefined,rpc:((name:string,args:Row,signal?:AbortSignal)=>Promise<any>)|undefined;
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),90000);
