@@ -22,6 +22,8 @@ async function getPlaywright() {
 
 function makeMock(initial, options) {
   const clone = value => JSON.parse(JSON.stringify(value));
+  const customerKey=value=>String(value).replace(/[\s·ㆍ・‧∙⋅·]+/gu,'').normalize('NFKC').replace(/\s/gu,'').toLowerCase();
+  const groupSeed=options.customerGroupSeed||[];
   const userMetadata = clone(options.userMetadata || {});
   const collabRoster = [
     ['라이프 이벤트 협업팀', '마루이', '윤민수', '이화춘', '심학봉'],
@@ -36,6 +38,10 @@ function makeMock(initial, options) {
   const account = (id, role, member = null) => ({ user_id: id, email: `${id}@example.test`, role, member_id: member, requested_member_id: null, request_status: 'none', updated_at: '2026-09-21T00:00:00.000Z', email_confirmed: true, signup_name: '' });
   const state = window.__db = {
     initialUrl: location.href,
+    customerGroups:groupSeed.map(({name,sort_order})=>({name,sort_order})),
+    customerGroupMap:[...new Map(groupSeed.flatMap(group=>[group.name,...group.labels].map(label=>[customerKey(label),{label,label_key:customerKey(label),group_name:group.name,source:'seed',reason:'',member_count:0,updated_at:'2026-10-22T00:00:00Z'}]))).values()],
+    failCustomerGroups:false,failCustomerClassification:false,holdCustomerClassification:false,pendingCustomerClassification:[],
+    releaseCustomerClassification(){this.holdCustomerClassification=false;this.pendingCustomerClassification.splice(0).forEach(resolve=>resolve());},
     members: clone(initial), links: clone(options.links || []), failLinkReads: !!options.failLinkReads, log: [], pending: [], holdWrites: false, revision: 0,
     collabTeams: clone(initialTeams), collabMemberships: clone(initialMemberships), collabPending: clone(options.collabPending || []), collabRevision: 1, failCollabReads: !!options.failCollabReads,
     pendingReads: [], holdReads: false, completedReads: 0,
@@ -98,6 +104,10 @@ function makeMock(initial, options) {
       let data;
       if (accessRead) {
         data = accountSnapshot.filter(matches);
+      } else if (['customer_groups','customer_group_map'].includes(this.table)) {
+        if(this.action!=='select')return permissionError();
+        if(state.failCustomerGroups)return {data:null,error:{code:'TEST_FAILURE',message:'Mapping read failed'}};
+        data=(this.table==='customer_groups'?state.customerGroups:state.customerGroupMap).filter(matches);
       } else if (linkRead) {
         data = state.links.filter(matches);
       } else if (collabRead) {
@@ -329,6 +339,25 @@ function makeMock(initial, options) {
     functions: { invoke: async (name, options = {}) => {
       const readOnly = options.method === 'GET';
       state.log.push({ action: 'function', name, value: clone(options.body || {}), method: options.method || 'POST', readOnly });
+      if(name==='classify-customer-labels'){
+        const own=currentAccount();if(!(own?.role==='admin'||own?.role==='member'&&own.member_id))return permissionError();
+        if(state.holdCustomerClassification)await new Promise(resolve=>state.pendingCustomerClassification.push(resolve));
+        if(state.failCustomerClassification)return {data:null,error:{message:'Classification unavailable'}};
+        const labels=new Map();state.members.forEach(member=>new Set(member.customers.map(customerKey)).forEach(key=>{
+          if(!labels.has(key))labels.set(key,{label:member.customers.find(label=>customerKey(label)===key),members:[]});labels.get(key).members.push(member.id);
+        }));
+        const hobbyMembers=new Set([...labels.values()].filter(row=>/골프|탁구|보드게임/.test(row.label)).flatMap(row=>row.members));
+        for(const [key,row]of labels){
+          const existing=state.customerGroupMap.find(map=>map.label_key===key);if(existing&&existing.source!=='ai')continue;
+          let group=/치과|의료|병원/.test(row.label)?'숙박·병원·상가 사업주':/골프|탁구|보드게임/.test(row.label)&&hobbyMembers.size>=2?'취미·여가 모임':'부모·가족';
+          if(!state.customerGroups.some(row=>row.name===group)){
+            if(state.customerGroups.length>=20)group='부모·가족';else state.customerGroups.push({name:group,sort_order:state.customerGroups.length});
+          }
+          const map={label:row.label,label_key:key,group_name:group,source:'ai',reason:'테스트 AI 응답: 공개 고객 유형의 성격',member_count:row.members.length,updated_at:timestamp()};
+          if(existing)Object.assign(existing,map);else state.customerGroupMap.push(map);
+        }
+        return {data:{classified:1},error:null};
+      }
       if (currentAccount()?.role !== 'admin') return permissionError();
       if (readOnly) return { data: { configured: state.aiConfigured }, error: null };
       const ids = options.body?.interview_ids, rows = state.interviews.filter(item => ids?.includes(item.id));
@@ -384,6 +413,7 @@ function makeMock(initial, options) {
 }
 
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+const customerGroupSeed=JSON.parse((await readFile(new URL('../supabase/customer-group-map-apply.sql',import.meta.url),'utf8')).match(/\$customer_groups\$([\s\S]*?)\$customer_groups\$/)[1]);
 const routes = routesFromHtml(html);
 assert.deepEqual(routes.map(route => route.slug), ['sunshine', 'collab-teams', 'customer-map', 'members']);
 const sunshineRoute = routes.find(route => route.slug === 'sunshine');
@@ -431,7 +461,7 @@ async function pageFor({ online = false, auth = false, records = seed, links = [
       return route.fulfill({ status: routePage || isHome ? 200 : 404, contentType: 'text/html', body: routePage || isHome ? renderPage(document, routePage || null, { baseUrl }) : '<h1>Not found</h1>' });
     }
     if (url.includes('/@supabase/supabase-js@')) return online
-      ? route.fulfill({ status: 200, contentType: 'application/javascript', body: `(${makeMock.toString()})(${JSON.stringify(records)}, ${JSON.stringify({ auth, failReads, role, failAccess, links, failLinkReads, failCollabReads, collabTeams, collabMemberships, collabPending, userMetadata:persistedAuthMetadata })});` })
+      ? route.fulfill({ status: 200, contentType: 'application/javascript', body: `(${makeMock.toString()})(${JSON.stringify(records)}, ${JSON.stringify({ auth, failReads, role, failAccess, links, failLinkReads, failCollabReads, collabTeams, collabMemberships, collabPending, customerGroupSeed, userMetadata:persistedAuthMetadata })});` })
       : route.abort();
     return route.abort();
   });
@@ -702,18 +732,85 @@ try {
   });
   await check('Customer map normalizes whitespace and middle dots, reports escaped unknown expressions to admins, and refreshes after realtime edits', async () => {
     const {page,context}=await pageFor({online:true,auth:true,records:customerMapRecords(),routePath:'customer-map/'});
-    await page.evaluate(()=>{const member=window.__db.members.find(row=>row.name==='김경태');member.customers.push('새로운 <고객> 유형','새로운<고객>유형','부 모 ㆍ 가 족');window.__db.realtime();});
-    await page.waitForFunction(()=>document.getElementById('customer-map-unclassified-count').textContent==='1');
+    await page.evaluate(()=>{window.__db.failCustomerClassification=true;const member=window.__db.members.find(row=>row.name==='김경태');member.customers.push('새로운 <고객> 유형','새로운<고객>유형','부 모 ㆍ 가 족');window.__db.realtime();});
+    await page.waitForFunction(()=>customerMapData().unclassified.length===1);
     await mapGroup(page,'기타').click();assert.equal(await mapGroup(page,'기타').locator('.customer-map-count').textContent(),'1');
-    await page.click('#t4');assert(await page.locator('#customer-map-unclassified').isVisible());
-    assert.match(await page.locator('#customer-map-unclassified-list').innerText(),/새로운 <고객> 유형 · 김경태/);
-    assert.equal(await page.locator('#customer-map-unclassified-list 고객').count(),0,'Customer text is escaped.');
+    await page.click('#t4');assert(await page.locator('#customer-map-ai').isVisible());
+    assert.equal(await page.locator('#customer-map-ai').getAttribute('open'),null,'AI history starts collapsed.');
+    await page.evaluate(async()=>{window.__db.failCustomerClassification=false;await loadMembers();});
+    await page.waitForFunction(()=>document.getElementById('customer-map-ai-count').textContent==='1');
+    await page.locator('#customer-map-ai summary').click();
+    assert.match(await page.locator('#customer-map-ai-list').innerText(),/새로운 <고객> 유형.*부모·가족/);
+    assert.equal(await page.locator('#customer-map-ai-list 고객').count(),0,'Customer text is escaped.');
     await page.evaluate(async()=>{window.__db.members.find(row=>row.name==='김경태').customers=['부모 · 가족'];await loadMembers();});
     await page.click('#t3');assert.equal(await page.locator('#customer-map-svg [data-map-group="기타"]').count(),0);
-    assert.equal(await page.locator('#customer-map-unclassified-count').textContent(),'0');
     await page.evaluate(async()=>{window.__db.accounts[0].role='viewer';await loadAccess();});
-    await page.click('#t4');assert(await page.locator('#customer-map-unclassified').isHidden());
+    await page.click('#t4');assert(await page.locator('#customer-map-ai').isHidden());
     await context.close();
+  });
+  await check('Customer map AI classifies new labels automatically after admin member saves and approved own-profile saves', async () => {
+    for(const role of ['admin','member']){
+      const {page,context}=await pageFor({online:true,auth:true,role});
+      if(role==='admin'){
+        await page.click('#t4');const input=page.locator('#admintable input[data-k=c]').first();await input.fill('골프 동호회 회원, 개원 예정 치과의사');await input.press('Tab');
+      }else{
+        await page.click('#profile-guide-start');await page.waitForSelector('#profile-editor[open]');await page.fill('#profile-customers','골프 동호회 회원\n개원 예정 치과의사');await page.click('#profile-save');
+      }
+      await page.waitForFunction(()=>!busy&&customerGroupRows.some(row=>row.label==='개원 예정 치과의사'&&row.group_name==='숙박·병원·상가 사업주'));
+      assert.equal(await page.evaluate(()=>customerGroupLookup.get(customerExpressionKey('골프 동호회 회원'))),'부모·가족');
+      assert.deepEqual(await page.evaluate(()=>window.__db.members[0].customers),['골프 동호회 회원','개원 예정 치과의사']);
+      assert.equal(await page.evaluate(()=>customerMapData().unclassified.length),0);
+      const calls=await page.evaluate(()=>window.__db.log.filter(row=>row.name==='classify-customer-labels'));
+      assert(calls.length>0);assert(calls.every(row=>JSON.stringify(row.value)==='{}'),'The browser never supplies AI labels or target groups.');
+      await context.close();
+    }
+  });
+  await check('Customer map AI retries after failed saves to the classifier, supports batch roster saves, and promotes shared new types', async () => {
+    const {page,context}=await pageFor({online:true,auth:true});await page.click('#t4');
+    await page.evaluate(()=>{window.__db.failCustomerClassification=true;});
+    const input=page.locator('#admintable input[data-k=c]').first();await input.fill('골프 동호회 회원, 개원 예정 치과의사');await input.press('Tab');
+    await page.waitForFunction(()=>!busy&&!customerClassificationBusy&&M[0].c.includes('골프 동호회 회원'));
+    assert.match(await page.locator('#adminmsg').textContent(),/저장했습니다/);assert(await page.evaluate(()=>customerMapData().unclassified.length===2));
+    await page.evaluate(()=>{window.__db.failCustomerClassification=false;});
+    await page.fill('#bulk',`${seed[0].name}\t${seed[0].field}\t${seed[0].chapter_role||''}\t${seed[0].company}`);await page.click('#bulkb');await page.check('#bulk-confirm');await page.click('#bulk-apply');
+    await page.waitForFunction(()=>!busy&&customerGroupRows.some(row=>row.label==='골프 동호회 회원'));
+    assert.equal(await page.evaluate(()=>customerMapData().unclassified.length),0,'Next batch/load automatically retries without a classification button.');
+    await page.evaluate(async()=>{window.__db.members[1].customers=['탁구 동호회 회원'];await loadMembers();});
+    await page.waitForFunction(()=>customerGroupNames.includes('취미·여가 모임'));
+    assert.equal(await page.evaluate(()=>customerGroupLookup.get(customerExpressionKey('골프 동호회 회원'))),'취미·여가 모임');
+    assert.equal(await page.evaluate(()=>customerGroupLookup.get(customerExpressionKey('탁구 동호회 회원'))),'취미·여가 모임');
+    assert.equal(await page.locator('#customer-map-ai').getAttribute('open'),null);
+    await context.close();
+  });
+  await check('Customer map reads the database mapping, preserves manual overrides, and tolerates mapping outages without failing member loads', async () => {
+    const {page,context}=await pageFor({online:true,auth:true,records:customerMapRecords()});
+    await page.evaluate(async()=>{
+      const row=window.__db.customerGroupMap.find(row=>row.label==='부모·가족');row.group_name='전문직';row.source='manual';
+      window.__db.members[0].customers=['부모·가족'];await loadMembers();
+    });
+    assert.equal(await page.evaluate(()=>customerGroupLookup.get(customerExpressionKey('부모·가족'))),'전문직');
+    assert.equal(await page.evaluate(()=>window.__db.customerGroupMap.find(row=>row.label==='부모·가족').source),'manual');
+    await page.evaluate(async()=>{window.__db.failCustomerGroups=true;window.__db.members[0].customers.push('개원 예정 치과의사');await loadMembers();});
+    assert(await page.evaluate(()=>online&&!customerGroupsReady&&M.length===34));
+    assert(await page.evaluate(()=>customerMapData().unclassified.some(row=>row.expression==='개원 예정 치과의사')));
+    await page.evaluate(async()=>{window.__db.failCustomerGroups=false;await loadMembers();});
+    await page.waitForFunction(()=>customerGroupRows.some(row=>row.label==='개원 예정 치과의사'));
+    assert.equal(await page.evaluate(()=>customerGroupLookup.get(customerExpressionKey('부모·가족'))),'전문직','AI retries never overwrite operator corrections.');
+    await context.close();
+  });
+  await check('Customer map small bubbles hide only their names until hover, keyboard focus or tap', async () => {
+    const {page,context}=await pageFor({online:true,routePath:'customer-map/'});
+    await page.setViewportSize({width:1440,height:1100});
+    const small=page.locator('#customer-map-svg .customer-map-group.is-small').first();
+    assert.equal(await small.locator('.customer-map-label').evaluate(node=>getComputedStyle(node).opacity),'0');
+    assert(await small.locator('.customer-map-count').isVisible());
+    await small.hover();assert.equal(await small.locator('.customer-map-label').evaluate(node=>getComputedStyle(node).opacity),'1');
+    await page.locator('#t3').hover();assert.equal(await small.locator('.customer-map-label').evaluate(node=>getComputedStyle(node).opacity),'0');
+    await page.keyboard.press('Tab');await small.focus();assert.equal(await small.locator('.customer-map-label').evaluate(node=>getComputedStyle(node).opacity),'1');
+    await page.keyboard.press('Enter');await page.locator('#t3').hover();assert.equal(await small.locator('.customer-map-label').evaluate(node=>getComputedStyle(node).opacity),'1');
+    await page.keyboard.press('Escape');await page.setViewportSize({width:400,height:1000});await small.click();
+    assert.equal(await small.locator('.customer-map-label').evaluate(node=>getComputedStyle(node).opacity),'1');
+    assert.equal(await small.getAttribute('aria-pressed'),'true');await context.close();
   });
   await check('Customer map keeps every node and accordion accessible at 1440 and 400 pixels in both themes', async () => {
     const {page,context}=await pageFor({online:true,records:customerMapRecords(),routePath:'customer-map/'});
@@ -2272,8 +2369,8 @@ try {
     assert.notEqual(await page.evaluate(id => window.__db.reviews.find(row => row.source_interview_ids.includes(id)).status, id), 'applied');
     await page.evaluate(() => window.__db.release());
     await page.waitForFunction(() => M[0].c.includes('지역 소상공인'));
-    assert.equal(await page.locator('#customer-map-svg .customer-map-group[data-map-group="기타"] .customer-map-count').textContent(),'1','Applying the interview refreshes the customer map without a reload.');
-    assert.match(await page.locator('#customer-map-unclassified-list').textContent(),/지역 소상공인/);
+    await page.waitForFunction(()=>!customerClassificationBusy&&customerGroupRows.some(row=>row.label==='지역 소상공인'&&row.source==='ai'));
+    assert.match(await page.locator('#customer-map-ai-list').textContent(),/지역 소상공인/);
     assert(!await page.locator('#v3').textContent().then(text=>text.includes('INTERVIEW_PRIVATE_REFERRAL')),'The customer map uses public customer types only.');
     const request = await page.evaluate(() => window.__db.log.find(row => row.name === 'apply_member_interview_review').value);
     assert.deepEqual(Object.keys(request.public_patch).sort(), ['customers']);
@@ -2312,7 +2409,7 @@ try {
     await credibility.locator('.interview-stage-save').click();
     await page.waitForFunction(id => !interviewBusy && !window.__db.interviews.find(row => row.id === id).stages.includes('profitability'), sourceIds[1]);
     await analyzeInterview(page);
-    const firstAnalysis = await page.evaluate(() => window.__db.log.filter(item => item.action === 'function' && !item.readOnly).at(-1).value);
+    const firstAnalysis = await page.evaluate(() => window.__db.log.filter(item => item.name === 'analyze-interview' && !item.readOnly).at(-1).value);
     assert.deepEqual([...firstAnalysis.interview_ids].sort(), [...sourceIds].sort());
     assert.equal(await page.evaluate(() => window.__db.reviews.length), 1);
     assert.equal(await page.evaluate(() => window.__db.interviews.length), 2);
@@ -2352,7 +2449,7 @@ try {
     });
     await analyzeInterview(page);
     assert.equal(await page.evaluate(() => window.__db.reviews.length), 2);
-    assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.action === 'function' && !item.readOnly).at(-1).value.interview_ids.length), 3);
+    assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.name === 'analyze-interview' && !item.readOnly).at(-1).value.interview_ids.length), 3);
     assert(await page.locator('#interview-new-documents').isHidden());
     for (const width of [400, 1440]) {
       await page.setViewportSize({ width, height: 1000 });
@@ -2522,7 +2619,7 @@ try {
     assert.deepEqual(await page.evaluate(() => window.__db.members[0].customers), seed[0].customers);
     assert.equal(await page.locator('#interview-review .interview-check').count(), 0);
     assert(await page.locator('#interview-analyze').isEnabled());
-    assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.action === 'function' && !item.readOnly).length), 1);
+    assert.equal(await page.evaluate(() => window.__db.log.filter(item => item.name === 'analyze-interview' && !item.readOnly).length), 1);
     await context.close();
   });
   await check('Failed or stale interview applies leave both public and private saved data unchanged', async () => {
@@ -2917,6 +3014,18 @@ try {
     console.log('CUSTOMER MAP SNAPSHOT '+JSON.stringify(report));
     console.log('SCREENSHOT diagnostics-output/customer-map: overview, Kim, hospital and dark theme at 1440px and 400px');
     await context.close();
+    const admin=await pageFor({online:true,auth:true,records:snapshot.members,collabTeams:snapshot.collabTeams,collabMemberships:snapshot.collabMemberships});
+    await admin.page.click('#t4');
+    const cell=admin.page.locator('#admintable input[data-k=c]').first();await cell.fill([...snapshot.members[0].customers,'골프 동호회 회원','개원 예정 치과의사'].join(', '));await cell.press('Tab');
+    await admin.page.waitForFunction(()=>!busy&&customerGroupRows.some(row=>row.label==='개원 예정 치과의사'));
+    for(const width of [1440,400]){
+      await admin.page.setViewportSize({width,height:1000});
+      for(const open of [false,true]){
+        await admin.page.locator('#customer-map-ai').evaluate((node,open)=>{node.open=open;scrollTo(0,scrollY+node.getBoundingClientRect().top-document.querySelector('nav').getBoundingClientRect().height-16);},open);
+        await admin.page.screenshot({path:path.join(directory,`customer-map-ai-${open?'open':'closed'}-${width}.png`),animations:'disabled'});
+      }
+    }
+    await admin.context.close();
   }
   if (process.argv.includes('--collab-screenshots') || process.argv.includes('--screenshots')) {
     const directory = fileURLToPath(new URL('../output/9th-collab', import.meta.url));await mkdir(directory, { recursive: true });

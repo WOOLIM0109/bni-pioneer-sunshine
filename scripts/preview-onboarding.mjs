@@ -44,7 +44,9 @@ const server = createServer(async (request, response) => {
       const initial = [own, ...rows.filter(row => row !== own)];
       own.wants = '';
       const mode = ['new', 'pending', 'admin'].includes(url.searchParams.get('mode')) ? url.searchParams.get('mode') : 'member';
-      const options = { auth: true, role: mode === 'admin' ? 'admin' : mode === 'member' ? 'member' : 'viewer' };
+      const groupSql=await readFile(root+'/supabase/customer-group-map-apply.sql','utf8');
+      const customerGroupSeed=JSON.parse(groupSql.match(/\$customer_groups\$([\s\S]*?)\$customer_groups\$/)[1]);
+      const options = { auth: true, role: mode === 'admin' ? 'admin' : mode === 'member' ? 'member' : 'viewer',customerGroupSeed };
       const setup = `window.__db.session.user.email='sunshine-preview@example.test';window.__db.userMetadata['test-user']={...window.__db.userMetadata['test-user'],full_name:${JSON.stringify(own.name)}};window.__db.session.user.user_metadata=window.__db.userMetadata['test-user'];window.__db.details.forEach(row=>{row.good_referral='';row.triggers=[];row.customer_companies=[];});${mode === 'pending' ? `window.__db.accounts[0].requested_member_id=${JSON.stringify(own.id)};window.__db.accounts[0].request_status='pending';` : ''}`;
       response.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
       return response.end(`${mock}\nlet previewMetadata={};try{previewMetadata=JSON.parse(localStorage.getItem('sunshine-preview-auth-metadata')||'{}');}catch{}\nwindow.__persistAuthMetadata=async next=>{localStorage.setItem('sunshine-preview-auth-metadata',JSON.stringify(next));};\nmakeMock(${JSON.stringify(initial)},{...${JSON.stringify(options)},userMetadata:previewMetadata});${setup}`);
